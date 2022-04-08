@@ -55,6 +55,7 @@ set(SRC
   ../include/ED_clip.h
   ../include/ED_curve.h
   ../include/ED_datafiles.h
+  ../include/ED_file_indexer.h
   ../include/ED_fileselect.h
   ../include/ED_geometry.h
   ../include/ED_gizmo_library.h
@@ -64,6 +65,7 @@ set(SRC
   ../include/ED_info.h
   ../include/ED_keyframes_draw.h
   ../include/ED_keyframes_edit.h
+  ../include/ED_keyframes_keylist.h
   ../include/ED_keyframing.h
   ../include/ED_lattice.h
   ../include/ED_markers.h
@@ -102,8 +104,10 @@ set(SRC
   ../include/ED_view3d_offscreen.h
   ../include/UI_icons.h
   ../include/UI_interface.h
+  ../include/UI_interface.hh
   ../include/UI_interface_icons.h
   ../include/UI_resources.h
+  ../include/UI_tree_view.hh
   ../include/UI_view2d.h
 )
 

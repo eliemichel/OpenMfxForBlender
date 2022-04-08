@@ -57,10 +57,9 @@ static ShaderFxTypeInfo *shader_fx_types[NUM_SHADER_FX_TYPES] = {NULL};
 /* *************************************************** */
 /* Methods - Evaluation Loops, etc. */
 
-/* check if exist grease pencil effects */
-bool BKE_shaderfx_has_gpencil(Object *ob)
+bool BKE_shaderfx_has_gpencil(const Object *ob)
 {
-  ShaderFxData *fx;
+  const ShaderFxData *fx;
   for (fx = ob->shader_fx.first; fx; fx = fx->next) {
     const ShaderFxTypeInfo *fxi = BKE_shaderfx_get_info(fx->type);
     if (fxi->type == eShaderFxType_GpencilType) {
@@ -81,7 +80,7 @@ ShaderFxData *BKE_shaderfx_new(int type)
   const ShaderFxTypeInfo *fxi = BKE_shaderfx_get_info(type);
   ShaderFxData *fx = MEM_callocN(fxi->struct_size, fxi->struct_name);
 
-  /* note, this name must be made unique later */
+  /* NOTE: this name must be made unique later. */
   BLI_strncpy(fx->name, DATA_(fxi->name), sizeof(fx->name));
 
   fx->type = type;
@@ -136,7 +135,6 @@ void BKE_shaderfx_free(ShaderFxData *fx)
   BKE_shaderfx_free_ex(fx, 0);
 }
 
-/* check unique name */
 bool BKE_shaderfx_unique_name(ListBase *shaders, ShaderFxData *fx)
 {
   if (shaders && fx) {
@@ -164,12 +162,12 @@ const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type)
   return NULL;
 }
 
-/**
- * Get an effect's panel type, which was defined in the #panelRegister callback.
- *
- * \note ShaderFx panel types are assumed to be named with the struct name field concatenated to
- * the defined prefix.
- */
+bool BKE_shaderfx_is_nonlocal_in_liboverride(const Object *ob, const ShaderFxData *shaderfx)
+{
+  return (ID_IS_OVERRIDE_LIBRARY(ob) &&
+          ((shaderfx == NULL) || (shaderfx->flag & eShaderFxFlag_OverrideLibrary_Local) == 0));
+}
+
 void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname)
 {
   const ShaderFxTypeInfo *fxi = BKE_shaderfx_get_info(type);
@@ -314,7 +312,7 @@ void BKE_shaderfx_blend_read_lib(BlendLibReader *reader, Object *ob)
   BKE_shaderfx_foreach_ID_link(ob, BKE_object_modifiers_lib_link_common, reader);
 
   /* If linking from a library, clear 'local' library override flag. */
-  if (ob->id.lib != NULL) {
+  if (ID_IS_LINKED(ob)) {
     LISTBASE_FOREACH (ShaderFxData *, fx, &ob->shader_fx) {
       fx->flag &= ~eShaderFxFlag_OverrideLibrary_Local;
     }

@@ -517,7 +517,7 @@ extern "C" {
 #  define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*(arr)))
 #endif
 
-/* ARRAY_SET_ITEMS#(v, ...): set indices of array 'v'  */
+/* ARRAY_SET_ITEMS#(v, ...): set indices of array 'v' */
 /* internal helpers */
 #define _VA_ARRAY_SET_ITEMS2(v, a) ((v)[0] = (a))
 #define _VA_ARRAY_SET_ITEMS3(v, a, b) \
@@ -635,7 +635,10 @@ extern "C" {
 /* defined
  * in memory_utils.c for now. I do not know where we should put it actually... */
 #ifndef __BLI_MEMORY_UTILS_H__
-extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
+/**
+ * Check if memory is zeroed, as with `memset(arr, 0, arr_size)`.
+ */
+extern bool BLI_memory_is_zero(const void *arr, size_t arr_size);
 #endif
 
 #define MEMCMP_STRUCT_AFTER_IS_ZERO(struct_var, member) \
@@ -648,11 +651,12 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 /** \name String Macros
  * \{ */
 
-/* Macro to convert a value to string in the pre-processor:
+/* Macro to convert a value to string in the preprocessor:
  * - `STRINGIFY_ARG`: gives the argument as a string
  * - `STRINGIFY_APPEND`: appends any argument 'b' onto the string argument 'a',
- *   used by `STRINGIFY` because some preprocessors warn about zero arguments
+ *   used by `STRINGIFY` because some preprocessors warn about zero arguments.
  * - `STRINGIFY`: gives the argument's value as a string. */
+
 #define STRINGIFY_ARG(x) "" #x
 #define STRINGIFY_APPEND(a, b) "" a #b
 #define STRINGIFY(x) STRINGIFY_APPEND("", x)
@@ -683,10 +687,20 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #  define UNUSED(x) UNUSED_##x
 #endif
 
+/**
+ * WARNING: this doesn't warn when returning pointer types (because of the placement of `*`).
+ * Use #UNUSED_FUNCTION_WITH_RETURN_TYPE instead in this case.
+ */
 #if defined(__GNUC__) || defined(__clang__)
 #  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_##x
 #else
 #  define UNUSED_FUNCTION(x) UNUSED_##x
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#  define UNUSED_FUNCTION_WITH_RETURN_TYPE(rtype, x) __attribute__((__unused__)) rtype UNUSED_##x
+#else
+#  define UNUSED_FUNCTION_WITH_RETURN_TYPE(rtype, x) rtype UNUSED_##x
 #endif
 
 /**
@@ -785,26 +799,29 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
  * To use after the enum declaration. */
 /* If any enumerator `C` is set to say `A|B`, then `C` would be the max enum value. */
 #  define ENUM_OPERATORS(_enum_type, _max_enum_value) \
+    extern "C++" { \
     inline constexpr _enum_type operator|(_enum_type a, _enum_type b) \
     { \
-      return static_cast<_enum_type>(static_cast<int>(a) | b); \
+      return static_cast<_enum_type>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b)); \
     } \
     inline constexpr _enum_type operator&(_enum_type a, _enum_type b) \
     { \
-      return static_cast<_enum_type>(static_cast<int>(a) & b); \
+      return static_cast<_enum_type>(static_cast<uint64_t>(a) & static_cast<uint64_t>(b)); \
     } \
     inline constexpr _enum_type operator~(_enum_type a) \
     { \
-      return static_cast<_enum_type>(~static_cast<int>(a) & (2 * _max_enum_value - 1)); \
+      return static_cast<_enum_type>(~static_cast<uint64_t>(a) & \
+                                     (2 * static_cast<uint64_t>(_max_enum_value) - 1)); \
     } \
     inline _enum_type &operator|=(_enum_type &a, _enum_type b) \
     { \
-      return a = static_cast<_enum_type>(static_cast<int>(a) | b); \
+      return a = static_cast<_enum_type>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b)); \
     } \
     inline _enum_type &operator&=(_enum_type &a, _enum_type b) \
     { \
-      return a = static_cast<_enum_type>(static_cast<int>(a) & b); \
-    }
+      return a = static_cast<_enum_type>(static_cast<uint64_t>(a) & static_cast<uint64_t>(b)); \
+    } \
+    } /* extern "C++" */
 
 #else
 /* Output nothing. */
@@ -822,6 +839,15 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 
 /** No-op for expressions we don't want to instantiate, but must remain valid. */
 #define EXPR_NOP(expr) (void)(0 ? ((void)(expr), 1) : 0)
+
+/**
+ * Utility macro that wraps `std::enable_if` to make it a bit easier to use and less verbose for
+ * SFINAE in common cases.
+ *
+ * \note Often one has to invoke this macro with double parenthesis. That's because the condition
+ * often contains a comma and angle brackets are not recognized as parenthesis by the preprocessor.
+ */
+#define BLI_ENABLE_IF(condition) typename std::enable_if_t<(condition)> * = nullptr
 
 /** \} */
 

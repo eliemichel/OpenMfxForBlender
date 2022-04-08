@@ -252,8 +252,6 @@ static void text_undosys_foreach_ID_ref(UndoStep *us_p,
   foreach_ID_ref_fn(user_data, ((UndoRefID *)&us->text_ref));
 }
 
-/* Export for ED_undo_sys. */
-
 void ED_text_undosys_type(UndoType *ut)
 {
   ut->name = "Text";
@@ -265,7 +263,7 @@ void ED_text_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = text_undosys_foreach_ID_ref;
 
-  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE | UNDOTYPE_FLAG_DECODE_ACTIVE_STEP;
 
   ut->step_size = sizeof(TextUndoStep);
 }
@@ -276,7 +274,6 @@ void ED_text_undosys_type(UndoType *ut)
 /** \name Utilities
  * \{ */
 
-/* Use operator system to finish the undo step. */
 UndoStep *ED_text_undo_push_init(bContext *C)
 {
   UndoStack *ustack = ED_undo_stack_get();

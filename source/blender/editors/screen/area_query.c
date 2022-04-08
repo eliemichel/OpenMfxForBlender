@@ -88,7 +88,7 @@ bool ED_region_panel_category_gutter_calc_rect(const ARegion *region, rcti *r_re
       r_region_gutter->xmin = r_region_gutter->xmax - category_tabs_width;
     }
     else {
-      BLI_assert(!"Unsupported alignment");
+      BLI_assert_msg(0, "Unsupported alignment");
     }
     return true;
   }
@@ -187,4 +187,38 @@ bool ED_region_contains_xy(const ARegion *region, const int event_xy[2])
     return true;
   }
   return false;
+}
+
+ARegion *ED_area_find_region_xy_visual(const ScrArea *area,
+                                       const int regiontype,
+                                       const int event_xy[2])
+{
+  if (!area) {
+    return NULL;
+  }
+
+  /* Check overlapped regions first. */
+  LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+    if (!region->overlap) {
+      continue;
+    }
+    if (ELEM(regiontype, RGN_TYPE_ANY, region->regiontype)) {
+      if (ED_region_contains_xy(region, event_xy)) {
+        return region;
+      }
+    }
+  }
+  /* Now non-overlapping ones. */
+  LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+    if (region->overlap) {
+      continue;
+    }
+    if (ELEM(regiontype, RGN_TYPE_ANY, region->regiontype)) {
+      if (ED_region_contains_xy(region, event_xy)) {
+        return region;
+      }
+    }
+  }
+
+  return NULL;
 }

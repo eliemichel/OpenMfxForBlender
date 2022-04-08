@@ -17,6 +17,10 @@
  * All rights reserved.
  */
 
+/** \file
+ * \ingroup intern_rigidbody
+ */
+
 #ifndef __RB_HULL_API_H__
 #define __RB_HULL_API_H__
 
@@ -31,9 +35,13 @@ typedef struct plConvexHull__ {
 plConvexHull plConvexHullCompute(float (*coords)[3], int count);
 void plConvexHullDelete(plConvexHull hull);
 int plConvexHullNumVertices(plConvexHull hull);
+int plConvexHullNumLoops(plConvexHull hull);
 int plConvexHullNumFaces(plConvexHull hull);
 void plConvexHullGetVertex(plConvexHull hull, int n, float coords[3], int *original_index);
+void plConvexHullGetLoop(plConvexHull hull, int n, int *v_from, int *v_to);
+int plConvexHullGetReversedLoopIndex(plConvexHull hull, int n);
 int plConvexHullGetFaceSize(plConvexHull hull, int n);
+void plConvexHullGetFaceLoops(plConvexHull hull, int n, int *loops);
 void plConvexHullGetFaceVertices(plConvexHull hull, int n, int *vertices);
 
 #ifdef __cplusplus

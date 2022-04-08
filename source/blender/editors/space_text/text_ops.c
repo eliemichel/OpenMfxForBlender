@@ -29,6 +29,7 @@
 #include "DNA_text_types.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_math_base.h"
 
 #include "BLT_translation.h"
@@ -81,6 +82,30 @@ static void test_line_start(char c, bool *r_last_state)
   }
   else if (!ELEM(c, '\t', ' ')) {
     *r_last_state = false;
+  }
+}
+
+/**
+ * This function receives a character and returns its closing pair if it exists.
+ * \param character: Character to find the closing pair.
+ * \return The closing pair of the character if it exists.
+ */
+static char text_closing_character_pair_get(const char character)
+{
+
+  switch (character) {
+    case '(':
+      return ')';
+    case '[':
+      return ']';
+    case '{':
+      return '}';
+    case '"':
+      return '"';
+    case '\'':
+      return '\'';
+    default:
+      return 0;
   }
 }
 
@@ -236,10 +261,7 @@ void text_update_line_edited(TextLine *line)
   }
 
   /* we just free format here, and let it rebuild during draw */
-  if (line->format) {
-    MEM_freeN(line->format);
-    line->format = NULL;
-  }
+  MEM_SAFE_FREE(line->format);
 }
 
 void text_update_edited(Text *text)
@@ -745,7 +767,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_DEFAULT); /* XXX TODO, relative_path. */
+                                 FILE_SORT_DEFAULT); /* XXX TODO: relative_path. */
 }
 
 /** \} */
@@ -774,7 +796,7 @@ static int text_run_script(bContext *C, ReportList *reports)
 
   /* Don't report error messages while live editing */
   if (!is_live) {
-    /* text may have freed its self */
+    /* text may have freed itself */
     if (CTX_data_edit_text(C) == text) {
       if (text->curl != curl_prev || curc_prev != text->curc) {
         text_update_cursor_moved(C);
@@ -1958,7 +1980,7 @@ static void txt_wrap_move_eol(SpaceText *st, ARegion *region, const bool sel)
         end = MIN2(end, i);
 
         if (chop) {
-          endj = BLI_str_prev_char_utf8((*linep)->line + j) - (*linep)->line;
+          endj = BLI_str_find_prev_char_utf8((*linep)->line + j, (*linep)->line) - (*linep)->line;
         }
 
         if (endj >= oldc) {
@@ -2405,7 +2427,17 @@ static int text_delete_exec(bContext *C, wmOperator *op)
         }
       }
     }
-
+    if (U.text_flag & USER_TEXT_EDIT_AUTO_CLOSE) {
+      const char *curr = text->curl->line + text->curc;
+      if (*curr != '\0') {
+        const char *prev = BLI_str_find_prev_char_utf8(curr, text->curl->line);
+        if ((curr != prev) && /* When back-spacing from the start of the line. */
+            (*curr == text_closing_character_pair_get(*prev))) {
+          txt_move_right(text, false);
+          txt_backspace_char(text);
+        }
+      }
+    }
     txt_backspace_char(text);
   }
   else if (type == DEL_NEXT_WORD) {
@@ -2595,20 +2627,18 @@ static void text_scroll_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceText *st = CTX_wm_space_text(C);
   TextScroll *tsc = op->customdata;
-  const int mval[2] = {event->x, event->y};
+  const int mval[2] = {event->xy[0], event->xy[1]};
 
   text_update_character_width(st);
 
   /* compute mouse move distance */
   if (tsc->is_first) {
-    tsc->mval_prev[0] = mval[0];
-    tsc->mval_prev[1] = mval[1];
+    copy_v2_v2_int(tsc->mval_prev, mval);
     tsc->is_first = false;
   }
 
   if (event->type != MOUSEPAN) {
-    tsc->mval_delta[0] = mval[0] - tsc->mval_prev[0];
-    tsc->mval_delta[1] = mval[1] - tsc->mval_prev[1];
+    sub_v2_v2v2_int(tsc->mval_delta, mval, tsc->mval_prev);
   }
 
   /* accumulate scroll, in float values for events that give less than one
@@ -2760,11 +2790,10 @@ static int text_scroll_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if (event->type == MOUSEPAN) {
     text_update_character_width(st);
 
-    tsc->mval_prev[0] = event->x;
-    tsc->mval_prev[1] = event->y;
+    copy_v2_v2_int(tsc->mval_prev, event->xy);
     /* Sensitivity of scroll set to 4pix per line/char */
-    tsc->mval_delta[0] = (event->x - event->prevx) * st->runtime.cwidth_px / 4;
-    tsc->mval_delta[1] = (event->y - event->prevy) * st->runtime.lheight_px / 4;
+    tsc->mval_delta[0] = (event->xy[0] - event->prev_xy[0]) * st->runtime.cwidth_px / 4;
+    tsc->mval_delta[1] = (event->xy[1] - event->prev_xy[1]) * st->runtime.lheight_px / 4;
     tsc->is_first = false;
     tsc->is_scrollbar = false;
     text_scroll_apply(C, op, event);
@@ -2782,8 +2811,7 @@ void TEXT_OT_scroll(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Scroll";
   /* don't really see the difference between this and
-   * scroll_bar. Both do basically the same thing (aside
-   * from keymaps).*/
+   * scroll_bar. Both do basically the same thing (aside from key-maps). */
   ot->idname = "TEXT_OT_scroll";
 
   /* api callbacks */
@@ -2889,8 +2917,7 @@ void TEXT_OT_scroll_bar(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Scrollbar";
   /* don't really see the difference between this and
-   * scroll. Both do basically the same thing (aside
-   * from keymaps).*/
+   * scroll. Both do basically the same thing (aside from key-maps). */
   ot->idname = "TEXT_OT_scroll_bar";
 
   /* api callbacks */
@@ -3429,26 +3456,33 @@ static int text_insert_exec(bContext *C, wmOperator *op)
   SpaceText *st = CTX_wm_space_text(C);
   Text *text = CTX_data_edit_text(C);
   char *str;
+  int str_len;
   bool done = false;
   size_t i = 0;
   uint code;
 
   text_drawcache_tag_update(st, 0);
 
-  str = RNA_string_get_alloc(op->ptr, "text", NULL, 0);
+  str = RNA_string_get_alloc(op->ptr, "text", NULL, 0, &str_len);
 
   ED_text_undo_push_init(C);
 
   if (st && st->overwrite) {
     while (str[i]) {
-      code = BLI_str_utf8_as_unicode_step(str, &i);
+      code = BLI_str_utf8_as_unicode_step(str, str_len, &i);
       done |= txt_replace_char(text, code);
     }
   }
   else {
     while (str[i]) {
-      code = BLI_str_utf8_as_unicode_step(str, &i);
+      code = BLI_str_utf8_as_unicode_step(str, str_len, &i);
       done |= txt_add_char(text, code);
+      if (U.text_flag & USER_TEXT_EDIT_AUTO_CLOSE) {
+        if (text_closing_character_pair_get(code)) {
+          done |= txt_add_char(text, text_closing_character_pair_get(code));
+          txt_move_left(text, false);
+        }
+      }
     }
   }
 
@@ -3470,7 +3504,7 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   int ret;
 
-  /* Note, the "text" property is always set from key-map,
+  /* NOTE: the "text" property is always set from key-map,
    * so we can't use #RNA_struct_property_is_set, check the length instead. */
   if (!RNA_string_length(op->ptr, "text")) {
     /* if alt/ctrl/super are pressed pass through except for utf8 character event
@@ -3490,7 +3524,7 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     }
     else {
       /* in theory, ghost can set value to extended ascii here */
-      len = BLI_str_utf8_from_unicode(event->ascii, str);
+      len = BLI_str_utf8_from_unicode(event->ascii, str, sizeof(str) - 1);
     }
     str[len] = '\0';
     RNA_string_set(op->ptr, "text", str);

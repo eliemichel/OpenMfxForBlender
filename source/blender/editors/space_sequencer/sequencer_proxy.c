@@ -56,7 +56,7 @@
 static void seq_proxy_build_job(const bContext *C, ReportList *reports)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = SEQ_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene);
   ScrArea *area = CTX_wm_area(C);
 
   if (ed == NULL) {
@@ -85,7 +85,7 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
     }
 
     bool success = SEQ_proxy_rebuild_context(
-        pj->main, pj->depsgraph, pj->scene, seq, file_list, &pj->queue);
+        pj->main, pj->depsgraph, pj->scene, seq, file_list, &pj->queue, false);
 
     if (!success && (seq->strip->proxy->build_flags & SEQ_PROXY_SKIP_EXISTING) != 0) {
       BKE_reportf(reports, RPT_WARNING, "Overwrite is not checked for %s, skipping", seq->name);
@@ -99,7 +99,7 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
     return;
   }
 
-  if (selected && !WM_jobs_is_running(wm_job)) {
+  if (!WM_jobs_is_running(wm_job)) {
     G.is_break = false;
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }
@@ -121,7 +121,7 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = SEQ_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene);
   GSet *file_list;
 
   if (ed == NULL) {
@@ -131,13 +131,13 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   file_list = BLI_gset_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, "file list");
 
   LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
-    if ((seq->flag & SELECT)) {
+    if (seq->flag & SELECT) {
       ListBase queue = {NULL, NULL};
       LinkData *link;
       short stop = 0, do_update;
       float progress;
 
-      SEQ_proxy_rebuild_context(bmain, depsgraph, scene, seq, file_list, &queue);
+      SEQ_proxy_rebuild_context(bmain, depsgraph, scene, seq, file_list, &queue, false);
 
       for (link = queue.first; link; link = link->next) {
         struct SeqIndexBuildContext *context = link->data;
@@ -184,7 +184,7 @@ static int sequencer_enable_proxies_invoke(bContext *C,
 static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = SEQ_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene);
   bool proxy_25 = RNA_boolean_get(op->ptr, "proxy_25");
   bool proxy_50 = RNA_boolean_get(op->ptr, "proxy_50");
   bool proxy_75 = RNA_boolean_get(op->ptr, "proxy_75");
@@ -197,7 +197,7 @@ static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
   }
 
   LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
-    if ((seq->flag & SELECT)) {
+    if (seq->flag & SELECT) {
       if (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE)) {
         SEQ_proxy_set(seq, turnon);
         if (seq->strip->proxy == NULL) {

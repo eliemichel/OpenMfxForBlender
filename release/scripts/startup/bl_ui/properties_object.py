@@ -184,24 +184,18 @@ class OBJECT_PT_collections(ObjectButtonsPanel, Panel):
             row.operator("object.collection_add", text="Add to Collection")
         row.operator("object.collection_add", text="", icon='ADD')
 
-        obj_name = obj.name
-        for collection in bpy.data.collections:
-            # XXX this is slow and stupid!, we need 2 checks, one that's fast
-            # and another that we can be sure its not a name collision
-            # from linked library data
-            collection_objects = collection.objects
-            if obj_name in collection.objects and obj in collection_objects[:]:
-                col = layout.column(align=True)
+        for collection in obj.users_collection:
+            col = layout.column(align=True)
 
-                col.context_pointer_set("collection", collection)
+            col.context_pointer_set("collection", collection)
 
-                row = col.box().row()
-                row.prop(collection, "name", text="")
-                row.operator("object.collection_remove", text="", icon='X', emboss=False)
-                row.menu("COLLECTION_MT_context_menu", icon='DOWNARROW_HLT', text="")
+            row = col.box().row()
+            row.prop(collection, "name", text="")
+            row.operator("object.collection_remove", text="", icon='X', emboss=False)
+            row.menu("COLLECTION_MT_context_menu", icon='DOWNARROW_HLT', text="")
 
-                row = col.box().row()
-                row.prop(collection, "instance_offset", text="")
+            row = col.box().row()
+            row.prop(collection, "instance_offset", text="")
 
 
 class OBJECT_PT_display(ObjectButtonsPanel, Panel):
@@ -216,6 +210,7 @@ class OBJECT_PT_display(ObjectButtonsPanel, Panel):
         obj = context.object
         obj_type = obj.type
         is_geometry = (obj_type in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT', 'VOLUME', 'HAIR', 'POINTCLOUD'})
+        has_bounds = (is_geometry or obj_type in {'LATTICE', 'ARMATURE'})
         is_wire = (obj_type in {'CAMERA', 'EMPTY'})
         is_empty_image = (obj_type == 'EMPTY' and obj.empty_display_type == 'IMAGE')
         is_dupli = (obj.instance_type != 'NONE')
@@ -247,20 +242,27 @@ class OBJECT_PT_display(ObjectButtonsPanel, Panel):
             # Only useful with object having faces/materials...
             col.prop(obj, "color")
 
-        col = layout.column(align=False, heading="Bounds")
-        col.use_property_decorate = False
-        row = col.row(align=True)
-        sub = row.row(align=True)
-        sub.prop(obj, "show_bounds", text="")
-        sub = sub.row(align=True)
-        sub.active = obj.show_bounds or (obj.display_type == 'BOUNDS')
-        sub.prop(obj, "display_bounds_type", text="")
-        row.prop_decorator(obj, "display_bounds_type")
+        if has_bounds:
+            col = layout.column(align=False, heading="Bounds")
+            col.use_property_decorate = False
+            row = col.row(align=True)
+            sub = row.row(align=True)
+            sub.prop(obj, "show_bounds", text="")
+            sub = sub.row(align=True)
+            sub.active = obj.show_bounds or (obj.display_type == 'BOUNDS')
+            sub.prop(obj, "display_bounds_type", text="")
+            row.prop_decorator(obj, "display_bounds_type")
 
 
 class OBJECT_PT_instancing(ObjectButtonsPanel, Panel):
     bl_label = "Instancing"
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        # FONT objects need (vertex) instancing for the 'Object Font' feature
+        return (ob.type in {'MESH', 'EMPTY', 'POINTCLOUD', 'FONT'})
 
     def draw(self, context):
         layout = self.layout
@@ -329,7 +331,9 @@ class OBJECT_PT_lineart(ObjectButtonsPanel, Panel):
 
         row = layout.row(heading="Override Crease")
         row.prop(lineart, "use_crease_override", text="")
-        row.prop(lineart, "crease_threshold", slider=True, text="")
+        subrow = row.row()
+        subrow.active = lineart.use_crease_override
+        subrow.prop(lineart, "crease_threshold", slider=True, text="")
 
 
 class OBJECT_PT_motion_paths(MotionPathButtonsPanel, Panel):
@@ -396,6 +400,10 @@ class OBJECT_PT_visibility(ObjectButtonsPanel, Panel):
         if context.object.type == 'GPENCIL':
             col = layout.column(heading="Grease Pencil")
             col.prop(ob, "use_grease_pencil_lights", toggle=False)
+
+        layout.separator()
+        col = layout.column(heading="Mask")
+        col.prop(ob, "is_holdout")
 
 
 class OBJECT_PT_custom_props(ObjectButtonsPanel, PropertyPanel, Panel):

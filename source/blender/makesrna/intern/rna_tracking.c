@@ -24,6 +24,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BKE_movieclip.h"
+#include "BKE_node_tree_update.h"
 #include "BKE_tracking.h"
 
 #include "RNA_access.h"
@@ -31,6 +32,7 @@
 
 #include "rna_internal.h"
 
+#include "DNA_defaults.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_object_types.h" /* SELECT */
 #include "DNA_scene_types.h"
@@ -415,11 +417,12 @@ static void rna_tracking_stabRotTracks_active_index_range(
   *max = max_ii(0, clip->tracking.stabilization.tot_rot_track - 1);
 }
 
-static void rna_tracking_flushUpdate(Main *UNUSED(bmain), Scene *scene, PointerRNA *ptr)
+static void rna_tracking_flushUpdate(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   MovieClip *clip = (MovieClip *)ptr->owner_id;
 
-  nodeUpdateID(scene->nodetree, &clip->id);
+  BKE_ntree_update_tag_id_changed(bmain, &clip->id);
+  BKE_ntree_update_main(bmain, NULL);
 
   WM_main_add_notifier(NC_SCENE | ND_NODES, NULL);
   WM_main_add_notifier(NC_SCENE, NULL);
@@ -607,7 +610,7 @@ static MovieTrackingTrack *add_track_to_base(
     MovieClip *clip, MovieTracking *tracking, ListBase *tracksbase, const char *name, int frame)
 {
   int width, height;
-  MovieClipUser user = {0};
+  MovieClipUser user = *DNA_struct_default_get(MovieClipUser);
   MovieTrackingTrack *track;
 
   user.framenr = 1;
@@ -697,7 +700,7 @@ static MovieTrackingMarker *rna_trackingMarkers_find_frame(MovieTrackingTrack *t
 
 static MovieTrackingMarker *rna_trackingMarkers_insert_frame(MovieTrackingTrack *track,
                                                              int framenr,
-                                                             float *co)
+                                                             float co[2])
 {
   MovieTrackingMarker marker, *new_marker;
 
@@ -2437,6 +2440,8 @@ static void rna_def_trackingDopesheet(BlenderRNA *brna)
        0,
        "Average Error",
        "Sort channels by average reprojection error of tracks after solve"},
+      {TRACKING_DOPE_SORT_START, "START", 0, "Start Frame", "Sort channels by first frame number"},
+      {TRACKING_DOPE_SORT_END, "END", 0, "End Frame", "Sort channels by last frame number"},
       {0, NULL, 0, NULL, NULL},
   };
 

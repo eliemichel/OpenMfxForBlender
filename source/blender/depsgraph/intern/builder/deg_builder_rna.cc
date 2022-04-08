@@ -153,8 +153,8 @@ bool RNANodeQuery::contains(const char *prop_identifier, const char *rna_path_co
     return false;
   }
 
-  // If substr != prop_identifier, it means that the substring is found further in prop_identifier,
-  // and that thus index -1 is a valid memory location.
+  /* If substr != prop_identifier, it means that the substring is found further in prop_identifier,
+   * and that thus index -1 is a valid memory location. */
   const bool start_ok = substr == prop_identifier || substr[-1] == '.';
   if (!start_ok) {
     return false;
@@ -180,8 +180,16 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
   node_identifier.operation_name = "";
   node_identifier.operation_name_tag = -1;
   /* Handling of commonly known scenarios. */
-  if (prop != nullptr && RNA_property_is_idprop(prop)) {
-    node_identifier.type = NodeType::PARAMETERS;
+  if (rna_prop_affects_parameters_node(ptr, prop)) {
+    /* Custom properties of bones are placed in their components to improve granularity. */
+    if (RNA_struct_is_a(ptr->type, &RNA_PoseBone)) {
+      const bPoseChannel *pchan = static_cast<const bPoseChannel *>(ptr->data);
+      node_identifier.type = NodeType::BONE;
+      node_identifier.component_name = pchan->name;
+    }
+    else {
+      node_identifier.type = NodeType::PARAMETERS;
+    }
     node_identifier.operation_code = OperationCode::ID_PROPERTY;
     node_identifier.operation_name = RNA_property_identifier(
         reinterpret_cast<const PropertyRNA *>(prop));
@@ -351,7 +359,7 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
     return node_identifier;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_NodeSocket)) {
-    node_identifier.type = NodeType::SHADING;
+    node_identifier.type = NodeType::NTREE_OUTPUT;
     return node_identifier;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_ShaderNode)) {
@@ -395,6 +403,14 @@ RNANodeQueryIDData *RNANodeQuery::ensure_id_data(const ID *id)
   unique_ptr<RNANodeQueryIDData> &id_data = id_data_map_.lookup_or_add_cb(
       id, [&]() { return std::make_unique<RNANodeQueryIDData>(id); });
   return id_data.get();
+}
+
+bool rna_prop_affects_parameters_node(const PointerRNA *ptr, const PropertyRNA *prop)
+{
+  return prop != nullptr && RNA_property_is_idprop(prop) &&
+         /* ID properties in the geometry nodes modifier don't affect that parameters node.
+          * Instead they affect the modifier and therefore the geometry node directly. */
+         !RNA_struct_is_a(ptr->type, &RNA_NodesModifier);
 }
 
 }  // namespace blender::deg

@@ -67,14 +67,6 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-/**
- * Restore the object->data to a non-modifier evaluated state.
- *
- * Some changes done directly in evaluated object require them to be reset
- * before being re-evaluated.
- * For example, we need to call this before #BKE_mesh_new_from_object(),
- * in case we removed/added modifiers in the evaluated object.
- */
 void BKE_object_eval_reset(Object *ob_eval)
 {
   BKE_object_free_derived_caches(ob_eval);
@@ -88,10 +80,10 @@ void BKE_object_eval_local_transform(Depsgraph *depsgraph, Object *ob)
   BKE_object_to_mat4(ob, ob->obmat);
 }
 
-/* Evaluate parent */
-/* NOTE: based on solve_parenting(), but with the cruft stripped out */
 void BKE_object_eval_parent(Depsgraph *depsgraph, Object *ob)
 {
+  /* NOTE: based on `solve_parenting()`, but with the cruft stripped out. */
+
   Object *par = ob->parent;
 
   float totmat[4][4];
@@ -123,7 +115,7 @@ void BKE_object_eval_parent(Depsgraph *depsgraph, Object *ob)
 void BKE_object_eval_constraints(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
   bConstraintOb *cob;
-  float ctime = BKE_scene_frame_get(scene);
+  float ctime = BKE_scene_ctime_get(scene);
 
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
 
@@ -168,12 +160,6 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
   /* includes all keys and modifiers */
   switch (ob->type) {
     case OB_MESH: {
-#if 0
-      BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? BKE_editmesh_from_object(ob) : NULL;
-#else
-      BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? ((Mesh *)ob->data)->edit_mesh : NULL;
-#endif
-
       CustomData_MeshMasks cddata_masks = scene->customdata_mask;
       CustomData_MeshMasks_update(&cddata_masks, &CD_MASK_BAREMESH);
       /* Custom attributes should not be removed automatically. They might be used by the render
@@ -183,6 +169,11 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
       cddata_masks.fmask |= CD_MASK_PROP_ALL;
       cddata_masks.pmask |= CD_MASK_PROP_ALL;
       cddata_masks.lmask |= CD_MASK_PROP_ALL;
+
+      /* Also copy over normal layers to avoid recomputation. */
+      cddata_masks.pmask |= CD_MASK_NORMAL;
+      cddata_masks.vmask |= CD_MASK_NORMAL;
+
       /* Make sure Freestyle edge/face marks appear in DM for render (see T40315).
        * Due to Line Art implementation, edge marks should also be shown in viewport. */
 #ifdef WITH_FREESTYLE
@@ -195,12 +186,7 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
         cddata_masks.lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
         cddata_masks.vmask |= CD_MASK_ORCO | CD_MASK_PROP_COLOR;
       }
-      if (em) {
-        makeDerivedMesh(depsgraph, scene, ob, em, &cddata_masks); /* was CD_MASK_BAREMESH */
-      }
-      else {
-        makeDerivedMesh(depsgraph, scene, ob, NULL, &cddata_masks);
-      }
+      makeDerivedMesh(depsgraph, scene, ob, &cddata_masks); /* was CD_MASK_BAREMESH */
       break;
     }
     case OB_ARMATURE:
@@ -224,7 +210,7 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
     case OB_SURF:
     case OB_FONT: {
       bool for_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
-      BKE_displist_make_curveTypes(depsgraph, scene, ob, for_render, false);
+      BKE_displist_make_curveTypes(depsgraph, scene, ob, for_render);
       break;
     }
 
@@ -282,7 +268,12 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
 /** Bounding box from evaluated geometry. */
 static void object_sync_boundbox_to_original(Object *object_orig, Object *object_eval)
 {
-  BoundBox *bb = BKE_object_boundbox_get(object_eval);
+  BoundBox *bb = object_eval->runtime.bb;
+  if (!bb || (bb->flag & BOUNDBOX_DIRTY)) {
+    BKE_object_boundbox_calc_from_evaluated_geometry(object_eval);
+  }
+
+  bb = BKE_object_boundbox_get(object_eval);
   if (bb != NULL) {
     if (object_orig->runtime.bb == NULL) {
       object_orig->runtime.bb = MEM_mallocN(sizeof(*object_orig->runtime.bb), __func__);
@@ -349,36 +340,43 @@ void BKE_object_eval_uber_transform(Depsgraph *depsgraph, Object *object)
   BKE_object_eval_proxy_copy(depsgraph, object);
 }
 
-void BKE_object_batch_cache_dirty_tag(Object *ob)
+void BKE_object_data_batch_cache_dirty_tag(ID *object_data)
 {
-  switch (ob->type) {
-    case OB_MESH:
-      BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
+  switch (GS(object_data->name)) {
+    case ID_ME:
+      BKE_mesh_batch_cache_dirty_tag((struct Mesh *)object_data, BKE_MESH_BATCH_DIRTY_ALL);
       break;
-    case OB_LATTICE:
-      BKE_lattice_batch_cache_dirty_tag(ob->data, BKE_LATTICE_BATCH_DIRTY_ALL);
+    case ID_LT:
+      BKE_lattice_batch_cache_dirty_tag((struct Lattice *)object_data,
+                                        BKE_LATTICE_BATCH_DIRTY_ALL);
       break;
-    case OB_CURVE:
-    case OB_FONT:
-    case OB_SURF:
-      BKE_curve_batch_cache_dirty_tag(ob->data, BKE_CURVE_BATCH_DIRTY_ALL);
+    case ID_CU:
+      BKE_curve_batch_cache_dirty_tag((struct Curve *)object_data, BKE_CURVE_BATCH_DIRTY_ALL);
       break;
-    case OB_MBALL:
-      BKE_mball_batch_cache_dirty_tag(ob->data, BKE_MBALL_BATCH_DIRTY_ALL);
+    case ID_MB:
+      BKE_mball_batch_cache_dirty_tag((struct MetaBall *)object_data, BKE_MBALL_BATCH_DIRTY_ALL);
       break;
-    case OB_GPENCIL:
-      BKE_gpencil_batch_cache_dirty_tag(ob->data);
+    case ID_GD:
+      BKE_gpencil_batch_cache_dirty_tag((struct bGPdata *)object_data);
       break;
-    case OB_HAIR:
-      BKE_hair_batch_cache_dirty_tag(ob->data, BKE_HAIR_BATCH_DIRTY_ALL);
+    case ID_HA:
+      BKE_hair_batch_cache_dirty_tag((struct Hair *)object_data, BKE_HAIR_BATCH_DIRTY_ALL);
       break;
-    case OB_POINTCLOUD:
-      BKE_pointcloud_batch_cache_dirty_tag(ob->data, BKE_POINTCLOUD_BATCH_DIRTY_ALL);
+    case ID_PT:
+      BKE_pointcloud_batch_cache_dirty_tag((struct PointCloud *)object_data,
+                                           BKE_POINTCLOUD_BATCH_DIRTY_ALL);
       break;
-    case OB_VOLUME:
-      BKE_volume_batch_cache_dirty_tag(ob->data, BKE_VOLUME_BATCH_DIRTY_ALL);
+    case ID_VO:
+      BKE_volume_batch_cache_dirty_tag((struct Volume *)object_data, BKE_VOLUME_BATCH_DIRTY_ALL);
+      break;
+    default:
       break;
   }
+}
+
+void BKE_object_batch_cache_dirty_tag(Object *ob)
+{
+  BKE_object_data_batch_cache_dirty_tag(ob->data);
 }
 
 void BKE_object_eval_uber_data(Depsgraph *depsgraph, Scene *scene, Object *ob)

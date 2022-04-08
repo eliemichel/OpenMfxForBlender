@@ -52,7 +52,6 @@
 /** \name Public Mask Selection API
  * \{ */
 
-/* 'check' select */
 bool ED_mask_spline_select_check(const MaskSpline *spline)
 {
   for (int i = 0; i < spline->tot_point; i++) {
@@ -68,7 +67,7 @@ bool ED_mask_spline_select_check(const MaskSpline *spline)
 
 bool ED_mask_layer_select_check(const MaskLayer *mask_layer)
 {
-  if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+  if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
     return false;
   }
 
@@ -92,7 +91,6 @@ bool ED_mask_select_check(const Mask *mask)
   return false;
 }
 
-/* 'sel' select  */
 void ED_mask_spline_select_set(MaskSpline *spline, const bool do_select)
 {
   if (do_select) {
@@ -111,7 +109,7 @@ void ED_mask_spline_select_set(MaskSpline *spline, const bool do_select)
 
 void ED_mask_layer_select_set(MaskLayer *mask_layer, const bool do_select)
 {
-  if (mask_layer->restrictflag & MASK_RESTRICT_SELECT) {
+  if (mask_layer->visibility_flag & MASK_HIDE_SELECT) {
     if (do_select == true) {
       return;
     }
@@ -135,7 +133,7 @@ void ED_mask_select_toggle_all(Mask *mask, int action)
 
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
 
-    if (mask_layer->restrictflag & MASK_RESTRICT_VIEW) {
+    if (mask_layer->visibility_flag & MASK_HIDE_VIEW) {
       continue;
     }
 
@@ -143,7 +141,7 @@ void ED_mask_select_toggle_all(Mask *mask, int action)
       /* we don't have generic functions for this, its restricted to this operator
        * if one day we need to re-use such functionality, they can be split out */
 
-      if (mask_layer->restrictflag & MASK_RESTRICT_SELECT) {
+      if (mask_layer->visibility_flag & MASK_HIDE_SELECT) {
         continue;
       }
       LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
@@ -165,9 +163,9 @@ void ED_mask_select_flush_all(Mask *mask)
     LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
       spline->flag &= ~SELECT;
 
-      /* intentionally _dont_ do this in the mask layer loop
-       * so we clear flags on all splines */
-      if (mask_layer->restrictflag & MASK_RESTRICT_VIEW) {
+      /* Intentionally *don't* do this in the mask layer loop
+       * so we clear flags on all splines. */
+      if (mask_layer->visibility_flag & MASK_HIDE_VIEW) {
         continue;
       }
 
@@ -466,7 +464,7 @@ static int box_select_exec(bContext *C, wmOperator *op)
 
   /* do actual selection */
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
 
@@ -551,7 +549,7 @@ static bool do_lasso_select_mask(bContext *C,
 
   /* do actual selection */
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
 
@@ -630,7 +628,7 @@ void MASK_OT_select_lasso(wmOperatorType *ot)
   ot->cancel = WM_gesture_lasso_cancel;
 
   /* flags */
-  ot->flag = OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO | OPTYPE_DEPENDS_ON_CURSOR;
 
   /* properties */
   WM_operator_properties_gesture_lasso(ot);
@@ -692,7 +690,7 @@ static int circle_select_exec(bContext *C, wmOperator *op)
 
   /* do actual selection */
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
 
@@ -821,7 +819,7 @@ static int mask_select_linked_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* do actual selection */
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
 
@@ -871,7 +869,7 @@ static int mask_select_more_less(bContext *C, bool more)
   Mask *mask = CTX_data_edit_mask(C);
 
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
 

@@ -42,7 +42,7 @@ enum {
   BLI_Buffer name_ = { \
       (name_##_static_), sizeof(type_), 0, static_count_, BLI_BUFFER_USE_STATIC | (flag_)}
 
-/* never use static*/
+/* Never use static. */
 #define BLI_buffer_declare(type_, name_, flag_) \
   bool name_##user; /* warn for free only */ \
   BLI_Buffer name_ = {NULL, sizeof(type_), 0, 0, (flag_)}
@@ -71,13 +71,25 @@ enum {
   } \
   (void)0
 
-/* Never decreases the amount of memory allocated */
-void BLI_buffer_resize(BLI_Buffer *buffer, const size_t new_count);
+/**
+ * \note Never decreases the amount of memory allocated.
+ */
+void BLI_buffer_resize(BLI_Buffer *buffer, size_t new_count);
 
-/* Ensure size, throwing away old data, respecting BLI_BUFFER_USE_CALLOC */
-void BLI_buffer_reinit(BLI_Buffer *buffer, const size_t new_count);
+/**
+ * Ensure size, throwing away old data, respecting #BLI_BUFFER_USE_CALLOC.
+ *
+ * Similar to #BLI_buffer_resize, but use when the existing data can be:
+ * - Ignored (malloc'd).
+ * - Cleared (when #BLI_BUFFER_USE_CALLOC is set).
+ */
+void BLI_buffer_reinit(BLI_Buffer *buffer, size_t new_count);
 
-/* Append an array of elements. */
+/**
+ * Append an array of elements.
+ *
+ * Callers use #BLI_buffer_append_array.
+ */
 void _bli_buffer_append_array(BLI_Buffer *buffer, void *data, size_t count);
 #define BLI_buffer_append_array(buffer_, type_, data_, count_) \
   { \
@@ -87,7 +99,11 @@ void _bli_buffer_append_array(BLI_Buffer *buffer, void *data, size_t count);
   } \
   (void)0
 
-/* Does not free the buffer structure itself */
+/**
+ * Does not free the buffer structure itself.
+ *
+ * Callers use #BLI_buffer_free.
+ */
 void _bli_buffer_free(BLI_Buffer *buffer);
 #define BLI_buffer_free(name_) \
   { \
@@ -96,7 +112,9 @@ void _bli_buffer_free(BLI_Buffer *buffer);
   } \
   (void)0
 
-/* A buffer embedded in a struct. Using memcpy is allowed until first resize. */
+/**
+ * A buffer embedded in a struct. Using #memcpy is allowed until first resize.
+ */
 #define BLI_buffer_field_init(name_, type_) \
   { \
     memset(name_, 0, sizeof(*name_)); \

@@ -27,7 +27,7 @@
 #include "BLI_math_color.h"
 #include "BLI_utildefines.h"
 
-#include "math.h"
+#include <math.h>
 
 #ifndef __MATH_COLOR_INLINE_C__
 #  define __MATH_COLOR_INLINE_C__
@@ -261,7 +261,7 @@ MINLINE void cpack_cpy_3ub(unsigned char r_col[3], const unsigned int pack)
 }
 
 /* -------------------------------------------------------------------- */
-/** \name RGB/Grayscale Functions
+/** \name RGB/Gray-Scale Functions
  *
  * \warning
  * These are only an approximation,
@@ -271,20 +271,6 @@ MINLINE void cpack_cpy_3ub(unsigned char r_col[3], const unsigned int pack)
  *
  * \{ */
 
-/**
- * ITU-R BT.709 primaries
- * https://en.wikipedia.org/wiki/Relative_luminance
- *
- * Real values are:
- * ``Y = 0.2126390059(R) + 0.7151686788(G) + 0.0721923154(B)``
- * according to: "Derivation of Basic Television Color Equations", RP 177-1993
- *
- * As this sums slightly above 1.0, the document recommends to use:
- * ``0.2126(R) + 0.7152(G) + 0.0722(B)``, as used here.
- *
- * The high precision values are used to calculate the rounded byte weights so they add up to 255:
- * ``54(R) + 182(G) + 19(B)``
- */
 MINLINE float rgb_to_grayscale(const float rgb[3])
 {
   return (0.2126f * rgb[0]) + (0.7152f * rgb[1]) + (0.0722f * rgb[2]);
@@ -317,21 +303,19 @@ MINLINE int compare_rgb_uchar(const unsigned char col_a[3],
   return 0;
 }
 
-/* Using a triangle distribution which gives a more final uniform noise.
- * See Banding in Games:A Noisy Rant(revision 5) Mikkel Gjøl, Playdead (slide 27) */
-/* Return triangle noise in [-0.5..1.5[ range */
 MINLINE float dither_random_value(float s, float t)
 {
-  /* Original code from https://www.shadertoy.com/view/4t2SDh */
-  /* The noise reshaping technique does not work on CPU.
-   * We generate and merge two distribution instead */
-  /* Uniform noise in [0..1[ range */
-  float nrnd0 = sinf(s * 12.9898f + t * 78.233f) * 43758.5453f;
-  float nrnd1 = sinf(s * 19.9898f + t * 119.233f) * 43798.5453f;
-  nrnd0 -= floorf(nrnd0);
-  nrnd1 -= floorf(nrnd1);
+  /* Using a triangle distribution which gives a more final uniform noise.
+   * See Banding in Games:A Noisy Rant(revision 5) Mikkel Gjøl, Playdead (slide 27) */
+
+  /* Uniform noise in [0..1[ range, using common GLSL hash function.
+   * https://stackoverflow.com/questions/12964279/whats-the-origin-of-this-glsl-rand-one-liner. */
+  float hash0 = sinf(s * 12.9898f + t * 78.233f) * 43758.5453f;
+  float hash1 = sinf(s * 19.9898f + t * 119.233f) * 43798.5453f;
+  hash0 -= floorf(hash0);
+  hash1 -= floorf(hash1);
   /* Convert uniform distribution into triangle-shaped distribution. */
-  return nrnd0 + nrnd1 - 0.5f;
+  return hash0 + hash1 - 0.5f;
 }
 
 MINLINE void float_to_byte_dither_v3(

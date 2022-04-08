@@ -54,16 +54,15 @@ struct ImBuf *seq_render_effect_execute_threaded(struct SeqEffectHandle *sh,
                                                  const struct SeqRenderData *context,
                                                  struct Sequence *seq,
                                                  float timeline_frame,
-                                                 float facf0,
-                                                 float facf1,
+                                                 float fac,
                                                  struct ImBuf *ibuf1,
                                                  struct ImBuf *ibuf2,
                                                  struct ImBuf *ibuf3);
 void seq_imbuf_to_sequencer_space(struct Scene *scene, struct ImBuf *ibuf, bool make_float);
-int seq_get_shown_sequences(struct ListBase *seqbasep,
+int seq_get_shown_sequences(struct ListBase *seqbase,
                             int timeline_frame,
                             int chanshown,
-                            struct Sequence **seq_arr_out);
+                            struct Sequence **r_seq_arr);
 struct ImBuf *seq_render_strip(const struct SeqRenderData *context,
                                struct SeqRenderState *state,
                                struct Sequence *seq,

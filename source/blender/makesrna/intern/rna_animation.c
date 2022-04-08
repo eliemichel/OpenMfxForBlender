@@ -337,7 +337,7 @@ static StructRNA *rna_KeyingSetInfo_register(Main *bmain,
   RNA_struct_blender_type_set(ksi->rna_ext.srna, ksi);
 
   /* set callbacks */
-  /* NOTE: we really should have all of these...  */
+  /* NOTE: we really should have all of these... */
   ksi->poll = (have_function[0]) ? RKS_POLL_rna_internal : NULL;
   ksi->iter = (have_function[1]) ? RKS_ITER_rna_internal : NULL;
   ksi->generate = (have_function[2]) ? RKS_GEN_rna_internal : NULL;
@@ -761,8 +761,8 @@ bool rna_NLA_tracks_override_apply(Main *bmain,
   /* This is not working so well with index-based insertion, especially in case some tracks get
    * added to lib linked data. So we simply add locale tracks at the end of the list always, order
    * of override operations should ensure order of local tracks is preserved properly. */
-  if (opop->subitem_local_index >= 0) {
-    nla_track_anchor = BLI_findlink(&anim_data_dst->nla_tracks, opop->subitem_local_index);
+  if (opop->subitem_reference_index >= 0) {
+    nla_track_anchor = BLI_findlink(&anim_data_dst->nla_tracks, opop->subitem_reference_index);
   }
   /* Otherwise we just insert in first position. */
 #  else
@@ -773,9 +773,11 @@ bool rna_NLA_tracks_override_apply(Main *bmain,
   if (opop->subitem_local_index >= 0) {
     nla_track_src = BLI_findlink(&anim_data_src->nla_tracks, opop->subitem_local_index);
   }
-  nla_track_src = nla_track_src ? nla_track_src->next : anim_data_src->nla_tracks.first;
 
-  BLI_assert(nla_track_src != NULL);
+  if (nla_track_src == NULL) {
+    BLI_assert(nla_track_src != NULL);
+    return false;
+  }
 
   NlaTrack *nla_track_dst = BKE_nlatrack_copy(bmain, nla_track_src, true, 0);
 
@@ -1146,7 +1148,7 @@ static void rna_def_keyingset(BlenderRNA *brna)
   RNA_def_property_string_maxlength(prop, RNA_DYN_DESCR_MAX); /* else it uses the pointer size! */
   RNA_def_property_ui_text(prop, "Description", "A short description of the keying set");
 
-  /* KeyingSetInfo (Type Info) for Builtin Sets only  */
+  /* KeyingSetInfo (Type Info) for Builtin Sets only. */
   prop = RNA_def_property(srna, "type_info", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "KeyingSetInfo");
   RNA_def_property_pointer_funcs(prop, "rna_KeyingSet_typeinfo_get", NULL, NULL, NULL);

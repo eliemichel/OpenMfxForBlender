@@ -23,7 +23,10 @@
 
 #include <string.h>
 
+#include "CLG_log.h"
+
 #include "BLI_listbase.h"
+#include "BLI_mempool.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_string_utils.h"
@@ -63,6 +66,8 @@
 
 #include "BLO_read_write.h"
 
+static CLG_LogRef LOG = {"bke.layercollection"};
+
 /* Set of flags which are dependent on a collection settings. */
 static const short g_base_collection_flags = (BASE_VISIBLE_DEPSGRAPH | BASE_VISIBLE_VIEWLAYER |
                                               BASE_SELECTABLE | BASE_ENABLED_VIEWPORT |
@@ -72,7 +77,9 @@ static const short g_base_collection_flags = (BASE_VISIBLE_DEPSGRAPH | BASE_VISI
 /* prototype */
 static void object_bases_iterator_next(BLI_Iterator *iter, const int flag);
 
-/*********************** Layer Collections and bases *************************/
+/* -------------------------------------------------------------------- */
+/** \name Layer Collections and Bases
+ * \{ */
 
 static LayerCollection *layer_collection_add(ListBase *lb_parent, Collection *collection)
 {
@@ -108,12 +115,14 @@ static Base *object_base_new(Object *ob)
   return base;
 }
 
-/********************************* View Layer ********************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Layer
+ * \{ */
 
 /* RenderLayer */
 
-/* Returns the default view layer to view in workspaces if there is
- * none linked to the workspace yet. */
 ViewLayer *BKE_view_layer_default_view(const Scene *scene)
 {
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
@@ -126,7 +135,6 @@ ViewLayer *BKE_view_layer_default_view(const Scene *scene)
   return scene->view_layers.first;
 }
 
-/* Returns the default view layer to render if we need to render just one. */
 ViewLayer *BKE_view_layer_default_render(const Scene *scene)
 {
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
@@ -139,7 +147,6 @@ ViewLayer *BKE_view_layer_default_render(const Scene *scene)
   return scene->view_layers.first;
 }
 
-/* Returns view layer with matching name, or NULL if not found. */
 ViewLayer *BKE_view_layer_find(const Scene *scene, const char *layer_name)
 {
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
@@ -151,11 +158,6 @@ ViewLayer *BKE_view_layer_find(const Scene *scene, const char *layer_name)
   return NULL;
 }
 
-/**
- * This is a placeholder to know which areas of the code need to be addressed
- * for the Workspace changes. Never use this, you should typically get the
- * active layer from the context or window.
- */
 ViewLayer *BKE_view_layer_context_active_PLACEHOLDER(const Scene *scene)
 {
   BLI_assert(scene->view_layers.first);
@@ -165,7 +167,7 @@ ViewLayer *BKE_view_layer_context_active_PLACEHOLDER(const Scene *scene)
 static ViewLayer *view_layer_add(const char *name)
 {
   if (!name) {
-    name = DATA_("View Layer");
+    name = DATA_("ViewLayer");
   }
 
   ViewLayer *view_layer = MEM_callocN(sizeof(ViewLayer), "View Layer");
@@ -174,8 +176,8 @@ static ViewLayer *view_layer_add(const char *name)
   BLI_strncpy_utf8(view_layer->name, name, sizeof(view_layer->name));
 
   /* Pure rendering pipeline settings. */
-  view_layer->layflag = 0x7FFF; /* solid ztra halo edge strand */
-  view_layer->passflag = SCE_PASS_COMBINED | SCE_PASS_Z;
+  view_layer->layflag = SCE_LAY_FLAG_DEFAULT;
+  view_layer->passflag = SCE_PASS_COMBINED;
   view_layer->pass_alpha_threshold = 0.5f;
   view_layer->cryptomatte_levels = 6;
   view_layer->cryptomatte_flag = VIEW_LAYER_CRYPTOMATTE_ACCURATE;
@@ -193,10 +195,6 @@ static void layer_collection_exclude_all(LayerCollection *layer_collection)
   }
 }
 
-/**
- * Add a new view layer
- * by default, a view layer has the master collection
- */
 ViewLayer *BKE_view_layer_add(Scene *scene,
                               const char *name,
                               ViewLayer *view_layer_source,
@@ -244,7 +242,7 @@ ViewLayer *BKE_view_layer_add(Scene *scene,
   BLI_uniquename(&scene->view_layers,
                  view_layer_new,
                  DATA_("ViewLayer"),
-                 '.',
+                 '_',
                  offsetof(ViewLayer, name),
                  sizeof(view_layer_new->name));
 
@@ -256,9 +254,6 @@ void BKE_view_layer_free(ViewLayer *view_layer)
   BKE_view_layer_free_ex(view_layer, true);
 }
 
-/**
- * Free (or release) any data used by this ViewLayer.
- */
 void BKE_view_layer_free_ex(ViewLayer *view_layer, const bool do_id_user)
 {
   view_layer->basact = NULL;
@@ -299,9 +294,6 @@ void BKE_view_layer_free_ex(ViewLayer *view_layer, const bool do_id_user)
   MEM_freeN(view_layer);
 }
 
-/**
- * Tag all the selected objects of a render-layer.
- */
 void BKE_view_layer_selected_objects_tag(ViewLayer *view_layer, const int tag)
 {
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
@@ -327,13 +319,6 @@ static bool find_scene_collection_in_scene_collections(ListBase *lb, const Layer
   return false;
 }
 
-/**
- * Fallback for when a Scene has no camera to use
- *
- * \param view_layer: in general you want to use the same ViewLayer that is used
- * for depsgraph. If rendering you pass the scene active layer, when viewing in the viewport
- * you want to get ViewLayer from context.
- */
 Object *BKE_view_layer_camera_find(ViewLayer *view_layer)
 {
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
@@ -345,9 +330,6 @@ Object *BKE_view_layer_camera_find(ViewLayer *view_layer)
   return NULL;
 }
 
-/**
- * Find the ViewLayer a LayerCollection belongs to
- */
 ViewLayer *BKE_view_layer_find_from_collection(const Scene *scene, LayerCollection *lc)
 {
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
@@ -361,7 +343,7 @@ ViewLayer *BKE_view_layer_find_from_collection(const Scene *scene, LayerCollecti
 
 /* Base */
 
-static void view_layer_bases_hash_create(ViewLayer *view_layer)
+static void view_layer_bases_hash_create(ViewLayer *view_layer, const bool do_base_duplicates_fix)
 {
   static ThreadMutex hash_lock = BLI_MUTEX_INITIALIZER;
 
@@ -371,14 +353,28 @@ static void view_layer_bases_hash_create(ViewLayer *view_layer)
     if (view_layer->object_bases_hash == NULL) {
       GHash *hash = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
 
-      LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+      LISTBASE_FOREACH_MUTABLE (Base *, base, &view_layer->object_bases) {
         if (base->object) {
-          /* Some processes, like ID remapping, may lead to having several bases with the same
-           * object. So just take the first one here, and ignore all others
-           * (#BKE_layer_collection_sync will clean this up anyway). */
           void **val_pp;
           if (!BLI_ghash_ensure_p(hash, base->object, &val_pp)) {
             *val_pp = base;
+          }
+          /* The same object has several bases.
+           *
+           * In normal cases this is a serious bug, but this is a common situation when remapping
+           * an object into another one already present in the same View Layer. While ideally we
+           * would process this case separately, for performances reasons it makes more sense to
+           * tackle it here. */
+          else if (do_base_duplicates_fix) {
+            if (view_layer->basact == base) {
+              view_layer->basact = NULL;
+            }
+            BLI_freelinkN(&view_layer->object_bases, base);
+          }
+          else {
+            CLOG_FATAL(&LOG,
+                       "Object '%s' has more than one entry in view layer's object bases listbase",
+                       base->object->id.name + 2);
           }
         }
       }
@@ -394,7 +390,7 @@ static void view_layer_bases_hash_create(ViewLayer *view_layer)
 Base *BKE_view_layer_base_find(ViewLayer *view_layer, Object *ob)
 {
   if (!view_layer->object_bases_hash) {
-    view_layer_bases_hash_create(view_layer);
+    view_layer_bases_hash_create(view_layer, false);
   }
 
   return BLI_ghash_lookup(view_layer->object_bases_hash, ob);
@@ -417,7 +413,12 @@ void BKE_view_layer_base_select_and_set_active(struct ViewLayer *view_layer, Bas
   }
 }
 
-/**************************** Copy View Layer and Layer Collections ***********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy View Layer and Layer Collections
+ * \{ */
+
 static void layer_aov_copy_data(ViewLayer *view_layer_dst,
                                 const ViewLayer *view_layer_src,
                                 ListBase *aovs_dst,
@@ -466,11 +467,6 @@ static void layer_collections_copy_data(ViewLayer *view_layer_dst,
   }
 }
 
-/**
- * Only copy internal data of ViewLayer from source to already allocated/initialized destination.
- *
- * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
- */
 void BKE_view_layer_copy_data(Scene *scene_dst,
                               const Scene *UNUSED(scene_src),
                               ViewLayer *view_layer_dst,
@@ -597,7 +593,7 @@ static bool layer_collection_hidden(ViewLayer *view_layer, LayerCollection *lc)
   }
 
   /* Check visiblilty restriction flags */
-  if (lc->flag & LAYER_COLLECTION_HIDE || lc->collection->flag & COLLECTION_RESTRICT_VIEWPORT) {
+  if (lc->flag & LAYER_COLLECTION_HIDE || lc->collection->flag & COLLECTION_HIDE_VIEWPORT) {
     return true;
   }
 
@@ -615,26 +611,17 @@ static bool layer_collection_hidden(ViewLayer *view_layer, LayerCollection *lc)
   return false;
 }
 
-/**
- * Get the collection for a given index
- */
 LayerCollection *BKE_layer_collection_from_index(ViewLayer *view_layer, const int index)
 {
   int i = 0;
   return collection_from_index(&view_layer->layer_collections, index, &i);
 }
 
-/**
- * Get the active collection
- */
 LayerCollection *BKE_layer_collection_get_active(ViewLayer *view_layer)
 {
   return view_layer->active_collection;
 }
 
-/*
- * Activate collection
- */
 bool BKE_layer_collection_activate(ViewLayer *view_layer, LayerCollection *lc)
 {
   if (lc->flag & LAYER_COLLECTION_EXCLUDE) {
@@ -645,9 +632,6 @@ bool BKE_layer_collection_activate(ViewLayer *view_layer, LayerCollection *lc)
   return true;
 }
 
-/**
- * Activate first parent collection
- */
 LayerCollection *BKE_layer_collection_activate_parent(ViewLayer *view_layer, LayerCollection *lc)
 {
   CollectionParent *parent = lc->collection->parents.first;
@@ -676,20 +660,16 @@ LayerCollection *BKE_layer_collection_activate_parent(ViewLayer *view_layer, Lay
 /**
  * Recursively get the count of collections
  */
-static int collection_count(ListBase *lb)
+static int collection_count(const ListBase *lb)
 {
   int i = 0;
-  LISTBASE_FOREACH (LayerCollection *, lc, lb) {
+  LISTBASE_FOREACH (const LayerCollection *, lc, lb) {
     i += collection_count(&lc->layer_collections) + 1;
   }
   return i;
 }
 
-/**
- * Get the total number of collections
- * (including all the nested collections)
- */
-int BKE_layer_collection_count(ViewLayer *view_layer)
+int BKE_layer_collection_count(const ViewLayer *view_layer)
 {
   return collection_count(&view_layer->layer_collections);
 }
@@ -716,16 +696,16 @@ static int index_from_collection(ListBase *lb, const LayerCollection *lc, int *i
   return -1;
 }
 
-/**
- * Return -1 if not found
- */
 int BKE_layer_collection_findindex(ViewLayer *view_layer, const LayerCollection *lc)
 {
   int i = 0;
   return index_from_collection(&view_layer->layer_collections, lc, &i);
 }
 
-/*********************************** Syncing *********************************
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Syncing
  *
  * The layer collection tree mirrors the scene collection tree. Whenever that
  * changes we need to synchronize them so that there is a corresponding layer
@@ -735,194 +715,541 @@ int BKE_layer_collection_findindex(ViewLayer *view_layer, const LayerCollection 
  *
  * The view layer also contains a list of bases for each object that exists
  * in at least one layer collection. That list is also synchronized here, and
- * stores state like selection. */
+ * stores state like selection.
+ *
+ * This API allows to temporarily forbid resync of LayerCollections.
+ *
+ * This can greatly improve performances in cases where those functions get
+ * called a lot (e.g. during massive remappings of IDs).
+ *
+ * Usage of these should be done very carefully though. In particular, calling
+ * code must ensures it resync LayerCollections before any UI/Event loop
+ * handling can happen.
+ *
+ * \warning This is not threadsafe at all, only use from main thread.
+ *
+ * \note It is probably needed to use #BKE_main_collection_sync_remap instead
+ *       of just #BKE_main_collection_sync after disabling LayerCollection resync,
+ *       unless it is absolutely certain that no ID remapping (or any other process
+ *       that may invalidate the caches) will happen while it is disabled.
+ *
+ * \note This is a quick and safe band-aid around the long-known issue
+ *       regarding this resync process.
+ *       Proper fix would be to make resync itself lazy, i.e. only happen
+ *       when actually needed.
+ *       See also T73411.
+ * \{ */
 
-static void layer_collection_sync(ViewLayer *view_layer,
-                                  const ListBase *lb_collections,
-                                  ListBase *lb_layer_collections,
-                                  ListBase *new_object_bases,
-                                  short parent_exclude,
-                                  short parent_restrict,
-                                  short parent_layer_restrict,
-                                  unsigned short parent_local_collections_bits)
+static bool no_resync = false;
+
+void BKE_layer_collection_resync_forbid(void)
 {
-  /* TODO: support recovery after removal of intermediate collections, reordering, ..
-   * For local edits we can make editing operating do the appropriate thing, but for
-   * linking we can only sync after the fact. */
+  no_resync = true;
+}
 
-  /* Remove layer collections that no longer have a corresponding scene collection. */
-  LISTBASE_FOREACH_MUTABLE (LayerCollection *, lc, lb_layer_collections) {
-    /* Note that ID remap can set lc->collection to NULL when deleting collections. */
-    Collection *collection = (lc->collection) ?
-                                 BLI_findptr(lb_collections,
-                                             lc->collection,
-                                             offsetof(CollectionChild, collection)) :
-                                 NULL;
+void BKE_layer_collection_resync_allow(void)
+{
+  no_resync = false;
+}
 
-    if (!collection) {
-      if (lc == view_layer->active_collection) {
-        view_layer->active_collection = NULL;
+typedef struct LayerCollectionResync {
+  struct LayerCollectionResync *prev, *next;
+
+  /* Temp data used to generate a queue during valid layer search. See
+   * #layer_collection_resync_find. */
+  struct LayerCollectionResync *queue_next;
+
+  /* LayerCollection and Collection wrapped by this data. */
+  LayerCollection *layer;
+  Collection *collection;
+
+  /* Hierarchical relationships in the old, existing ViewLayer state (except for newly created
+   * layers). */
+  struct LayerCollectionResync *parent_layer_resync;
+  ListBase children_layer_resync;
+
+  /* This layer still points to a valid collection. */
+  bool is_usable;
+  /* This layer is still valid as a parent, i.e. at least one of its original layer children is
+   * usable and matches one of its current children collections. */
+  bool is_valid_as_parent;
+  /* This layer is still valid as a child, i.e. its original layer parent is usable and matches one
+   * of its current parents collections. */
+  bool is_valid_as_child;
+  /* This layer is still fully valid in the new collection hierarchy, i.e. itself and all of its
+   * parents fully match the current collection hierarchy.
+   * OR
+   * This layer has already been re-used to match the new collections hierarchy. */
+  bool is_used;
+} LayerCollectionResync;
+
+static LayerCollectionResync *layer_collection_resync_create_recurse(
+    LayerCollectionResync *parent_layer_resync, LayerCollection *layer, BLI_mempool *mempool)
+{
+  LayerCollectionResync *layer_resync = BLI_mempool_calloc(mempool);
+
+  layer_resync->layer = layer;
+  layer_resync->collection = layer->collection;
+  layer_resync->parent_layer_resync = parent_layer_resync;
+  if (parent_layer_resync != NULL) {
+    BLI_addtail(&parent_layer_resync->children_layer_resync, layer_resync);
+  }
+
+  layer_resync->is_usable = (layer->collection != NULL);
+  layer_resync->is_valid_as_child =
+      layer_resync->is_usable && (parent_layer_resync == NULL ||
+                                  (parent_layer_resync->is_usable &&
+                                   BLI_findptr(&parent_layer_resync->layer->collection->children,
+                                               layer->collection,
+                                               offsetof(CollectionChild, collection)) != NULL));
+  if (layer_resync->is_valid_as_child) {
+    layer_resync->is_used = parent_layer_resync != NULL ? parent_layer_resync->is_used : true;
+  }
+  else {
+    layer_resync->is_used = false;
+  }
+
+  if (BLI_listbase_is_empty(&layer->layer_collections)) {
+    layer_resync->is_valid_as_parent = layer_resync->is_usable;
+  }
+  else {
+    LISTBASE_FOREACH (LayerCollection *, child_layer, &layer->layer_collections) {
+      LayerCollectionResync *child_layer_resync = layer_collection_resync_create_recurse(
+          layer_resync, child_layer, mempool);
+      if (layer_resync->is_usable && child_layer_resync->is_valid_as_child) {
+        layer_resync->is_valid_as_parent = true;
       }
-
-      /* Free recursively. */
-      layer_collection_free(view_layer, lc);
-      BLI_freelinkN(lb_layer_collections, lc);
     }
   }
 
-  /* Add layer collections for any new scene collections, and ensure order is the same. */
-  ListBase new_lb_layer = {NULL, NULL};
+  CLOG_INFO(&LOG,
+            4,
+            "Old LayerCollection for %s is...\n\tusable: %d\n\tvalid parent: %d\n\tvalid child: "
+            "%d\n\tused: %d\n",
+            layer_resync->collection ? layer_resync->collection->id.name : "<NONE>",
+            layer_resync->is_usable,
+            layer_resync->is_valid_as_parent,
+            layer_resync->is_valid_as_child,
+            layer_resync->is_used);
 
-  LISTBASE_FOREACH (const CollectionChild *, child, lb_collections) {
-    Collection *collection = child->collection;
-    LayerCollection *lc = BLI_findptr(
-        lb_layer_collections, collection, offsetof(LayerCollection, collection));
+  return layer_resync;
+}
 
-    if (lc) {
-      BLI_remlink(lb_layer_collections, lc);
-      BLI_addtail(&new_lb_layer, lc);
+static LayerCollectionResync *layer_collection_resync_find(LayerCollectionResync *layer_resync,
+                                                           Collection *child_collection)
+{
+  /* Given the given parent, valid layer collection, find in the old hierarchy the best possible
+   * unused layer matching the given child collection.
+   *
+   * This uses the following heuristics:
+   *  - Prefer a layer descendant of the given parent one if possible.
+   *  - Prefer a layer as closely related as possible from the given parent.
+   *  - Do not used layers that are not head (highest possible ancestor) of a local valid hierarchy
+   *    branch, since we can assume we could then re-use its ancestor instead.
+   *
+   * A queue is used to ensure this order of preferences.
+   */
+
+  BLI_assert(layer_resync->collection != child_collection);
+  BLI_assert(child_collection != NULL);
+
+  LayerCollectionResync *current_layer_resync = NULL;
+  LayerCollectionResync *root_layer_resync = layer_resync;
+
+  LayerCollectionResync *queue_head = layer_resync, *queue_tail = layer_resync;
+  layer_resync->queue_next = NULL;
+
+  while (queue_head != NULL) {
+    current_layer_resync = queue_head;
+    queue_head = current_layer_resync->queue_next;
+
+    if (current_layer_resync->collection == child_collection &&
+        (current_layer_resync->parent_layer_resync == layer_resync ||
+         (!current_layer_resync->is_used && !current_layer_resync->is_valid_as_child))) {
+      /* This layer is a valid candidate, because its collection matches the seeked one, AND:
+       *  - It is a direct child of the initial given parent ('unchanged hierarchy' case), OR
+       *  - It is not currently used, and not part of a valid hierarchy (sub-)chain.
+       */
+      break;
+    }
+
+    /* Else, add all its direct children for further searching. */
+    LISTBASE_FOREACH (LayerCollectionResync *,
+                      child_layer_resync,
+                      &current_layer_resync->children_layer_resync) {
+      /* Add to tail of the queue. */
+      queue_tail->queue_next = child_layer_resync;
+      child_layer_resync->queue_next = NULL;
+      queue_tail = child_layer_resync;
+      if (queue_head == NULL) {
+        queue_head = queue_tail;
+      }
+    }
+
+    /* If all descendants from current layer have been processed, go one step higher and
+     * process all of its other siblings. */
+    if (queue_head == NULL && root_layer_resync->parent_layer_resync != NULL) {
+      LISTBASE_FOREACH (LayerCollectionResync *,
+                        sibling_layer_resync,
+                        &root_layer_resync->parent_layer_resync->children_layer_resync) {
+        if (sibling_layer_resync == root_layer_resync) {
+          continue;
+        }
+        /* Add to tail of the queue. */
+        queue_tail->queue_next = sibling_layer_resync;
+        sibling_layer_resync->queue_next = NULL;
+        queue_tail = sibling_layer_resync;
+        if (queue_head == NULL) {
+          queue_head = queue_tail;
+        }
+      }
+      root_layer_resync = root_layer_resync->parent_layer_resync;
+    }
+
+    current_layer_resync = NULL;
+  }
+
+  return current_layer_resync;
+}
+
+static void layer_collection_resync_unused_layers_free(ViewLayer *view_layer,
+                                                       LayerCollectionResync *layer_resync)
+{
+  LISTBASE_FOREACH (
+      LayerCollectionResync *, child_layer_resync, &layer_resync->children_layer_resync) {
+    layer_collection_resync_unused_layers_free(view_layer, child_layer_resync);
+  }
+
+  if (!layer_resync->is_used) {
+    CLOG_INFO(&LOG,
+              4,
+              "Freeing unused LayerCollection for %s",
+              layer_resync->collection != NULL ? layer_resync->collection->id.name :
+                                                 "<Deleted Collection>");
+
+    if (layer_resync->layer == view_layer->active_collection) {
+      view_layer->active_collection = NULL;
+    }
+
+    /* We do not want to go recursive here, this is handled through the LayerCollectionResync data
+     * wrapper. */
+    MEM_freeN(layer_resync->layer);
+    layer_resync->layer = NULL;
+    layer_resync->collection = NULL;
+    layer_resync->is_usable = false;
+  }
+}
+
+static void layer_collection_objects_sync(ViewLayer *view_layer,
+                                          LayerCollection *layer,
+                                          ListBase *r_lb_new_object_bases,
+                                          const short collection_restrict,
+                                          const short layer_restrict,
+                                          const ushort local_collections_bits)
+{
+  /* No need to sync objects if the collection is excluded. */
+  if ((layer->flag & LAYER_COLLECTION_EXCLUDE) != 0) {
+    return;
+  }
+
+  LISTBASE_FOREACH (CollectionObject *, cob, &layer->collection->gobject) {
+    if (cob->ob == NULL) {
+      continue;
+    }
+
+    /* Tag linked object as a weak reference so we keep the object
+     * base pointer on file load and remember hidden state. */
+    id_lib_indirect_weak_link(&cob->ob->id);
+
+    void **base_p;
+    Base *base;
+    if (BLI_ghash_ensure_p(view_layer->object_bases_hash, cob->ob, &base_p)) {
+      /* Move from old base list to new base list. Base might have already
+       * been moved to the new base list and the first/last test ensure that
+       * case also works. */
+      base = *base_p;
+      if (!ELEM(base, r_lb_new_object_bases->first, r_lb_new_object_bases->last)) {
+        BLI_remlink(&view_layer->object_bases, base);
+        BLI_addtail(r_lb_new_object_bases, base);
+      }
     }
     else {
-      lc = layer_collection_add(&new_lb_layer, collection);
-      lc->flag = parent_exclude;
+      /* Create new base. */
+      base = object_base_new(cob->ob);
+      base->local_collections_bits = local_collections_bits;
+      *base_p = base;
+      BLI_addtail(r_lb_new_object_bases, base);
     }
 
-    unsigned short local_collections_bits = parent_local_collections_bits &
-                                            lc->local_collections_bits;
+    if ((collection_restrict & COLLECTION_HIDE_VIEWPORT) == 0) {
+      base->flag_from_collection |= (BASE_ENABLED_VIEWPORT | BASE_VISIBLE_DEPSGRAPH);
+      if ((layer_restrict & LAYER_COLLECTION_HIDE) == 0) {
+        base->flag_from_collection |= BASE_VISIBLE_VIEWLAYER;
+      }
+      if (((collection_restrict & COLLECTION_HIDE_SELECT) == 0)) {
+        base->flag_from_collection |= BASE_SELECTABLE;
+      }
+    }
+
+    if ((collection_restrict & COLLECTION_HIDE_RENDER) == 0) {
+      base->flag_from_collection |= BASE_ENABLED_RENDER;
+    }
+
+    /* Holdout and indirect only */
+    if ((layer->flag & LAYER_COLLECTION_HOLDOUT) || (base->object->visibility_flag & OB_HOLDOUT)) {
+      base->flag_from_collection |= BASE_HOLDOUT;
+    }
+    if (layer->flag & LAYER_COLLECTION_INDIRECT_ONLY) {
+      base->flag_from_collection |= BASE_INDIRECT_ONLY;
+    }
+
+    layer->runtime_flag |= LAYER_COLLECTION_HAS_OBJECTS;
+  }
+}
+
+static void layer_collection_sync(ViewLayer *view_layer,
+                                  LayerCollectionResync *layer_resync,
+                                  BLI_mempool *layer_resync_mempool,
+                                  ListBase *r_lb_new_object_bases,
+                                  const short parent_layer_flag,
+                                  const short parent_collection_restrict,
+                                  const short parent_layer_restrict,
+                                  const ushort parent_local_collections_bits)
+{
+  /* This function assumes current 'parent' layer collection is already fully (re)synced and valid
+   * regarding current Collection hierarchy.
+   *
+   * It will process all the children collections of the collection from the given 'parent' layer,
+   * re-use or create layer collections for each of them, and ensure orders also match.
+   *
+   * Then it will ensure that the objects owned by the given parent collection have a proper base.
+   *
+   * NOTE: This process is recursive.
+   */
+
+  /* Temporary storage for all valid (new or reused) children layers. */
+  ListBase new_lb_layer = {NULL, NULL};
+
+  BLI_assert(layer_resync->is_used);
+
+  LISTBASE_FOREACH (CollectionChild *, child, &layer_resync->collection->children) {
+    Collection *child_collection = child->collection;
+    LayerCollectionResync *child_layer_resync = layer_collection_resync_find(layer_resync,
+                                                                             child_collection);
+
+    if (child_layer_resync != NULL) {
+      BLI_assert(child_layer_resync->collection != NULL);
+      BLI_assert(child_layer_resync->layer != NULL);
+      BLI_assert(child_layer_resync->is_usable);
+
+      if (child_layer_resync->is_used) {
+        CLOG_INFO(&LOG,
+                  4,
+                  "Found same existing LayerCollection for %s as child of %s",
+                  child_collection->id.name,
+                  layer_resync->collection->id.name);
+      }
+      else {
+        CLOG_INFO(&LOG,
+                  4,
+                  "Found a valid unused LayerCollection for %s as child of %s, re-using it",
+                  child_collection->id.name,
+                  layer_resync->collection->id.name);
+      }
+
+      child_layer_resync->is_used = true;
+
+      /* NOTE: Do not move the resync wrapper to match the new layer hierarchy, so that the old
+       * parenting info remains available. In case a search for a valid layer in the children of
+       * the current is required again, the old parenting hierarchy is needed as reference, not the
+       * new one.
+       */
+      BLI_remlink(&child_layer_resync->parent_layer_resync->layer->layer_collections,
+                  child_layer_resync->layer);
+      BLI_addtail(&new_lb_layer, child_layer_resync->layer);
+    }
+    else {
+      CLOG_INFO(&LOG,
+                4,
+                "No available LayerCollection for %s as child of %s, creating a new one",
+                child_collection->id.name,
+                layer_resync->collection->id.name);
+
+      LayerCollection *child_layer = layer_collection_add(&new_lb_layer, child_collection);
+      child_layer->flag = parent_layer_flag;
+
+      child_layer_resync = BLI_mempool_calloc(layer_resync_mempool);
+      child_layer_resync->collection = child_collection;
+      child_layer_resync->layer = child_layer;
+      child_layer_resync->is_usable = true;
+      child_layer_resync->is_used = true;
+      child_layer_resync->is_valid_as_child = true;
+      child_layer_resync->is_valid_as_parent = true;
+      /* NOTE: Needs to be added to the layer_resync hierarchy so that the resync wrapper gets
+       * freed at the end. */
+      child_layer_resync->parent_layer_resync = layer_resync;
+      BLI_addtail(&layer_resync->children_layer_resync, child_layer_resync);
+    }
+
+    LayerCollection *child_layer = child_layer_resync->layer;
+
+    const ushort child_local_collections_bits = parent_local_collections_bits &
+                                                child_layer->local_collections_bits;
 
     /* Tag linked collection as a weak reference so we keep the layer
      * collection pointer on file load and remember exclude state. */
-    id_lib_indirect_weak_link(&collection->id);
+    id_lib_indirect_weak_link(&child_collection->id);
 
     /* Collection restrict is inherited. */
-    short child_restrict = parent_restrict;
+    short child_collection_restrict = parent_collection_restrict;
     short child_layer_restrict = parent_layer_restrict;
-    if (!(collection->flag & COLLECTION_IS_MASTER)) {
-      child_restrict |= collection->flag;
-      child_layer_restrict |= lc->flag;
+    if (!(child_collection->flag & COLLECTION_IS_MASTER)) {
+      child_collection_restrict |= child_collection->flag;
+      child_layer_restrict |= child_layer->flag;
     }
 
     /* Sync child collections. */
     layer_collection_sync(view_layer,
-                          &collection->children,
-                          &lc->layer_collections,
-                          new_object_bases,
-                          lc->flag,
-                          child_restrict,
+                          child_layer_resync,
+                          layer_resync_mempool,
+                          r_lb_new_object_bases,
+                          child_layer->flag,
+                          child_collection_restrict,
                           child_layer_restrict,
-                          local_collections_bits);
+                          child_local_collections_bits);
 
     /* Layer collection exclude is not inherited. */
-    lc->runtime_flag = 0;
-    if (lc->flag & LAYER_COLLECTION_EXCLUDE) {
+    child_layer->runtime_flag = 0;
+    if (child_layer->flag & LAYER_COLLECTION_EXCLUDE) {
       continue;
     }
 
     /* We separate restrict viewport and visible view layer because a layer collection can be
-     * hidden in the view layer yet (locally) visible in a viewport (if it is not restricted).*/
-    if (child_restrict & COLLECTION_RESTRICT_VIEWPORT) {
-      lc->runtime_flag |= LAYER_COLLECTION_RESTRICT_VIEWPORT;
+     * hidden in the view layer yet (locally) visible in a viewport (if it is not restricted). */
+    if (child_collection_restrict & COLLECTION_HIDE_VIEWPORT) {
+      child_layer->runtime_flag |= LAYER_COLLECTION_HIDE_VIEWPORT;
     }
 
-    if (((lc->runtime_flag & LAYER_COLLECTION_RESTRICT_VIEWPORT) == 0) &&
+    if (((child_layer->runtime_flag & LAYER_COLLECTION_HIDE_VIEWPORT) == 0) &&
         ((child_layer_restrict & LAYER_COLLECTION_HIDE) == 0)) {
-      lc->runtime_flag |= LAYER_COLLECTION_VISIBLE_VIEW_LAYER;
+      child_layer->runtime_flag |= LAYER_COLLECTION_VISIBLE_VIEW_LAYER;
     }
+  }
 
-    /* Sync objects, except if collection was excluded. */
-    LISTBASE_FOREACH (CollectionObject *, cob, &collection->gobject) {
+  /* Replace layer collection list with new one. */
+  layer_resync->layer->layer_collections = new_lb_layer;
+  BLI_assert(BLI_listbase_count(&layer_resync->collection->children) ==
+             BLI_listbase_count(&new_lb_layer));
+
+  /* Update bases etc. for objects. */
+  layer_collection_objects_sync(view_layer,
+                                layer_resync->layer,
+                                r_lb_new_object_bases,
+                                parent_collection_restrict,
+                                parent_layer_restrict,
+                                parent_local_collections_bits);
+}
+
+#ifndef NDEBUG
+static bool view_layer_objects_base_cache_validate(ViewLayer *view_layer, LayerCollection *layer)
+{
+  bool is_valid = true;
+
+  if (layer == NULL) {
+    layer = view_layer->layer_collections.first;
+  }
+
+  /* Only check for a collection's objects if its layer is not excluded. */
+  if ((layer->flag & LAYER_COLLECTION_EXCLUDE) == 0) {
+    LISTBASE_FOREACH (CollectionObject *, cob, &layer->collection->gobject) {
       if (cob->ob == NULL) {
         continue;
       }
-
-      /* Tag linked object as a weak reference so we keep the object
-       * base pointer on file load and remember hidden state. */
-      id_lib_indirect_weak_link(&cob->ob->id);
-
-      void **base_p;
-      Base *base;
-      if (BLI_ghash_ensure_p(view_layer->object_bases_hash, cob->ob, &base_p)) {
-        /* Move from old base list to new base list. Base might have already
-         * been moved to the new base list and the first/last test ensure that
-         * case also works. */
-        base = *base_p;
-        if (!ELEM(base, new_object_bases->first, new_object_bases->last)) {
-          BLI_remlink(&view_layer->object_bases, base);
-          BLI_addtail(new_object_bases, base);
-        }
+      if (BLI_ghash_lookup(view_layer->object_bases_hash, cob->ob) == NULL) {
+        CLOG_FATAL(
+            &LOG,
+            "Object '%s' from collection '%s' has no entry in view layer's object bases cache",
+            cob->ob->id.name + 2,
+            layer->collection->id.name + 2);
+        is_valid = false;
+        break;
       }
-      else {
-        /* Create new base. */
-        base = object_base_new(cob->ob);
-        base->local_collections_bits = local_collections_bits;
-        *base_p = base;
-        BLI_addtail(new_object_bases, base);
-      }
-
-      if ((child_restrict & COLLECTION_RESTRICT_VIEWPORT) == 0) {
-        base->flag_from_collection |= (BASE_ENABLED_VIEWPORT | BASE_VISIBLE_DEPSGRAPH);
-        if ((child_layer_restrict & LAYER_COLLECTION_HIDE) == 0) {
-          base->flag_from_collection |= BASE_VISIBLE_VIEWLAYER;
-        }
-        if (((child_restrict & COLLECTION_RESTRICT_SELECT) == 0)) {
-          base->flag_from_collection |= BASE_SELECTABLE;
-        }
-      }
-
-      if ((child_restrict & COLLECTION_RESTRICT_RENDER) == 0) {
-        base->flag_from_collection |= BASE_ENABLED_RENDER;
-      }
-
-      /* Holdout and indirect only */
-      if (lc->flag & LAYER_COLLECTION_HOLDOUT) {
-        base->flag_from_collection |= BASE_HOLDOUT;
-      }
-      if (lc->flag & LAYER_COLLECTION_INDIRECT_ONLY) {
-        base->flag_from_collection |= BASE_INDIRECT_ONLY;
-      }
-
-      lc->runtime_flag |= LAYER_COLLECTION_HAS_OBJECTS;
     }
   }
 
-  /* Free potentially remaining unused layer collections in old list.
-   * NOTE: While this does not happen in typical situations, some corner cases (like remapping
-   * several different collections to a single one) can lead to this list having extra unused
-   * items. */
-  LISTBASE_FOREACH_MUTABLE (LayerCollection *, lc, lb_layer_collections) {
-    if (lc == view_layer->active_collection) {
-      view_layer->active_collection = NULL;
+  if (is_valid) {
+    LISTBASE_FOREACH (LayerCollection *, layer_child, &layer->layer_collections) {
+      if (!view_layer_objects_base_cache_validate(view_layer, layer_child)) {
+        is_valid = false;
+        break;
+      }
     }
-
-    /* Free recursively. */
-    layer_collection_free(view_layer, lc);
-    BLI_freelinkN(lb_layer_collections, lc);
   }
-  BLI_assert(BLI_listbase_is_empty(lb_layer_collections));
 
-  /* Replace layer collection list with new one. */
-  *lb_layer_collections = new_lb_layer;
-  BLI_assert(BLI_listbase_count(lb_collections) == BLI_listbase_count(lb_layer_collections));
+  return is_valid;
+}
+#else
+static bool view_layer_objects_base_cache_validate(ViewLayer *UNUSED(view_layer),
+                                                   LayerCollection *UNUSED(layer))
+{
+  return true;
+}
+#endif
+
+void BKE_layer_collection_doversion_2_80(const Scene *scene, ViewLayer *view_layer)
+{
+  LayerCollection *first_layer_collection = view_layer->layer_collections.first;
+  if (BLI_listbase_count_at_most(&view_layer->layer_collections, 2) > 1 ||
+      first_layer_collection->collection != scene->master_collection) {
+    /* In some cases (from older files) we do have a master collection, but no matching layer,
+     * instead all the children of the master collection have their layer collections in the
+     * viewlayer's list. This is not a valid situation, add a layer for the master collection and
+     * add all existing first-level layers as children of that new master layer. */
+    ListBase layer_collections = view_layer->layer_collections;
+    BLI_listbase_clear(&view_layer->layer_collections);
+    LayerCollection *master_layer_collection = layer_collection_add(&view_layer->layer_collections,
+                                                                    scene->master_collection);
+    master_layer_collection->layer_collections = layer_collections;
+  }
 }
 
-/**
- * Update view layer collection tree from collections used in the scene.
- * This is used when collections are removed or added, both while editing
- * and on file loaded in case linked data changed or went missing.
- */
 void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
 {
+  if (no_resync) {
+    return;
+  }
+
   if (!scene->master_collection) {
     /* Happens for old files that don't have versioning applied yet. */
     return;
   }
+
+  if (BLI_listbase_is_empty(&view_layer->layer_collections)) {
+    /* In some cases (from older files, or when creating a new ViewLayer from
+     * #BKE_view_layer_add), we do have a master collection, yet no matching layer. Create the
+     * master one here, so that the rest of the code can work as expected. */
+    layer_collection_add(&view_layer->layer_collections, scene->master_collection);
+  }
+
+#ifndef NDEBUG
+  {
+    BLI_assert_msg(BLI_listbase_count_at_most(&view_layer->layer_collections, 2) == 1,
+                   "ViewLayer's first level of children layer collections should always have "
+                   "exactly one item");
+
+    LayerCollection *first_layer_collection = view_layer->layer_collections.first;
+    BLI_assert_msg(first_layer_collection->collection == scene->master_collection,
+                   "ViewLayer's first layer collection should always be the one for the scene's "
+                   "master collection");
+  }
+#endif
 
   /* Free cache. */
   MEM_SAFE_FREE(view_layer->object_bases_array);
 
   /* Create object to base hash if it does not exist yet. */
   if (!view_layer->object_bases_hash) {
-    view_layer_bases_hash_create(view_layer);
+    view_layer_bases_hash_create(view_layer, false);
   }
 
   /* Clear visible and selectable flags to be reset. */
@@ -931,20 +1258,28 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
     base->flag_from_collection &= ~g_base_collection_flags;
   }
 
-  /* Generate new layer connections and object bases when collections changed. */
-  CollectionChild child = {.next = NULL, .prev = NULL, .collection = scene->master_collection};
-  const ListBase collections = {.first = &child, .last = &child};
-  ListBase new_object_bases = {.first = NULL, .last = NULL};
+  /* Generate temporary data representing the old layers hierarchy, and how well it matches the
+   * new collections hierarchy. */
+  BLI_mempool *layer_resync_mempool = BLI_mempool_create(
+      sizeof(LayerCollectionResync), 1024, 1024, BLI_MEMPOOL_NOP);
+  LayerCollectionResync *master_layer_resync = layer_collection_resync_create_recurse(
+      NULL, view_layer->layer_collections.first, layer_resync_mempool);
 
+  /* Generate new layer connections and object bases when collections changed. */
+  ListBase new_object_bases = {.first = NULL, .last = NULL};
   const short parent_exclude = 0, parent_restrict = 0, parent_layer_restrict = 0;
   layer_collection_sync(view_layer,
-                        &collections,
-                        &view_layer->layer_collections,
+                        master_layer_resync,
+                        layer_resync_mempool,
                         &new_object_bases,
                         parent_exclude,
                         parent_restrict,
                         parent_layer_restrict,
                         ~(0));
+
+  layer_collection_resync_unused_layers_free(view_layer, master_layer_resync);
+  BLI_mempool_destroy(layer_resync_mempool);
+  master_layer_resync = NULL;
 
   /* Any remaining object bases are to be removed. */
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
@@ -953,12 +1288,20 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
     }
 
     if (base->object) {
+      /* Those asserts are commented, since they are too expensive to perform even in debug, as
+       * this layer resync function currently gets called way too often. */
+#if 0
+      BLI_assert(BLI_findindex(&new_object_bases, base) == -1);
+      BLI_assert(BLI_findptr(&new_object_bases, base->object, offsetof(Base, object)) == NULL);
+#endif
       BLI_ghash_remove(view_layer->object_bases_hash, base->object, NULL, NULL);
     }
   }
 
   BLI_freelistN(&view_layer->object_bases);
   view_layer->object_bases = new_object_bases;
+
+  view_layer_objects_base_cache_validate(view_layer, NULL);
 
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     BKE_base_eval_flags(base);
@@ -976,6 +1319,10 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
 
 void BKE_scene_collection_sync(const Scene *scene)
 {
+  if (no_resync) {
+    return;
+  }
+
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
     BKE_layer_collection_sync(scene, view_layer);
   }
@@ -983,6 +1330,10 @@ void BKE_scene_collection_sync(const Scene *scene)
 
 void BKE_main_collection_sync(const Main *bmain)
 {
+  if (no_resync) {
+    return;
+  }
+
   /* TODO: if a single collection changed, figure out which
    * scenes it belongs to and only update those. */
 
@@ -997,18 +1348,31 @@ void BKE_main_collection_sync(const Main *bmain)
 
 void BKE_main_collection_sync_remap(const Main *bmain)
 {
+  if (no_resync) {
+    return;
+  }
+
   /* On remapping of object or collection pointers free caches. */
   /* TODO: try to make this faster */
 
-  for (const Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+  for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       MEM_SAFE_FREE(view_layer->object_bases_array);
 
       if (view_layer->object_bases_hash) {
         BLI_ghash_free(view_layer->object_bases_hash, NULL, NULL);
         view_layer->object_bases_hash = NULL;
+
+        /* Directly re-create the mapping here, so that we can also deal with duplicates in
+         * `view_layer->object_bases` list of bases properly. This is the only place where such
+         * duplicates should be fixed, and not considered as a critical error. */
+        view_layer_bases_hash_create(view_layer, true);
       }
     }
+
+    BKE_collection_object_cache_free(scene->master_collection);
+    DEG_id_tag_update_ex((Main *)bmain, &scene->master_collection->id, ID_RECALC_COPY_ON_WRITE);
+    DEG_id_tag_update_ex((Main *)bmain, &scene->id, ID_RECALC_COPY_ON_WRITE);
   }
 
   for (Collection *collection = bmain->collections.first; collection;
@@ -1020,17 +1384,15 @@ void BKE_main_collection_sync_remap(const Main *bmain)
   BKE_main_collection_sync(bmain);
 }
 
-/* ---------------------------------------------------------------------- */
+/** \} */
 
-/**
- * Select all the objects of this layer collection
- *
- * It also select the objects that are in nested collections.
- * \note Recursive
- */
+/* -------------------------------------------------------------------- */
+/** \name Object Selection
+ * \{ */
+
 bool BKE_layer_collection_objects_select(ViewLayer *view_layer, LayerCollection *lc, bool deselect)
 {
-  if (lc->collection->flag & COLLECTION_RESTRICT_SELECT) {
+  if (lc->collection->flag & COLLECTION_HIDE_SELECT) {
     return false;
   }
 
@@ -1066,7 +1428,7 @@ bool BKE_layer_collection_objects_select(ViewLayer *view_layer, LayerCollection 
 
 bool BKE_layer_collection_has_selected_objects(ViewLayer *view_layer, LayerCollection *lc)
 {
-  if (lc->collection->flag & COLLECTION_RESTRICT_SELECT) {
+  if (lc->collection->flag & COLLECTION_HIDE_SELECT) {
     return false;
   }
 
@@ -1104,9 +1466,12 @@ bool BKE_layer_collection_has_layer_collection(LayerCollection *lc_parent,
   return false;
 }
 
-/* ---------------------------------------------------------------------- */
+/** \} */
 
-/* Update after toggling visibility of an object base. */
+/* -------------------------------------------------------------------- */
+/** \name Object Visibility
+ * \{ */
+
 void BKE_base_set_visible(Scene *scene, ViewLayer *view_layer, Base *base, bool extend)
 {
   if (!extend) {
@@ -1154,7 +1519,7 @@ bool BKE_object_is_visible_in_viewport(const View3D *v3d, const struct Object *o
 {
   BLI_assert(v3d != NULL);
 
-  if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
+  if (ob->visibility_flag & OB_HIDE_VIEWPORT) {
     return false;
   }
 
@@ -1179,6 +1544,12 @@ bool BKE_object_is_visible_in_viewport(const View3D *v3d, const struct Object *o
   return true;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Collection Isolation & Local View
+ * \{ */
+
 static void layer_collection_flag_set_recursive(LayerCollection *lc, const int flag)
 {
   lc->flag |= flag;
@@ -1195,14 +1566,6 @@ static void layer_collection_flag_unset_recursive(LayerCollection *lc, const int
   }
 }
 
-/**
- * Isolate the collection - hide all other collections but this one.
- * Make sure to show all the direct parents and all children of the layer collection as well.
- * When extending we simply show the collections and its direct family.
- *
- * If the collection or any of its parents is disabled, make it enabled.
- * Don't change the children disable state though.
- */
 void BKE_layer_collection_isolate_global(Scene *scene,
                                          ViewLayer *view_layer,
                                          LayerCollection *lc,
@@ -1212,7 +1575,7 @@ void BKE_layer_collection_isolate_global(Scene *scene,
   bool hide_it = extend && (lc->runtime_flag & LAYER_COLLECTION_VISIBLE_VIEW_LAYER);
 
   if (!extend) {
-    /* Hide all collections . */
+    /* Hide all collections. */
     LISTBASE_FOREACH (LayerCollection *, lc_iter, &lc_master->layer_collections) {
       layer_collection_flag_set_recursive(lc_iter, LAYER_COLLECTION_HIDE);
     }
@@ -1295,6 +1658,10 @@ static void layer_collection_local_sync(ViewLayer *view_layer,
 
 void BKE_layer_collection_local_sync(ViewLayer *view_layer, const View3D *v3d)
 {
+  if (no_resync) {
+    return;
+  }
+
   const unsigned short local_collections_uuid = v3d->local_collections_uuid;
 
   /* Reset flags and set the bases visible by default. */
@@ -1307,11 +1674,12 @@ void BKE_layer_collection_local_sync(ViewLayer *view_layer, const View3D *v3d)
   }
 }
 
-/**
- * Sync the local collection for all the 3D Viewports.
- */
 void BKE_layer_collection_local_sync_all(const Main *bmain)
 {
+  if (no_resync) {
+    return;
+  }
+
   LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
@@ -1329,11 +1697,6 @@ void BKE_layer_collection_local_sync_all(const Main *bmain)
   }
 }
 
-/**
- * Isolate the collection locally
- *
- * Same as BKE_layer_collection_isolate_local but for a viewport
- */
 void BKE_layer_collection_isolate_local(ViewLayer *view_layer,
                                         const View3D *v3d,
                                         LayerCollection *lc,
@@ -1406,11 +1769,6 @@ static void layer_collection_bases_hide_recursive(ViewLayer *view_layer, LayerCo
   }
 }
 
-/**
- * Hide/show all the elements of a collection.
- * Don't change the collection children enable/disable state,
- * but it may change it for the collection itself.
- */
 void BKE_layer_collection_set_visible(ViewLayer *view_layer,
                                       LayerCollection *lc,
                                       const bool visible,
@@ -1497,10 +1855,7 @@ static LayerCollection *find_layer_collection_by_scene_collection(LayerCollectio
   return NULL;
 }
 
-/**
- * Return the first matching LayerCollection in the ViewLayer for the Collection.
- */
-LayerCollection *BKE_layer_collection_first_from_scene_collection(ViewLayer *view_layer,
+LayerCollection *BKE_layer_collection_first_from_scene_collection(const ViewLayer *view_layer,
                                                                   const Collection *collection)
 {
   LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
@@ -1513,17 +1868,11 @@ LayerCollection *BKE_layer_collection_first_from_scene_collection(ViewLayer *vie
   return NULL;
 }
 
-/**
- * See if view layer has the scene collection linked directly, or indirectly (nested)
- */
-bool BKE_view_layer_has_collection(ViewLayer *view_layer, const Collection *collection)
+bool BKE_view_layer_has_collection(const ViewLayer *view_layer, const Collection *collection)
 {
   return BKE_layer_collection_first_from_scene_collection(view_layer, collection) != NULL;
 }
 
-/**
- * See if the object is in any of the scene layers of the scene
- */
 bool BKE_scene_has_object(Scene *scene, Object *ob)
 {
   LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
@@ -1633,6 +1982,8 @@ static void objects_iterator_end(BLI_Iterator *iter)
 {
   object_bases_iterator_end(iter);
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name BKE_view_layer_selected_objects_iterator
@@ -1823,11 +2174,10 @@ void BKE_view_layer_bases_in_mode_iterator_end(BLI_Iterator *UNUSED(iter))
 
 /** \} */
 
-/* Evaluation  */
+/* -------------------------------------------------------------------- */
+/** \name Evaluation
+ * \{ */
 
-/* Applies object's restrict flags on top of flags coming from the collection
- * and stores those in base->flag. BASE_VISIBLE_DEPSGRAPH ignores viewport flags visibility
- * (i.e., restriction and local collection). */
 void BKE_base_eval_flags(Base *base)
 {
   /* Apply collection flags. */
@@ -1835,14 +2185,14 @@ void BKE_base_eval_flags(Base *base)
   base->flag |= (base->flag_from_collection & g_base_collection_flags);
 
   /* Apply object restrictions. */
-  const int object_restrict = base->object->restrictflag;
-  if (object_restrict & OB_RESTRICT_VIEWPORT) {
+  const int object_restrict = base->object->visibility_flag;
+  if (object_restrict & OB_HIDE_VIEWPORT) {
     base->flag &= ~BASE_ENABLED_VIEWPORT;
   }
-  if (object_restrict & OB_RESTRICT_RENDER) {
+  if (object_restrict & OB_HIDE_RENDER) {
     base->flag &= ~BASE_ENABLED_RENDER;
   }
-  if (object_restrict & OB_RESTRICT_SELECT) {
+  if (object_restrict & OB_HIDE_SELECT) {
     base->flag &= ~BASE_SELECTABLE;
   }
 
@@ -1885,6 +2235,12 @@ void BKE_layer_eval_view_layer_indexed(struct Depsgraph *depsgraph,
   BLI_assert(view_layer != NULL);
   layer_eval_view_layer(depsgraph, scene, view_layer);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Blend File I/O
+ * \{ */
 
 static void write_layer_collections(BlendWriter *writer, ListBase *lb)
 {
@@ -2006,6 +2362,8 @@ void BKE_view_layer_blend_read_lib(BlendLibReader *reader, Library *lib, ViewLay
   IDP_BlendReadLib(reader, view_layer->id_properties);
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Shader AOV
  * \{ */
@@ -2016,8 +2374,12 @@ static void viewlayer_aov_make_name_unique(ViewLayer *view_layer)
   if (aov == NULL) {
     return;
   }
+
+  /* Don't allow dots, it's incompatible with OpenEXR convention to store channels
+   * as "layer.pass.channel". */
+  BLI_str_replace_char(aov->name, '.', '_');
   BLI_uniquename(
-      &view_layer->aovs, aov, DATA_("AOV"), '.', offsetof(ViewLayerAOV, name), sizeof(aov->name));
+      &view_layer->aovs, aov, DATA_("AOV"), '_', offsetof(ViewLayerAOV, name), sizeof(aov->name));
 }
 
 static void viewlayer_aov_active_set(ViewLayer *view_layer, ViewLayerAOV *aov)
@@ -2086,12 +2448,6 @@ static void bke_view_layer_verify_aov_cb(void *userdata,
   }
 }
 
-/* Update the naming and conflicts of the AOVs.
- *
- * Name must be unique between all AOVs.
- * Conflicts with render passes will show a conflict icon. Reason is that switching a render
- * engine or activating a render pass could lead to other conflicts that wouldn't be that clear
- * for the user. */
 void BKE_view_layer_verify_aov(struct RenderEngine *engine,
                                struct Scene *scene,
                                struct ViewLayer *view_layer)
@@ -2109,7 +2465,6 @@ void BKE_view_layer_verify_aov(struct RenderEngine *engine,
   BLI_ghash_free(name_count, MEM_freeN, NULL);
 }
 
-/* Check if the given view layer has at least one valid AOV. */
 bool BKE_view_layer_has_valid_aov(ViewLayer *view_layer)
 {
   LISTBASE_FOREACH (ViewLayerAOV *, aov, &view_layer->aovs) {

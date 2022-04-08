@@ -47,7 +47,7 @@
 /**
  * \section dna_genfile Overview
  *
- * - please note: no builtin security to detect input of double structs
+ * - please NOTE: no builtin security to detect input of double structs
  * - if you want a struct not to be in DNA file: add two hash marks above it `(#<enter>#<enter>)`.
  *
  * Structure DNA data is added to each blender file and to each executable, this to detect
@@ -84,8 +84,8 @@
  * **Remember to read/write integer and short aligned!**
  *
  * While writing a file, the names of a struct is indicated with a type number,
- * to be found with: ``type = DNA_struct_find_nr(SDNA *, const char *)``
- * The value of ``type`` corresponds with the index within the structs array
+ * to be found with: `type = DNA_struct_find_nr(SDNA *, const char *)`
+ * The value of `type` corresponds with the index within the structs array
  *
  * For the moment: the complete DNA file is included in a .blend file. For
  * the future we can think of smarter methods, like only included the used
@@ -101,7 +101,7 @@
  *  - Change of a pointer type: when the name doesn't change the contents is copied.
  *
  * NOT YET:
- *  - array (``vec[3]``) to float struct (``vec3f``).
+ *  - array (`vec[3]`) to float struct (`vec3f`).
  *
  * DONE:
  *  - Endian compatibility.
@@ -177,13 +177,6 @@ static bool ispointer(const char *name)
   return (name[0] == '*' || (name[0] == '(' && name[1] == '*'));
 }
 
-/**
- * Returns the size of struct fields of the specified type and name.
- *
- * \param type: Index into sdna->types/types_size
- * \param name: Index into sdna->names,
- * needed to extract possible pointer/array information.
- */
 int DNA_elem_size_nr(const SDNA *sdna, short type, short name)
 {
   const char *cp = sdna->names[name];
@@ -265,9 +258,6 @@ static int dna_struct_find_nr_ex_impl(
   return -1;
 }
 
-/**
- * Returns the index of the struct info for the struct with the specified name.
- */
 int DNA_struct_find_nr_ex(const SDNA *sdna, const char *str, unsigned int *index_last)
 {
   return dna_struct_find_nr_ex_impl(
@@ -284,7 +274,6 @@ int DNA_struct_find_nr_ex(const SDNA *sdna, const char *str, unsigned int *index
       index_last);
 }
 
-/** \note requires #DNA_sdna_alias_data_ensure_structs_map to be called. */
 int DNA_struct_alias_find_nr_ex(const SDNA *sdna, const char *str, unsigned int *index_last)
 {
 #ifdef WITH_DNA_GHASH
@@ -310,7 +299,6 @@ int DNA_struct_find_nr(const SDNA *sdna, const char *str)
   return DNA_struct_find_nr_ex(sdna, str, &index_last_dummy);
 }
 
-/** \note requires #DNA_sdna_alias_data_ensure_structs_map to be called. */
 int DNA_struct_alias_find_nr(const SDNA *sdna, const char *str)
 {
   unsigned int index_last_dummy = UINT_MAX;
@@ -525,7 +513,7 @@ static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error
 
     sdna->pointer_size = sdna->types_size[struct_info->type] / 2;
 
-    if (struct_info->members_len != 2 || (sdna->pointer_size != 4 && sdna->pointer_size != 8)) {
+    if (struct_info->members_len != 2 || (!ELEM(sdna->pointer_size, 4, 8))) {
       *r_error_message = "ListBase struct error! Needs it to calculate pointerize.";
       /* well, at least sizeof(ListBase) is error proof! (ton) */
       return false;
@@ -544,9 +532,6 @@ static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error
   return true;
 }
 
-/**
- * Constructs and returns a decoded SDNA structure from the given encoded SDNA data block.
- */
 SDNA *DNA_sdna_from_data(const void *data,
                          const int data_len,
                          bool do_endian_swap,
@@ -691,10 +676,6 @@ static void set_compare_flags_for_struct(const SDNA *oldsdna,
   compare_flags[old_struct_index] = SDNA_CMP_EQUAL;
 }
 
-/**
- * Constructs and returns an array of byte flags with one element for each struct in oldsdna,
- * indicating how it compares to newsdna.
- */
 const char *DNA_struct_get_compareflags(const SDNA *oldsdna, const SDNA *newsdna)
 {
   if (oldsdna->structs_len == 0) {
@@ -855,7 +836,7 @@ static void cast_pointer_64_to_32(const int array_len,
                                   uint32_t *new_data)
 {
   /* WARNING: 32-bit Blender trying to load file saved by 64-bit Blender,
-   * pointers may lose uniqueness on truncation! (Hopefully this wont
+   * pointers may lose uniqueness on truncation! (Hopefully this won't
    * happen unless/until we ever get to multi-gigabyte .blend files...) */
   for (int a = 0; a < array_len; a++) {
     new_data[a] = old_data[a] >> 3;
@@ -1018,13 +999,6 @@ static int get_member_size_in_bytes(const SDNA *sdna, const SDNA_StructMember *m
   return type_size * array_length;
 }
 
-/**
- * Does endian swapping on the fields of a struct value.
- *
- * \param sdna: SDNA of the struct_nr belongs to
- * \param struct_nr: Index of struct info within sdna
- * \param data: Struct data that is to be converted
- */
 void DNA_struct_switch_endian(const SDNA *sdna, int struct_nr, char *data)
 {
   if (struct_nr == -1) {
@@ -1060,7 +1034,7 @@ void DNA_struct_switch_endian(const SDNA *sdna, int struct_nr, char *data)
           }
           case SDNA_TYPE_INT:
           case SDNA_TYPE_FLOAT: {
-            /* Note, intentionally ignore long/ulong, because these could be 4 or 8 bytes.
+            /* NOTE: intentionally ignore long/ulong, because these could be 4 or 8 bytes.
              * Fortunately, we only use these types for runtime variables and only once for a
              * struct type that is no longer used. */
             BLI_endian_switch_int32_array((int32_t *)member_data, member_array_length);
@@ -1153,7 +1127,7 @@ static void reconstruct_structs(const DNA_ReconstructInfo *reconstruct_info,
  *
  * \param reconstruct_info: Preprocessed reconstruct information generated by
  * #DNA_reconstruct_info_create.
- * \param new_struct_nr: Index in newsdna->structs of the struct that is being reconstructed.
+ * \param new_struct_nr: Index in `newsdna->structs` of the struct that is being reconstructed.
  * \param old_block: Memory buffer containing the old struct.
  * \param new_block: Where to put converted struct contents.
  */
@@ -1230,13 +1204,6 @@ static void reconstruct_structs(const DNA_ReconstructInfo *reconstruct_info,
   }
 }
 
-/**
- * \param reconstruct_info: Information preprocessed by #DNA_reconstruct_info_create.
- * \param old_struct_nr: Index of struct info within oldsdna.
- * \param blocks: The number of array elements.
- * \param old_blocks: Array of struct data.
- * \return An allocated reconstructed struct.
- */
 void *DNA_struct_reconstruct(const DNA_ReconstructInfo *reconstruct_info,
                              int old_struct_nr,
                              int blocks,
@@ -1398,7 +1365,7 @@ static void init_reconstruct_step_for_member(const SDNA *oldsdna,
         r_step->data.cast_pointer.array_len = shared_array_length;
       }
       else {
-        BLI_assert(!"invalid pointer size");
+        BLI_assert_msg(0, "invalid pointer size");
         r_step->type = RECONSTRUCT_STEP_INIT_ZERO;
       }
       break;
@@ -1534,10 +1501,6 @@ static int compress_reconstruct_steps(ReconstructStep *steps, const int old_step
   return new_step_count;
 }
 
-/**
- * Pre-process information about how structs in \a newsdna can be reconstructed from structs in
- * \a oldsdna. This information is then used to speedup #DNA_struct_reconstruct.
- */
 DNA_ReconstructInfo *DNA_reconstruct_info_create(const SDNA *oldsdna,
                                                  const SDNA *newsdna,
                                                  const char *compare_flags)
@@ -1546,9 +1509,9 @@ DNA_ReconstructInfo *DNA_reconstruct_info_create(const SDNA *oldsdna,
   reconstruct_info->oldsdna = oldsdna;
   reconstruct_info->newsdna = newsdna;
   reconstruct_info->compare_flags = compare_flags;
-  reconstruct_info->step_counts = MEM_malloc_arrayN(sizeof(int), newsdna->structs_len, __func__);
+  reconstruct_info->step_counts = MEM_malloc_arrayN(newsdna->structs_len, sizeof(int), __func__);
   reconstruct_info->steps = MEM_malloc_arrayN(
-      sizeof(ReconstructStep *), newsdna->structs_len, __func__);
+      newsdna->structs_len, sizeof(ReconstructStep *), __func__);
 
   /* Generate reconstruct steps for all structs. */
   for (int new_struct_nr = 0; new_struct_nr < newsdna->structs_len; new_struct_nr++) {
@@ -1564,9 +1527,8 @@ DNA_ReconstructInfo *DNA_reconstruct_info_create(const SDNA *oldsdna,
     ReconstructStep *steps = create_reconstruct_steps_for_struct(
         oldsdna, newsdna, compare_flags, old_struct, new_struct);
 
-    int steps_len = new_struct->members_len;
     /* Comment the line below to skip the compression for debugging purposes. */
-    steps_len = compress_reconstruct_steps(steps, new_struct->members_len);
+    const int steps_len = compress_reconstruct_steps(steps, new_struct->members_len);
 
     reconstruct_info->steps[new_struct_nr] = steps;
     reconstruct_info->step_counts[new_struct_nr] = steps_len;
@@ -1598,10 +1560,6 @@ void DNA_reconstruct_info_free(DNA_ReconstructInfo *reconstruct_info)
   MEM_freeN(reconstruct_info);
 }
 
-/**
- * Returns the offset of the field with the specified name and type within the specified
- * struct type in #SDNA, -1 on failure.
- */
 int DNA_elem_offset(SDNA *sdna, const char *stype, const char *vartype, const char *name)
 {
   const int SDNAnr = DNA_struct_find_nr(sdna, stype);
@@ -1633,7 +1591,6 @@ bool DNA_struct_elem_find(const SDNA *sdna,
   return false;
 }
 
-/** \note requires #DNA_sdna_alias_data_ensure_structs_map to be called. */
 bool DNA_struct_alias_elem_find(const SDNA *sdna,
                                 const char *stype,
                                 const char *vartype,
@@ -1652,9 +1609,6 @@ bool DNA_struct_alias_elem_find(const SDNA *sdna,
   return false;
 }
 
-/**
- * Returns the size in bytes of a primitive type.
- */
 int DNA_elem_type_size(const eSDNA_Type elem_nr)
 {
   /* should contain all enum types */
@@ -1697,9 +1651,6 @@ static bool DNA_sdna_patch_struct_nr(SDNA *sdna,
   sdna->types[struct_info->type] = struct_name_new;
   return true;
 }
-/**
- * Rename a struct
- */
 bool DNA_sdna_patch_struct(SDNA *sdna, const char *struct_name_old, const char *struct_name_new)
 {
   const int struct_name_old_nr = DNA_struct_find_nr(sdna, struct_name_old);
@@ -1757,11 +1708,6 @@ static bool DNA_sdna_patch_struct_member_nr(SDNA *sdna,
   }
   return false;
 }
-/**
- * Replace \a elem_old with \a elem_new for struct \a struct_name
- * handles search & replace, maintaining surrounding non-identifier characters
- * such as pointer & array size.
- */
 bool DNA_sdna_patch_struct_member(SDNA *sdna,
                                   const char *struct_name,
                                   const char *elem_old,
@@ -1801,7 +1747,7 @@ static void sdna_expand_names(SDNA *sdna)
 
   int names_expand_index = 0;
   for (int struct_nr = 0; struct_nr < sdna->structs_len; struct_nr++) {
-    /* We can't edit this memory 'sdna->structs' points to (readonly datatoc file). */
+    /* We can't edit this memory 'sdna->structs' points to (read-only `datatoc` file). */
     const SDNA_Struct *struct_old = sdna->structs[struct_nr];
 
     const int array_size = sizeof(short) * 2 + sizeof(SDNA_StructMember) * struct_old->members_len;
@@ -1910,10 +1856,6 @@ void DNA_sdna_alias_data_ensure(SDNA *sdna)
   BLI_ghash_free(elem_map_alias_from_static, MEM_freeN, NULL);
 }
 
-/**
- * Separated from #DNA_sdna_alias_data_ensure because it's not needed
- * unless we want to lookup aliased struct names (#DNA_struct_alias_find_nr and friends).
- */
 void DNA_sdna_alias_data_ensure_structs_map(SDNA *sdna)
 {
   DNA_sdna_alias_data_ensure(sdna);

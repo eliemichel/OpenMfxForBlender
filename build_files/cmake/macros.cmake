@@ -208,7 +208,7 @@ function(blender_source_group
   )
 
   # if enabled, use the sources directories as filters.
-  if(WINDOWS_USE_VISUAL_STUDIO_SOURCE_FOLDERS)
+  if(IDE_GROUP_SOURCES_IN_FOLDERS)
     foreach(_SRC ${sources})
       # remove ../'s
       get_filename_component(_SRC_DIR ${_SRC} REALPATH)
@@ -240,8 +240,8 @@ function(blender_source_group
     endforeach()
   endif()
 
-  # if enabled, set the FOLDER property for visual studio projects
-  if(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS)
+  # if enabled, set the FOLDER property for the projects
+  if(IDE_GROUP_PROJECTS_IN_FOLDERS)
     get_filename_component(FolderDir ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
     string(REPLACE ${CMAKE_SOURCE_DIR} "" FolderDir ${FolderDir})
     set_target_properties(${name} PROPERTIES FOLDER ${FolderDir})
@@ -487,7 +487,6 @@ function(blender_add_test_executable
 
   include_directories(${includes})
   include_directories(${includes_sys})
-  setup_libdirs()
 
   BLENDER_SRC_GTEST_EX(
     NAME ${name}
@@ -521,91 +520,6 @@ function(setup_heavy_lib_pool)
         set_property(TARGET ${TARGET} PROPERTY JOB_POOL_COMPILE compile_heavy_job_pool)
       endif()
     endforeach()
-  endif()
-endfunction()
-
-function(SETUP_LIBDIRS)
-
-  # NOTE: For all new libraries, use absolute library paths.
-  # This should eventually be phased out.
-  # APPLE plaform uses full paths for linking libraries, and avoids link_directories.
-  if(NOT MSVC AND NOT APPLE)
-    link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
-
-    if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
-      link_directories(${PYTHON_LIBPATH})
-    endif()
-    if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
-      link_directories(${SDL_LIBPATH})
-    endif()
-    if(WITH_CODEC_FFMPEG)
-      link_directories(${FFMPEG_LIBPATH})
-    endif()
-    if(WITH_IMAGE_OPENEXR)
-      link_directories(${OPENEXR_LIBPATH})
-    endif()
-    if(WITH_IMAGE_TIFF)
-      link_directories(${TIFF_LIBPATH})
-    endif()
-    if(WITH_BOOST)
-      link_directories(${BOOST_LIBPATH})
-    endif()
-    if(WITH_OPENIMAGEIO)
-      link_directories(${OPENIMAGEIO_LIBPATH})
-    endif()
-    if(WITH_OPENIMAGEDENOISE)
-      link_directories(${OPENIMAGEDENOISE_LIBPATH})
-    endif()
-    if(WITH_OPENCOLORIO)
-      link_directories(${OPENCOLORIO_LIBPATH})
-    endif()
-    if(WITH_OPENVDB)
-      link_directories(${OPENVDB_LIBPATH})
-    endif()
-    if(WITH_OPENAL)
-      link_directories(${OPENAL_LIBPATH})
-    endif()
-    if(WITH_JACK AND NOT WITH_JACK_DYNLOAD)
-      link_directories(${JACK_LIBPATH})
-    endif()
-    if(WITH_PULSEAUDIO AND NOT WITH_PULSEAUDIO_DYNLOAD)
-      link_directories(${LIBPULSE_LIBPATH})
-    endif()
-    if(WITH_CODEC_SNDFILE)
-      link_directories(${LIBSNDFILE_LIBPATH})
-    endif()
-    if(WITH_FFTW3)
-      link_directories(${FFTW3_LIBPATH})
-    endif()
-    if(WITH_OPENCOLLADA)
-      link_directories(${OPENCOLLADA_LIBPATH})
-      # # Never set
-      # link_directories(${PCRE_LIBPATH})
-      # link_directories(${EXPAT_LIBPATH})
-    endif()
-    if(WITH_LLVM)
-      link_directories(${LLVM_LIBPATH})
-    endif()
-
-    if(WITH_ALEMBIC)
-      link_directories(${ALEMBIC_LIBPATH})
-    endif()
-
-    if(WITH_GMP)
-      link_directories(${GMP_LIBPATH})
-    endif()
-
-    if(WITH_GHOST_WAYLAND)
-      link_directories(
-        ${wayland-client_LIBRARY_DIRS}
-        ${wayland-egl_LIBRARY_DIRS}
-        ${xkbcommon_LIBRARY_DIRS}
-        ${wayland-cursor_LIBRARY_DIRS})
-    endif()
-
-    if(WIN32 AND NOT UNIX)
-      link_directories(${PTHREADS_LIBPATH})
-    endif()
   endif()
 endfunction()
 
@@ -701,7 +615,7 @@ macro(message_first_run)
 endmacro()
 
 # when we have warnings as errors applied globally this
-# needs to be removed for some external libs which we dont maintain.
+# needs to be removed for some external libs which we don't maintain.
 
 # utility macro
 macro(remove_cc_flag
@@ -801,7 +715,7 @@ macro(remove_extra_strict_flags)
 endmacro()
 
 # note, we can only append flags on a single file so we need to negate the options.
-# at the moment we cant shut up ffmpeg deprecations, so use this, but will
+# at the moment we can't shut up ffmpeg deprecations, so use this, but will
 # probably add more removals here.
 macro(remove_strict_c_flags_file
   filenames)
@@ -922,10 +836,6 @@ function(get_blender_version)
   math(EXPR _out_version_major "${_out_version} / 100")
   math(EXPR _out_version_minor "${_out_version} % 100")
 
-  # Zero pad the minor version so `_out_version_minor` is always two characters.
-  # This is needed if the minor version is a single digit.
-  string(REGEX REPLACE "^([0-9])$" "0\\1" _out_version_minor "${_out_version_minor}")
-
   # output vars
   set(BLENDER_VERSION "${_out_version_major}.${_out_version_minor}" PARENT_SCOPE)
   set(BLENDER_VERSION_MAJOR "${_out_version_major}" PARENT_SCOPE)
@@ -973,14 +883,6 @@ macro(blender_project_hack_post)
 
   unset(_reset_standard_cflags_rel)
   unset(_reset_standard_cxxflags_rel)
-
-  # ------------------------------------------------------------------
-  # workaround for omission in cmake 2.8.4's GNU.cmake, fixed in 2.8.5
-  if(CMAKE_COMPILER_IS_GNUCC)
-    if(NOT DARWIN)
-      set(CMAKE_INCLUDE_SYSTEM_FLAG_C "-isystem ")
-    endif()
-  endif()
 
 endmacro()
 
@@ -1294,43 +1196,20 @@ endfunction()
 macro(openmp_delayload
   projectname
   )
-    if(MSVC)
-      if(WITH_OPENMP)
-        if(MSVC_CLANG)
-          set(OPENMP_DLL_NAME "libomp")
-        elseif(MSVC_VERSION EQUAL 1800)
-          set(OPENMP_DLL_NAME "vcomp120")
-        else()
-          set(OPENMP_DLL_NAME "vcomp140")
-        endif()
-        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELEASE " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_DEBUG " /DELAYLOAD:${OPENMP_DLL_NAME}d.dll delayimp.lib")
-        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELWITHDEBINFO " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_MINSIZEREL " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-      endif()
-    endif()
-endmacro()
-
-macro(blender_precompile_headers target cpp header)
   if(MSVC)
-    # get the name for the pch output file
-    get_filename_component(pchbase ${cpp} NAME_WE)
-    set(pchfinal "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${pchbase}.pch")
-
-    # mark the cpp as the one outputting the pch
-    set_property(SOURCE ${cpp} APPEND PROPERTY OBJECT_OUTPUTS "${pchfinal}")
-
-    # get all sources for the target
-    get_target_property(sources ${target} SOURCES)
-
-    # make all sources depend on the pch to enforce the build order
-    foreach(src ${sources})
-      set_property(SOURCE ${src} APPEND PROPERTY OBJECT_DEPENDS "${pchfinal}")
-    endforeach()
-
-    target_sources(${target} PRIVATE ${cpp} ${header})
-    set_target_properties(${target} PROPERTIES COMPILE_FLAGS "/Yu${header} /Fp${pchfinal} /FI${header}")
-    set_source_files_properties(${cpp} PROPERTIES COMPILE_FLAGS "/Yc${header} /Fp${pchfinal}")
+    if(WITH_OPENMP)
+      if(MSVC_CLANG)
+        set(OPENMP_DLL_NAME "libomp")
+      elseif(MSVC_VERSION EQUAL 1800)
+        set(OPENMP_DLL_NAME "vcomp120")
+      else()
+        set(OPENMP_DLL_NAME "vcomp140")
+      endif()
+      set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELEASE " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+      set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_DEBUG " /DELAYLOAD:${OPENMP_DLL_NAME}d.dll delayimp.lib")
+      set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELWITHDEBINFO " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+      set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_MINSIZEREL " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+    endif()
   endif()
 endmacro()
 

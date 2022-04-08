@@ -112,7 +112,7 @@ void MeshTopology::getEdgeVertexIndices(int edge_index, int *v1, int *v2) const
 
   if (edge_index >= edges_.size()) {
     *v1 = -1;
-    *v1 = -1;
+    *v2 = -1;
     return;
   }
 
@@ -183,7 +183,7 @@ void MeshTopology::setNumFaces(int num_faces)
   num_faces_ = num_faces;
 
   // NOTE: Extra element to store fake face past the last real one to make it
-  // possible to calculate number of verticies in the last face.
+  // possible to calculate number of vertices in the last face.
   faces_first_vertex_index_.resize(num_faces + 1, 0);
 }
 

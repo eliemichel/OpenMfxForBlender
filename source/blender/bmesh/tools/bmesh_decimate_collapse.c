@@ -285,7 +285,7 @@ static void bm_decim_build_edge_cost_single(BMEdge *e,
     cost = (BLI_quadric_evaluate(q1, optimize_co) + BLI_quadric_evaluate(q2, optimize_co));
   }
 
-  /* note, 'cost' shouldn't be negative but happens sometimes with small values.
+  /* NOTE: 'cost' shouldn't be negative but happens sometimes with small values.
    * this can cause faces that make up a flat surface to over-collapse, see T37121. */
   cost = fabsf(cost);
 
@@ -303,7 +303,7 @@ static void bm_decim_build_edge_cost_single(BMEdge *e,
       const float e_weight = (vweights[BM_elem_index_get(e->v1)] +
                               vweights[BM_elem_index_get(e->v2)]);
       cost = bm_decim_build_edge_cost_single__topology(e) - cost;
-      /* note, this is rather arbitrary max weight is 2 here,
+      /* NOTE: this is rather arbitrary max weight is 2 here,
        * allow for skipping edges 4x the length, based on weights */
       if (e_weight) {
         cost *= 1.0f + (e_weight * vweight_factor);
@@ -568,9 +568,9 @@ static bool bm_decim_triangulate_begin(BMesh *bm, int *r_edges_tri_tot)
       pf_heap = NULL;
     }
 
-    /* adding new faces as we loop over faces
+    /* Adding new faces as we loop over faces
      * is normally best avoided, however in this case its not so bad because any face touched twice
-     * will already be triangulated*/
+     * will already be triangulated. */
     BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
       if (f->len > 3) {
         has_cut |= bm_face_triangulate(bm,
@@ -847,7 +847,7 @@ BLI_INLINE int bm_edge_is_manifold_or_boundary(BMLoop *l)
   /* less optimized version of check below */
   return (BM_edge_is_manifold(l->e) || BM_edge_is_boundary(l->e);
 #else
-  /* if the edge is a boundary it points to its self, else this must be a manifold */
+  /* if the edge is a boundary it points to itself, else this must be a manifold */
   return LIKELY(l) && LIKELY(l->radial_next->radial_next == l);
 #endif
 }
@@ -855,7 +855,7 @@ BLI_INLINE int bm_edge_is_manifold_or_boundary(BMLoop *l)
 static bool bm_edge_collapse_is_degenerate_topology(BMEdge *e_first)
 {
   /* simply check that there is no overlap between faces and edges of each vert,
-   * (excluding the 2 faces attached to 'e' and 'e' its self) */
+   * (excluding the 2 faces attached to 'e' and 'e' itself) */
 
   BMEdge *e_iter;
 
@@ -935,9 +935,9 @@ static bool bm_edge_collapse_is_degenerate_topology(BMEdge *e_first)
 }
 
 /**
- * special, highly limited edge collapse function
+ * Special, highly limited edge collapse function
  * intended for speed over flexibility.
- * can only collapse edges connected to (1, 2) tris.
+ * can only collapse edges connected to (1, 2) triangles.
  *
  * Important - don't add vert/edge/face data on collapsing!
  *
@@ -1277,15 +1277,6 @@ static bool bm_decim_edge_collapse(BMesh *bm,
 /* Main Decimate Function
  * ********************** */
 
-/**
- * \brief BM_mesh_decimate
- * \param bm: The mesh
- * \param factor: face count multiplier [0 - 1]
- * \param vweights: Optional array of vertex  aligned weights [0 - 1],
- *        a vertex group is the usual source for this.
- * \param symmetry_axis: Axis of symmetry, -1 to disable mirror decimate.
- * \param symmetry_eps: Threshold when matching mirror verts.
- */
 void BM_mesh_decimate_collapse(BMesh *bm,
                                const float factor,
                                float *vweights,
@@ -1367,7 +1358,7 @@ void BM_mesh_decimate_collapse(BMesh *bm,
       /* handy to detect corruptions elsewhere */
       BLI_assert(BM_elem_index_get(e) < tot_edge_orig);
 
-      /* Under normal conditions wont be accessed again,
+      /* Under normal conditions won't be accessed again,
        * but NULL just in case so we don't use freed node. */
       eheap_table[BM_elem_index_get(e)] = NULL;
 

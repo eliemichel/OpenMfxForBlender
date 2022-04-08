@@ -54,7 +54,8 @@ typedef enum {
   TFM_TILT,
   TFM_TRACKBALL,
   TFM_PUSHPULL,
-  TFM_CREASE,
+  TFM_EDGE_CREASE,
+  TFM_VERT_CREASE,
   TFM_MIRROR,
   TFM_BONESIZE,
   TFM_BONE_ENVELOPE,
@@ -104,15 +105,16 @@ void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
 bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
                                     const char *name,
-                                    const bool use_view,
-                                    const bool activate,
-                                    const bool overwrite);
+                                    bool use_view,
+                                    bool activate,
+                                    bool overwrite);
 void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 
-void ED_getTransformOrientationMatrix(const struct bContext *C,
+void ED_getTransformOrientationMatrix(struct ViewLayer *view_layer,
+                                      const struct View3D *v3d,
                                       struct Object *ob,
                                       struct Object *obedit,
-                                      const short around,
+                                      short around,
                                       float r_orientation_mat[3][3]);
 
 int BIF_countTransformOrientation(const struct bContext *C);
@@ -137,6 +139,7 @@ int BIF_countTransformOrientation(const struct bContext *C);
 #define P_GPENCIL_EDIT (1 << 13)
 #define P_CURSOR_EDIT (1 << 14)
 #define P_CLNOR_INVALIDATE (1 << 15)
+#define P_VIEW2D_EDGE_PAN (1 << 16)
 /* For properties performed when confirming the transformation. */
 #define P_POST_TRANSFORM (1 << 19)
 
@@ -144,19 +147,31 @@ void Transform_Properties(struct wmOperatorType *ot, int flags);
 
 /* *** transform_orientations.c *** */
 void ED_transform_calc_orientation_from_type(const struct bContext *C, float r_mat[3][3]);
-short ED_transform_calc_orientation_from_type_ex(const struct bContext *C,
-                                                 float r_mat[3][3],
-                                                 /* extra args */
-                                                 struct Scene *scene,
-                                                 struct RegionView3D *rv3d,
+/**
+ * \note The resulting matrix may not be orthogonal,
+ * callers that depend on `r_mat` to be orthogonal should use #orthogonalize_m3.
+ *
+ * A non orthogonal matrix may be returned when:
+ * - #V3D_ORIENT_GIMBAL the result won't be orthogonal unless the object has no rotation.
+ * - #V3D_ORIENT_LOCAL may contain shear from non-uniform scale in parent/child relationships.
+ * - #V3D_ORIENT_CUSTOM may have been created from #V3D_ORIENT_LOCAL.
+ */
+short ED_transform_calc_orientation_from_type_ex(const struct Scene *scene,
+                                                 struct ViewLayer *view_layer,
+                                                 const struct View3D *v3d,
+                                                 const struct RegionView3D *rv3d,
                                                  struct Object *ob,
                                                  struct Object *obedit,
-                                                 const short orientation_index,
-                                                 const int pivot_point);
+                                                 short orientation_index,
+                                                 int pivot_point,
+                                                 float r_mat[3][3]);
 
 /* transform gizmos */
 
 void VIEW3D_GGT_xform_gizmo(struct wmGizmoGroupType *gzgt);
+/**
+ * Only poll, flag & gzmap_params differ.
+ */
 void VIEW3D_GGT_xform_gizmo_context(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GGT_xform_cage(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GGT_xform_shear(struct wmGizmoGroupType *gzgt);
@@ -174,11 +189,18 @@ void ED_widgetgroup_gizmo2d_rotate_callbacks_set(struct wmGizmoGroupType *gzgt);
 
 struct TransformBounds {
   float center[3];      /* Center for transform widget. */
-  float min[3], max[3]; /* Boundbox of selection for transform widget. */
+  float min[3], max[3]; /* Bounding-box of selection for transform widget. */
 
   /* Normalized axis */
   float axis[3][3];
   float axis_min[3], axis_max[3];
+
+  /**
+   * When #TransformCalcParams.use_local_axis is used.
+   * This is the local space matrix the caller may need to access.
+   */
+  bool use_matrix_space;
+  float matrix_space[4][4];
 };
 
 struct TransformCalcParams {
@@ -187,6 +209,11 @@ struct TransformCalcParams {
   /* Use 'Scene.orientation_type' when zero, otherwise subtract one and use. */
   ushort orientation_index;
 };
+/**
+ * Centroid, bound-box, of selection.
+ *
+ * Returns total items selected.
+ */
 int ED_transform_calc_gizmo_stats(const struct bContext *C,
                                   const struct TransformCalcParams *params,
                                   struct TransformBounds *tbounds);

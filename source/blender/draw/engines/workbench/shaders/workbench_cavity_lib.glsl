@@ -1,14 +1,6 @@
 
 #pragma BLENDER_REQUIRE(common_view_lib.glsl)
-#pragma BLENDER_REQUIRE(workbench_data_lib.glsl)
 #pragma BLENDER_REQUIRE(workbench_common_lib.glsl)
-
-layout(std140) uniform samples_block
-{
-  vec4 samples_coords[512];
-};
-
-uniform sampler2D cavityJitter;
 
 /*  From The Alchemy screen-space ambient obscurance algorithm
  * http://graphics.cs.williams.edu/papers/AlchemyHPG11/VV11AlchemyAO.pdf */
@@ -43,7 +35,7 @@ void cavity_compute(vec2 screenco,
   /* convert from -1.0...1.0 range to 0.0..1.0 for easy use with texture coordinates */
   offset *= 0.5;
 
-  /* Note. Putting noise usage here to put some ALU after texture fetch. */
+  /* NOTE: Putting noise usage here to put some ALU after texture fetch. */
   vec2 rotX = noise.rg;
   vec2 rotY = vec2(-rotX.y, rotX.x);
 

@@ -47,10 +47,6 @@
 
 #include "readfile.h"
 
-/**
- * Check (but do *not* fix) that all linked data-blocks are still valid
- * (i.e. pointing to the right library).
- */
 bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 {
   ListBase mainlist;
@@ -64,7 +60,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
   int i = set_listbasepointers(bmain, lbarray);
   while (i--) {
     for (ID *id = lbarray[i]->first; id != NULL; id = id->next) {
-      if (id->lib != NULL) {
+      if (ID_IS_LINKED(id)) {
         is_valid = false;
         BKE_reportf(reports,
                     RPT_ERROR,
@@ -83,7 +79,8 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
     }
 
     BKE_library_filepath_set(bmain, curlib, curlib->filepath);
-    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath_abs, reports);
+    BlendFileReadReport bf_reports = {.reports = reports};
+    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath_abs, &bf_reports);
 
     if (bh == NULL) {
       BKE_reportf(reports,
@@ -114,7 +111,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
       int totnames = 0;
       LinkNode *names = BLO_blendhandle_get_datablock_names(bh, GS(id->name), false, &totnames);
       for (; id != NULL; id = id->next) {
-        if (id->lib == NULL) {
+        if (!ID_IS_LINKED(id)) {
           is_valid = false;
           BKE_reportf(reports,
                       RPT_ERROR,
@@ -164,7 +161,6 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
   return is_valid;
 }
 
-/** Check (and fix if needed) that shape key's 'from' pointer is valid. */
 bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
 {
   ListBase *lb;
@@ -178,7 +174,7 @@ bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
       if (!BKE_key_idtype_support(GS(id->name))) {
         break;
       }
-      if (id->lib == NULL) {
+      if (!ID_IS_LINKED(id)) {
         /* We assume lib data is valid... */
         Key *shapekey = BKE_key_from_id(id);
         if (shapekey != NULL && shapekey->from != id) {
@@ -198,6 +194,21 @@ bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
   FOREACH_MAIN_LISTBASE_END;
 
   BKE_main_unlock(bmain);
+
+  /* NOTE: #BKE_id_delete also locks `bmain`, so we need to do this loop outside of the lock here.
+   */
+  LISTBASE_FOREACH_MUTABLE (Key *, shapekey, &bmain->shapekeys) {
+    if (shapekey->from != NULL) {
+      continue;
+    }
+
+    BKE_reportf(reports,
+                RPT_ERROR,
+                "Shapekey %s has an invalid 'from' pointer (%p), it will be deleted",
+                shapekey->id.name,
+                shapekey->from);
+    BKE_id_delete(bmain, shapekey);
+  }
 
   return is_valid;
 }

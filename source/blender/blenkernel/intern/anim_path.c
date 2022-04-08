@@ -216,7 +216,7 @@ static bool binary_search_anim_path(const float *accum_len_arr,
     if (UNLIKELY(cur_step == 0)) {
       /* This should never happen unless there is something horribly wrong. */
       CLOG_ERROR(&LOG, "Couldn't find any valid point on the animation path!");
-      BLI_assert(!"Couldn't find any valid point on the animation path!");
+      BLI_assert_msg(0, "Couldn't find any valid point on the animation path!");
       return false;
     }
 
@@ -230,14 +230,6 @@ static bool binary_search_anim_path(const float *accum_len_arr,
   }
 }
 
-/**
- * Calculate the deformation implied by the curve path at a given parametric position,
- * and returns whether this operation succeeded.
- *
- * \param ctime: Time is normalized range <0-1>.
- *
- * \return success.
- */
 bool BKE_where_on_path(const Object *ob,
                        float ctime,
                        float r_vec[4],
@@ -252,6 +244,10 @@ bool BKE_where_on_path(const Object *ob,
   Curve *cu = ob->data;
   if (ob->runtime.curve_cache == NULL) {
     CLOG_WARN(&LOG, "No curve cache!");
+    return false;
+  }
+  if (ob->runtime.curve_cache->anim_path_accum_length == NULL) {
+    CLOG_WARN(&LOG, "No anim path!");
     return false;
   }
   /* We only use the first curve. */
@@ -327,7 +323,7 @@ bool BKE_where_on_path(const Object *ob,
   }
   const Nurb *nu = nurbs->first;
 
-  /* make sure that first and last frame are included in the vectors here  */
+  /* Make sure that first and last frame are included in the vectors here. */
   if (ELEM(nu->type, CU_POLY, CU_BEZIER, CU_NURBS)) {
     key_curve_position_weights(frac, w, KEY_LINEAR);
   }

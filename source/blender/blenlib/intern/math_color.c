@@ -64,13 +64,11 @@ void hsl_to_rgb(float h, float s, float l, float *r_r, float *r_g, float *r_b)
   *r_b = (nb - 0.5f) * chroma + l;
 }
 
-/* convenience function for now */
 void hsv_to_rgb_v(const float hsv[3], float r_rgb[3])
 {
   hsv_to_rgb(hsv[0], hsv[1], hsv[2], &r_rgb[0], &r_rgb[1], &r_rgb[2]);
 }
 
-/* convenience function for now */
 void hsl_to_rgb_v(const float hsl[3], float r_rgb[3])
 {
   hsl_to_rgb(hsl[0], hsl[1], hsl[2], &r_rgb[0], &r_rgb[1], &r_rgb[2]);
@@ -124,9 +122,6 @@ void yuv_to_rgb(float y, float u, float v, float *r_r, float *r_g, float *r_b, i
   *r_b = b;
 }
 
-/* The RGB inputs are supposed gamma corrected and in the range 0 - 1.0f
- *
- * Output YCC have a range of 16-235 and 16-240 except with JFIF_0_255 where the range is 0-255 */
 void rgb_to_ycc(float r, float g, float b, float *r_y, float *r_cb, float *r_cr, int colorspace)
 {
   float sr, sg, sb;
@@ -153,7 +148,7 @@ void rgb_to_ycc(float r, float g, float b, float *r_y, float *r_cb, float *r_cr,
       cr = (0.5f * sr) - (0.41869f * sg) - (0.08131f * sb) + 128.0f;
       break;
     default:
-      BLI_assert(!"invalid colorspace");
+      BLI_assert_msg(0, "invalid colorspace");
       break;
   }
 
@@ -162,12 +157,14 @@ void rgb_to_ycc(float r, float g, float b, float *r_y, float *r_cb, float *r_cr,
   *r_cr = cr;
 }
 
-/* YCC input have a range of 16-235 and 16-240 except with JFIF_0_255 where the range is 0-255 */
-/* RGB outputs are in the range 0 - 1.0f */
-
-/* FIXME comment above must be wrong because BLI_YCC_ITU_BT601 y 16.0 cr 16.0 -> r -0.7009 */
 void ycc_to_rgb(float y, float cb, float cr, float *r_r, float *r_g, float *r_b, int colorspace)
 {
+  /* FIXME the following comment must be wrong because:
+   * BLI_YCC_ITU_BT601 y 16.0 cr 16.0 -> r -0.7009. */
+
+  /* YCC input have a range of 16-235 and 16-240 except with JFIF_0_255 where the range is 0-255
+   * RGB outputs are in the range 0 - 1.0f. */
+
   float r = 128.0f, g = 128.0f, b = 128.0f;
 
   switch (colorspace) {
@@ -250,7 +247,6 @@ void rgb_to_hsv(float r, float g, float b, float *r_h, float *r_s, float *r_v)
   *r_v = r;
 }
 
-/* convenience function for now */
 void rgb_to_hsv_v(const float rgb[3], float r_hsv[3])
 {
   rgb_to_hsv(rgb[0], rgb[1], rgb[2], &r_hsv[0], &r_hsv[1], &r_hsv[2]);
@@ -311,7 +307,6 @@ void rgb_to_hsl_compat_v(const float rgb[3], float r_hsl[3])
   rgb_to_hsl_compat(rgb[0], rgb[1], rgb[2], &r_hsl[0], &r_hsl[1], &r_hsl[2]);
 }
 
-/* convenience function for now */
 void rgb_to_hsl_v(const float rgb[3], float r_hsl[3])
 {
   rgb_to_hsl(rgb[0], rgb[1], rgb[2], &r_hsl[0], &r_hsl[1], &r_hsl[2]);
@@ -338,13 +333,11 @@ void rgb_to_hsv_compat(float r, float g, float b, float *r_h, float *r_s, float 
   }
 }
 
-/* convenience function for now */
 void rgb_to_hsv_compat_v(const float rgb[3], float r_hsv[3])
 {
   rgb_to_hsv_compat(rgb[0], rgb[1], rgb[2], &r_hsv[0], &r_hsv[1], &r_hsv[2]);
 }
 
-/* clamp hsv to usable values */
 void hsv_clamp_v(float hsv[3], float v_max)
 {
   if (UNLIKELY(hsv[0] < 0.0f || hsv[0] > 1.0f)) {
@@ -354,12 +347,6 @@ void hsv_clamp_v(float hsv[3], float v_max)
   CLAMP(hsv[2], 0.0f, v_max);
 }
 
-/**
- * We define a 'cpack' here as a (3 byte color code)
- * number that can be expressed like 0xFFAA66 or so.
- * For that reason it is sensitive for endianness... with this function it works correctly.
- * \see #imm_cpack
- */
 unsigned int hsv_to_cpack(float h, float s, float v)
 {
   unsigned int r, g, b;
@@ -473,12 +460,6 @@ void minmax_rgb(short c[3])
   }
 }
 
-/* If the requested RGB shade contains a negative weight for
- * one of the primaries, it lies outside the color gamut
- * accessible from the given triple of primaries.  Desaturate
- * it by adding white, equal quantities of R, G, and B, enough
- * to make RGB all positive.  The function returns 1 if the
- * components were modified, zero otherwise.*/
 int constrain_rgb(float *r, float *g, float *b)
 {
   /* Amount of white needed */
@@ -520,7 +501,6 @@ void lift_gamma_gain_to_asc_cdl(const float *lift,
 
 /* ************************************* other ************************************************* */
 
-/* Applies an hue offset to a float rgb color */
 void rgb_float_set_hue_float_offset(float rgb[3], float hue_offset)
 {
   float hsv[3];
@@ -538,7 +518,6 @@ void rgb_float_set_hue_float_offset(float rgb[3], float hue_offset)
   hsv_to_rgb(hsv[0], hsv[1], hsv[2], rgb, rgb + 1, rgb + 2);
 }
 
-/* Applies an hue offset to a byte rgb color */
 void rgb_byte_set_hue_float_offset(unsigned char rgb[3], float hue_offset)
 {
   float rgb_float[3];
@@ -685,10 +664,12 @@ static void blackbody_temperature_to_rgb(float rgb[3], float t)
     rgb[2] = 0.0f;
   }
   else {
-    int i = (t >= 6365.0f) ?
-                5 :
-                (t >= 3315.0f) ? 4 :
-                                 (t >= 1902.0f) ? 3 : (t >= 1449.0f) ? 2 : (t >= 1167.0f) ? 1 : 0;
+    int i = (t >= 6365.0f) ? 5 :
+            (t >= 3315.0f) ? 4 :
+            (t >= 1902.0f) ? 3 :
+            (t >= 1449.0f) ? 2 :
+            (t >= 1167.0f) ? 1 :
+                             0;
 
     const float *r = blackbody_table_r[i];
     const float *g = blackbody_table_g[i];
@@ -708,6 +689,82 @@ void blackbody_temperature_to_rgb_table(float *r_table, int width, float min, fl
 
     float rgb[3];
     blackbody_temperature_to_rgb(rgb, temperature);
+
+    copy_v3_v3(&r_table[i * 4], rgb);
+    r_table[i * 4 + 3] = 0.0f;
+  }
+}
+
+/* ****************************** wavelength ******************************** */
+/* Wavelength to RGB. */
+
+/**
+ * CIE color matching functions `xBar`, `yBar`, and `zBar` for
+ * wavelengths from 380 through 780 nanometers, every 5 nanometers.
+ *
+ * For a wavelength lambda in this range:
+ * \code{.txt}
+ * cie_color_match[(lambda - 380) / 5][0] = xBar
+ * cie_color_match[(lambda - 380) / 5][1] = yBar
+ * cie_color_match[(lambda - 380) / 5][2] = zBar
+ * \endcode
+ */
+
+static float cie_colour_match[81][3] = {
+    {0.0014f, 0.0000f, 0.0065f}, {0.0022f, 0.0001f, 0.0105f}, {0.0042f, 0.0001f, 0.0201f},
+    {0.0076f, 0.0002f, 0.0362f}, {0.0143f, 0.0004f, 0.0679f}, {0.0232f, 0.0006f, 0.1102f},
+    {0.0435f, 0.0012f, 0.2074f}, {0.0776f, 0.0022f, 0.3713f}, {0.1344f, 0.0040f, 0.6456f},
+    {0.2148f, 0.0073f, 1.0391f}, {0.2839f, 0.0116f, 1.3856f}, {0.3285f, 0.0168f, 1.6230f},
+    {0.3483f, 0.0230f, 1.7471f}, {0.3481f, 0.0298f, 1.7826f}, {0.3362f, 0.0380f, 1.7721f},
+    {0.3187f, 0.0480f, 1.7441f}, {0.2908f, 0.0600f, 1.6692f}, {0.2511f, 0.0739f, 1.5281f},
+    {0.1954f, 0.0910f, 1.2876f}, {0.1421f, 0.1126f, 1.0419f}, {0.0956f, 0.1390f, 0.8130f},
+    {0.0580f, 0.1693f, 0.6162f}, {0.0320f, 0.2080f, 0.4652f}, {0.0147f, 0.2586f, 0.3533f},
+    {0.0049f, 0.3230f, 0.2720f}, {0.0024f, 0.4073f, 0.2123f}, {0.0093f, 0.5030f, 0.1582f},
+    {0.0291f, 0.6082f, 0.1117f}, {0.0633f, 0.7100f, 0.0782f}, {0.1096f, 0.7932f, 0.0573f},
+    {0.1655f, 0.8620f, 0.0422f}, {0.2257f, 0.9149f, 0.0298f}, {0.2904f, 0.9540f, 0.0203f},
+    {0.3597f, 0.9803f, 0.0134f}, {0.4334f, 0.9950f, 0.0087f}, {0.5121f, 1.0000f, 0.0057f},
+    {0.5945f, 0.9950f, 0.0039f}, {0.6784f, 0.9786f, 0.0027f}, {0.7621f, 0.9520f, 0.0021f},
+    {0.8425f, 0.9154f, 0.0018f}, {0.9163f, 0.8700f, 0.0017f}, {0.9786f, 0.8163f, 0.0014f},
+    {1.0263f, 0.7570f, 0.0011f}, {1.0567f, 0.6949f, 0.0010f}, {1.0622f, 0.6310f, 0.0008f},
+    {1.0456f, 0.5668f, 0.0006f}, {1.0026f, 0.5030f, 0.0003f}, {0.9384f, 0.4412f, 0.0002f},
+    {0.8544f, 0.3810f, 0.0002f}, {0.7514f, 0.3210f, 0.0001f}, {0.6424f, 0.2650f, 0.0000f},
+    {0.5419f, 0.2170f, 0.0000f}, {0.4479f, 0.1750f, 0.0000f}, {0.3608f, 0.1382f, 0.0000f},
+    {0.2835f, 0.1070f, 0.0000f}, {0.2187f, 0.0816f, 0.0000f}, {0.1649f, 0.0610f, 0.0000f},
+    {0.1212f, 0.0446f, 0.0000f}, {0.0874f, 0.0320f, 0.0000f}, {0.0636f, 0.0232f, 0.0000f},
+    {0.0468f, 0.0170f, 0.0000f}, {0.0329f, 0.0119f, 0.0000f}, {0.0227f, 0.0082f, 0.0000f},
+    {0.0158f, 0.0057f, 0.0000f}, {0.0114f, 0.0041f, 0.0000f}, {0.0081f, 0.0029f, 0.0000f},
+    {0.0058f, 0.0021f, 0.0000f}, {0.0041f, 0.0015f, 0.0000f}, {0.0029f, 0.0010f, 0.0000f},
+    {0.0020f, 0.0007f, 0.0000f}, {0.0014f, 0.0005f, 0.0000f}, {0.0010f, 0.0004f, 0.0000f},
+    {0.0007f, 0.0002f, 0.0000f}, {0.0005f, 0.0002f, 0.0000f}, {0.0003f, 0.0001f, 0.0000f},
+    {0.0002f, 0.0001f, 0.0000f}, {0.0002f, 0.0001f, 0.0000f}, {0.0001f, 0.0000f, 0.0000f},
+    {0.0001f, 0.0000f, 0.0000f}, {0.0001f, 0.0000f, 0.0000f}, {0.0000f, 0.0000f, 0.0000f}};
+
+static void wavelength_to_xyz(float xyz[3], float lambda_nm)
+{
+  float ii = (lambda_nm - 380.0f) * (1.0f / 5.0f); /* Scaled 0..80. */
+  int i = (int)ii;
+
+  if (i < 0 || i >= 80) {
+    xyz[0] = 0.0f;
+    xyz[1] = 0.0f;
+    xyz[2] = 0.0f;
+  }
+  else {
+    ii -= (float)i;
+    const float *c = cie_colour_match[i];
+    xyz[0] = c[0] + ii * (c[3] - c[0]);
+    xyz[1] = c[1] + ii * (c[4] - c[1]);
+    xyz[2] = c[2] + ii * (c[5] - c[2]);
+  }
+}
+
+void wavelength_to_xyz_table(float *r_table, int width)
+{
+  for (int i = 0; i < width; i++) {
+    float temperature = 380 + 400 / (float)width * (float)i;
+
+    float rgb[3];
+    wavelength_to_xyz(rgb, temperature);
 
     copy_v3_v3(&r_table[i * 4], rgb);
     r_table[i * 4 + 3] = 0.0f;

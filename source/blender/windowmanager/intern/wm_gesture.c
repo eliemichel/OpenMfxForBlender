@@ -50,7 +50,6 @@
 
 #include "BIF_glutil.h"
 
-/* context checked on having screen, window and area */
 wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent *event, int type)
 {
   wmGesture *gesture = MEM_callocN(sizeof(wmGesture), "new gesture");
@@ -73,14 +72,14 @@ wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent
     rcti *rect = MEM_callocN(sizeof(rcti), "gesture rect new");
 
     gesture->customdata = rect;
-    rect->xmin = event->x - gesture->winrct.xmin;
-    rect->ymin = event->y - gesture->winrct.ymin;
+    rect->xmin = event->xy[0] - gesture->winrct.xmin;
+    rect->ymin = event->xy[1] - gesture->winrct.ymin;
     if (type == WM_GESTURE_CIRCLE) {
       /* caller is responsible for initializing 'xmax' to radius. */
     }
     else {
-      rect->xmax = event->x - gesture->winrct.xmin;
-      rect->ymax = event->y - gesture->winrct.ymin;
+      rect->xmax = event->xy[0] - gesture->winrct.xmin;
+      rect->ymax = event->xy[1] - gesture->winrct.ymin;
     }
   }
   else if (ELEM(type, WM_GESTURE_LINES, WM_GESTURE_LASSO)) {
@@ -88,8 +87,8 @@ wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent
     gesture->points_alloc = 1024;
     gesture->customdata = lasso = MEM_mallocN(sizeof(short[2]) * gesture->points_alloc,
                                               "lasso points");
-    lasso[0] = event->x - gesture->winrct.xmin;
-    lasso[1] = event->y - gesture->winrct.ymin;
+    lasso[0] = event->xy[0] - gesture->winrct.xmin;
+    lasso[1] = event->xy[1] - gesture->winrct.ymin;
     gesture->points = 1;
   }
 
@@ -129,7 +128,6 @@ bool WM_gesture_is_modal_first(const wmGesture *gesture)
   return (gesture->is_active_prev == false);
 }
 
-/* tweak and line gestures */
 int wm_gesture_evaluate(wmGesture *gesture, const wmEvent *event)
 {
   if (gesture->type == WM_GESTURE_TWEAK) {
@@ -385,7 +383,7 @@ static void draw_filled_lasso(wmGesture *gt)
     mcoords[i][1] = lasso[1];
   }
 
-  BLI_lasso_boundbox(&rect, (const int(*)[2])mcoords, mcoords_len);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
   BLI_rcti_translate(&rect, gt->winrct.xmin, gt->winrct.ymin);
   BLI_rcti_isect(&gt->winrct, &rect, &rect);
@@ -402,7 +400,7 @@ static void draw_filled_lasso(wmGesture *gt)
                                   rect.ymin,
                                   rect.xmax,
                                   rect.ymax,
-                                  (const int(*)[2])mcoords,
+                                  mcoords,
                                   mcoords_len,
                                   draw_filled_lasso_px_cb,
                                   &lasso_fill_data);
@@ -414,7 +412,7 @@ static void draw_filled_lasso(wmGesture *gt)
     GPU_shader_uniform_vector(
         state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
 
-    immDrawPixelsTex(
+    immDrawPixelsTexTiled(
         &state, rect.xmin, rect.ymin, w, h, GPU_R8, false, pixel_buf, 1.0f, 1.0f, NULL);
 
     GPU_shader_unbind();
@@ -515,7 +513,6 @@ static void wm_gesture_draw_cross(wmWindow *win, wmGesture *gt)
   immUnbindProgram();
 }
 
-/* called in wm_draw.c */
 void wm_gesture_draw(wmWindow *win)
 {
   wmGesture *gt = (wmGesture *)win->gesture.first;

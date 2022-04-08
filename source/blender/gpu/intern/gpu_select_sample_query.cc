@@ -20,8 +20,8 @@
 /** \file
  * \ingroup gpu
  *
- * Interface for accessing gpu-related methods for selection. The semantics will be
- * similar to glRenderMode(GL_SELECT) since the goal is to maintain compatibility.
+ * Interface for accessing GPU-related methods for selection. The semantics will be
+ * similar to `glRenderMode(GL_SELECT)` since the goal is to maintain compatibility.
  */
 
 #include <cstdlib>
@@ -48,17 +48,17 @@ using namespace blender;
 using namespace blender::gpu;
 
 struct GPUSelectQueryState {
-  /* Tracks whether a query has been issued so that gpu_load_id can end the previous one */
+  /* Tracks whether a query has been issued so that gpu_load_id can end the previous one. */
   bool query_issued;
   /* GPU queries abstraction. Contains an array of queries. */
   QueryPool *queries;
   /* Array holding the id corresponding id to each query. */
   Vector<uint> *ids;
-  /* cache on initialization */
+  /* Cache on initialization. */
   uint (*buffer)[4];
-  /* buffer size (stores number of integers, for actual size multiply by sizeof integer)*/
+  /* Buffer size (stores number of integers, for actual size multiply by `sizeof(int)`). */
   uint bufsize;
-  /* mode of operation */
+  /* Mode of operation. */
   char mode;
   uint index;
   int oldhits;
@@ -151,7 +151,7 @@ bool gpu_select_query_load_id(uint id)
   return true;
 }
 
-uint gpu_select_query_end(void)
+uint gpu_select_query_end()
 {
   uint hits = 0;
   const uint maxhits = g_query_state.bufsize;

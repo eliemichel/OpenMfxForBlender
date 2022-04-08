@@ -372,7 +372,6 @@ MINLINE void premul_ushort_to_straight_uchar(unsigned char *result, const unsign
   }
 }
 
-/* result in ibuf2, scaling should be done correctly */
 void imb_onehalf_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
 {
   int x, y;
@@ -867,7 +866,7 @@ static void q_scale_float(
  *
  * only handles common cases when we either
  *
- * scale  both, x and y or
+ * scale both, x and y or
  * shrink both, x and y
  *
  * but that is pretty fast:
@@ -912,7 +911,7 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
 {
   const int do_rect = (ibuf->rect != NULL);
   const int do_float = (ibuf->rect_float != NULL);
-  const size_t rect_size = ibuf->x * ibuf->y * 4;
+  const size_t rect_size = IMB_get_rect_len(ibuf) * 4;
 
   uchar *rect, *_newrect, *newrect;
   float *rectf, *_newrectf, *newrectf;
@@ -1053,7 +1052,7 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
 {
   const int do_rect = (ibuf->rect != NULL);
   const int do_float = (ibuf->rect_float != NULL);
-  const size_t rect_size = ibuf->x * ibuf->y * 4;
+  const size_t rect_size = IMB_get_rect_len(ibuf) * 4;
 
   uchar *rect, *_newrect, *newrect;
   float *rectf, *_newrectf, *newrectf;
@@ -1661,12 +1660,9 @@ static void scalefast_Z_ImBuf(ImBuf *ibuf, int newx, int newy)
   }
 }
 
-/**
- * Return true if \a ibuf is modified.
- */
 bool IMB_scaleImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy)
 {
-  BLI_assert(newx > 0 && newy > 0);
+  BLI_assert_msg(newx > 0 && newy > 0, "Images must be at least 1 on both dimensions!");
 
   if (ibuf == NULL) {
     return false;
@@ -1709,12 +1705,9 @@ struct imbufRGBA {
   float r, g, b, a;
 };
 
-/**
- * Return true if \a ibuf is modified.
- */
 bool IMB_scalefastImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy)
 {
-  BLI_assert(newx > 0 && newy > 0);
+  BLI_assert_msg(newx > 0 && newy > 0, "Images must be at least 1 on both dimensions!");
 
   unsigned int *rect, *_newrect, *newrect;
   struct imbufRGBA *rectf, *_newrectf, *newrectf;
@@ -1888,7 +1881,7 @@ static void *do_scale_thread(void *data_v)
 
 void IMB_scaleImBuf_threaded(ImBuf *ibuf, unsigned int newx, unsigned int newy)
 {
-  BLI_assert(newx > 0 && newy > 0);
+  BLI_assert_msg(newx > 0 && newy > 0, "Images must be at least 1 on both dimensions!");
 
   ScaleTreadInitData init_data = {NULL};
 

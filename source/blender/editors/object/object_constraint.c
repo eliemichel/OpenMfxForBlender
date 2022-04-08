@@ -80,10 +80,6 @@
 /** \name Constraint Data Accessors
  * \{ */
 
-/**
- * If object is in pose-mode, return active bone constraints, else object constraints.
- * No constraints are returned for a bone on an inactive bone-layer.
- */
 ListBase *ED_object_constraint_active_list(Object *ob)
 {
   if (ob == NULL) {
@@ -93,7 +89,7 @@ ListBase *ED_object_constraint_active_list(Object *ob)
   if (ob->mode & OB_MODE_POSE) {
     bPoseChannel *pchan;
 
-    pchan = BKE_pose_channel_active(ob);
+    pchan = BKE_pose_channel_active_if_layer_visible(ob);
     if (pchan) {
       return &pchan->constraints;
     }
@@ -105,10 +101,6 @@ ListBase *ED_object_constraint_active_list(Object *ob)
   return NULL;
 }
 
-/**
- * Get the constraints for the active pose bone. Bone may be on an inactive bone-layer
- * (unlike #ED_object_constraint_active_list, such constraints are not excluded here).
- */
 ListBase *ED_object_pose_constraint_list(const bContext *C)
 {
   bPoseChannel *pose_bone = CTX_data_pointer_get(C, "pose_bone").data;
@@ -122,8 +114,6 @@ ListBase *ED_object_pose_constraint_list(const bContext *C)
   return &pose_bone->constraints;
 }
 
-/* Find the list that a given constraint belongs to,
- * and/or also get the posechannel this is from (if applicable) */
 ListBase *ED_object_constraint_list_from_constraint(Object *ob,
                                                     bConstraint *con,
                                                     bPoseChannel **r_pchan)
@@ -164,7 +154,6 @@ ListBase *ED_object_constraint_list_from_constraint(Object *ob,
   return NULL;
 }
 
-/* single constraint */
 bConstraint *ED_object_constraint_active_get(Object *ob)
 {
   return BKE_constraints_active_get(ED_object_constraint_active_list(ob));
@@ -544,7 +533,7 @@ static void test_constraint(
           else {
             Curve *cu = ct->tar->data;
 
-            /* auto-set 'Path' setting on curve so this works  */
+            /* auto-set 'Path' setting on curve so this works. */
             cu->flag |= CU_PATH;
           }
         }
@@ -693,12 +682,11 @@ static bool edit_constraint_poll_generic(bContext *C,
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
   bConstraint *con = ptr.data;
 
-  if (!ob) {
-    CTX_wm_operator_poll_msg_set(C, "Context missing active object");
+  if (!ED_operator_object_active_editable_ex(C, ob)) {
     return false;
   }
 
-  if (ID_IS_LINKED(ob) || (ptr.owner_id && ID_IS_LINKED(ptr.owner_id))) {
+  if (ptr.owner_id != NULL && ID_IS_LINKED(ptr.owner_id)) {
     CTX_wm_operator_poll_msg_set(C, "Cannot edit library data");
     return false;
   }
@@ -1450,7 +1438,9 @@ void ED_object_constraint_link(Main *bmain, Object *ob_dst, ListBase *dst, ListB
 
 void ED_object_constraint_copy_for_object(Main *bmain, Object *ob_dst, bConstraint *con)
 {
-  BKE_constraint_copy_for_object(ob_dst, con);
+  bConstraint *copy_con = BKE_constraint_copy_for_object(ob_dst, con);
+  copy_con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+
   ED_object_constraint_dependency_tag_update(bmain, ob_dst, con);
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, ob_dst);
 }
@@ -1460,7 +1450,9 @@ void ED_object_constraint_copy_for_pose(Main *bmain,
                                         bPoseChannel *pchan,
                                         bConstraint *con)
 {
-  BKE_constraint_copy_for_pose(ob_dst, pchan, con);
+  bConstraint *copy_con = BKE_constraint_copy_for_pose(ob_dst, pchan, con);
+  copy_con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+
   ED_object_constraint_dependency_tag_update(bmain, ob_dst, con);
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, ob_dst);
 }
@@ -1484,13 +1476,11 @@ static int constraint_delete_exec(bContext *C, wmOperator *op)
 
   /* free the constraint */
   if (BKE_constraint_remove_ex(lb, ob, con, true)) {
-    /* there's no active constraint now, so make sure this is the case */
-    BKE_constraints_active_set(&ob->constraints, NULL);
     /* needed to set the flags on posebones correctly */
     ED_object_constraint_update(bmain, ob);
 
     /* relations */
-    DEG_relations_tag_update(CTX_data_main(C));
+    DEG_relations_tag_update(bmain);
 
     /* notifiers */
     WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT | NA_REMOVED, ob);
@@ -1508,10 +1498,10 @@ static int constraint_delete_exec(bContext *C, wmOperator *op)
 static int constraint_delete_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   int retval;
-  if (edit_constraint_invoke_properties(C, op, event, &retval)) {
-    return constraint_delete_exec(C, op);
+  if (!edit_constraint_invoke_properties(C, op, event, &retval)) {
+    return OPERATOR_CANCELLED;
   }
-  return OPERATOR_CANCELLED;
+  return constraint_delete_exec(C, op);
 }
 
 void CONSTRAINT_OT_delete(wmOperatorType *ot)
@@ -1535,6 +1525,327 @@ void CONSTRAINT_OT_delete(wmOperatorType *ot)
 /** \} */
 
 /* ------------------------------------------------------------------- */
+/** \name Apply Constraint Operator
+ * \{ */
+
+static int constraint_apply_exec(bContext *C, wmOperator *op)
+{
+  Scene *scene = CTX_data_scene(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Main *bmain = CTX_data_main(C);
+  Object *ob = ED_object_active_context(C);
+  bConstraint *con = edit_constraint_property_get(C, op, ob, 0);
+  bPoseChannel *pchan;
+  ListBase *constraints = ED_object_constraint_list_from_constraint(ob, con, &pchan);
+
+  /* Store name temporarily for report. */
+  char name[MAX_NAME];
+  strcpy(name, con->name);
+  const bool is_first_constraint = con != constraints->first;
+
+  /* Copy the constraint. */
+  bool success;
+  if (pchan) {
+    success = BKE_constraint_apply_and_remove_for_pose(
+        depsgraph, scene, constraints, ob, con, pchan);
+  }
+  else {
+    success = BKE_constraint_apply_and_remove_for_object(depsgraph, scene, constraints, ob, con);
+  }
+
+  if (!success) {
+    /* Couldn't remove due to some invalid data. */
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Update for any children that may get moved. */
+  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
+
+  /* Needed to set the flags on posebones correctly. */
+  ED_object_constraint_update(bmain, ob);
+
+  DEG_relations_tag_update(bmain);
+  WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT | NA_REMOVED, ob);
+  if (pchan) {
+    WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
+  }
+  else {
+    WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, ob);
+  }
+
+  if (RNA_boolean_get(op->ptr, "report")) {
+    if (is_first_constraint) {
+      BKE_report(op->reports,
+                 RPT_INFO,
+                 "Applied constraint was not first, result may not be as expected");
+    }
+    else {
+      /* Only add this report if the operator didn't cause another one. The purpose here is
+       * to alert that something happened, and the previous report will do that anyway. */
+      BKE_reportf(op->reports, RPT_INFO, "Applied constraint: %s", name);
+    }
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static int constraint_apply_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  int retval;
+  if (!edit_constraint_invoke_properties(C, op, event, &retval)) {
+    return OPERATOR_CANCELLED;
+  }
+  return constraint_apply_exec(C, op);
+}
+
+void CONSTRAINT_OT_apply(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Apply Constraint";
+  ot->idname = "CONSTRAINT_OT_apply";
+  ot->description = "Apply constraint and remove from the stack";
+
+  /* callbacks */
+  ot->invoke = constraint_apply_invoke;
+  ot->exec = constraint_apply_exec;
+  ot->poll = edit_constraint_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  edit_constraint_properties(ot);
+  edit_constraint_report_property(ot);
+}
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Copy Constraint Operator
+ * \{ */
+
+static int constraint_copy_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *ob = ED_object_active_context(C);
+  bConstraint *con = edit_constraint_property_get(C, op, ob, 0);
+  bPoseChannel *pchan;
+  ListBase *constraints = ED_object_constraint_list_from_constraint(ob, con, &pchan);
+
+  /* Store name temporarily for report. */
+  char name[MAX_NAME];
+  strcpy(name, con->name);
+
+  /* Copy the constraint. */
+  bConstraint *copy_con;
+  if (pchan) {
+    copy_con = BKE_constraint_copy_for_pose(ob, pchan, con);
+  }
+  else {
+    copy_con = BKE_constraint_copy_for_object(ob, con);
+  }
+
+  if (!copy_con) {
+    /* Couldn't remove due to some invalid data. */
+    return OPERATOR_CANCELLED;
+  }
+  copy_con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+
+  /* Move constraint to correct position. */
+  const int new_index = BLI_findindex(constraints, con) + 1;
+  const int current_index = BLI_findindex(constraints, copy_con);
+  BLI_assert(new_index >= 0);
+  BLI_assert(current_index >= 0);
+  BLI_listbase_link_move(constraints, copy_con, new_index - current_index);
+
+  /* Needed to set the flags on posebones correctly. */
+  ED_object_constraint_update(bmain, ob);
+
+  DEG_relations_tag_update(bmain);
+  WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT | NA_ADDED, ob);
+
+  if (RNA_boolean_get(op->ptr, "report")) {
+    BKE_reportf(op->reports, RPT_INFO, "Copied constraint: %s", name);
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static int constraint_copy_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  int retval;
+  if (!edit_constraint_invoke_properties(C, op, event, &retval)) {
+    return OPERATOR_CANCELLED;
+  }
+  return constraint_copy_exec(C, op);
+}
+
+void CONSTRAINT_OT_copy(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Duplicate Constraint";
+  ot->idname = "CONSTRAINT_OT_copy";
+  ot->description = "Duplicate constraint at the same position in the stack";
+
+  /* callbacks */
+  ot->invoke = constraint_copy_invoke;
+  ot->exec = constraint_copy_exec;
+  ot->poll = edit_constraint_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  edit_constraint_properties(ot);
+  edit_constraint_report_property(ot);
+}
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Copy Constraint To Selected Operator
+ * \{ */
+
+static int constraint_copy_to_selected_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *obact = ED_object_active_context(C);
+  bConstraint *con = edit_constraint_property_get(C, op, obact, 0);
+  bPoseChannel *pchan;
+  ED_object_constraint_list_from_constraint(obact, con, &pchan);
+
+  if (pchan) {
+    /* Don't do anything if bone doesn't exist or doesn't have any constraints. */
+    if (pchan->constraints.first == NULL) {
+      BKE_report(op->reports, RPT_ERROR, "No constraints for copying");
+      return OPERATOR_CANCELLED;
+    }
+
+    Object *prev_ob = NULL;
+
+    /* Copy all constraints from active posebone to all selected posebones. */
+    CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, chan, selected_pose_bones, Object *, ob) {
+      /* If we're not handling the object we're copying from, copy all constraints over. */
+      if (pchan == chan) {
+        continue;
+      }
+
+      bConstraint *copy_con = BKE_constraint_copy_for_pose(ob, chan, con);
+      copy_con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+
+      /* Update flags (need to add here, not just copy). */
+      chan->constflag |= pchan->constflag;
+
+      if (prev_ob == ob) {
+        continue;
+      }
+
+      BKE_pose_tag_recalc(bmain, ob->pose);
+      DEG_id_tag_update((ID *)ob, ID_RECALC_GEOMETRY);
+      prev_ob = ob;
+    }
+    CTX_DATA_END;
+  }
+  else {
+    /* Copy all constraints from active object to all selected objects. */
+    CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+      /* If we're not handling the object we're copying from, copy all constraints over. */
+      if (obact == ob) {
+        continue;
+      }
+
+      bConstraint *copy_con = BKE_constraint_copy_for_object(ob, con);
+      copy_con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY | ID_RECALC_TRANSFORM);
+    }
+    CTX_DATA_END;
+  }
+
+  /* Force depsgraph to get recalculated since new relationships added. */
+  DEG_relations_tag_update(bmain);
+
+  WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+static int constraint_copy_to_selected_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  int retval;
+  if (!edit_constraint_invoke_properties(C, op, event, &retval)) {
+    return retval;
+  }
+  return constraint_copy_to_selected_exec(C, op);
+}
+
+static bool constraint_copy_to_selected_poll(bContext *C)
+{
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "constraint", &RNA_Constraint);
+  Object *obact = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  bConstraint *con = ptr.data;
+  bPoseChannel *pchan;
+  ED_object_constraint_list_from_constraint(obact, con, &pchan);
+
+  if (pchan) {
+    bool found = false;
+    CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, chan, selected_pose_bones, Object *, ob) {
+      UNUSED_VARS(ob);
+      if (pchan != chan) {
+        /** NOTE: Can not return here, because CTX_DATA_BEGIN_WITH_ID allocated
+         * a list that needs to be freed by CTX_DATA_END. */
+        found = true;
+        break;
+      }
+    }
+    CTX_DATA_END;
+    if (found) {
+      return true;
+    }
+
+    CTX_wm_operator_poll_msg_set(C, "No other bones are selected");
+    return false;
+  }
+
+  if (!obact) {
+    CTX_wm_operator_poll_msg_set(C, "No selected object to copy from");
+    return false;
+  }
+
+  bool found = false;
+  CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
+    if (ob != obact) {
+      /** NOTE: Can not return here, because CTX_DATA_BEGIN allocated
+       * a list that needs to be freed by CTX_DATA_END. */
+      found = true;
+      break;
+    }
+  }
+  CTX_DATA_END;
+  if (found) {
+    return true;
+  }
+
+  CTX_wm_operator_poll_msg_set(C, "No other objects are selected");
+  return false;
+}
+
+void CONSTRAINT_OT_copy_to_selected(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Copy Constraint To Selected";
+  ot->idname = "CONSTRAINT_OT_copy_to_selected";
+  ot->description = "Copy constraint to other selected objects/bones";
+
+  /* api callbacks */
+  ot->exec = constraint_copy_to_selected_exec;
+  ot->invoke = constraint_copy_to_selected_invoke;
+  ot->poll = constraint_copy_to_selected_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  edit_constraint_properties(ot);
+}
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
 /** \name Move Down Constraint Operator
  * \{ */
 
@@ -1551,6 +1862,7 @@ static int constraint_move_down_exec(bContext *C, wmOperator *op)
     BLI_remlink(conlist, con);
     BLI_insertlinkafter(conlist, nextCon, con);
 
+    ED_object_constraint_update(CTX_data_main(C), ob);
     WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT, ob);
 
     return OPERATOR_FINISHED;
@@ -1606,6 +1918,7 @@ static int constraint_move_up_exec(bContext *C, wmOperator *op)
     BLI_remlink(conlist, con);
     BLI_insertlinkbefore(conlist, prevCon, con);
 
+    ED_object_constraint_update(CTX_data_main(C), ob);
     WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT, ob);
 
     return OPERATOR_FINISHED;
@@ -1658,6 +1971,8 @@ static int constraint_move_to_index_exec(bContext *C, wmOperator *op)
 
   if (con) {
     ED_object_constraint_move_to_index(ob, con, new_index);
+
+    ED_object_constraint_update(CTX_data_main(C), ob);
 
     return OPERATOR_FINISHED;
   }
@@ -1729,7 +2044,7 @@ static int pose_constraints_clear_exec(bContext *C, wmOperator *UNUSED(op))
   /* force depsgraph to get recalculated since relationships removed */
   DEG_relations_tag_update(bmain);
 
-  /* note, calling BIK_clear_data() isn't needed here */
+  /* NOTE: calling BIK_clear_data() isn't needed here. */
 
   return OPERATOR_FINISHED;
 }
@@ -1743,8 +2058,8 @@ void POSE_OT_constraints_clear(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = pose_constraints_clear_exec;
-  ot->poll = ED_operator_posemode_exclusive; /* XXX - do we want to ensure there are selected
-                                              * bones too? */
+  /* XXX: do we want to ensure there are selected bones too? */
+  ot->poll = ED_operator_object_active_local_editable_posemode_exclusive;
 }
 
 static int object_constraints_clear_exec(bContext *C, wmOperator *UNUSED(op))
@@ -1900,7 +2215,7 @@ static bool get_new_constraint_target(
     bContext *C, int con_type, Object **tar_ob, bPoseChannel **tar_pchan, bool add)
 {
   Object *obact = ED_object_active_context(C);
-  bPoseChannel *pchanact = BKE_pose_channel_active(obact);
+  bPoseChannel *pchanact = BKE_pose_channel_active_if_layer_visible(obact);
   bool only_curve = false, only_mesh = false, only_ob = false;
   bool found = false;
 
@@ -1975,7 +2290,7 @@ static bool get_new_constraint_target(
             (!only_curve && !only_mesh)) {
 
           /* Only use the object & bone if the bone is visible & selected
-           * since we may have multiple objects in pose mode at once.  */
+           * since we may have multiple objects in pose mode at once. */
           bPoseChannel *pchan = BKE_pose_channel_active_or_first_selected(ob);
           if (pchan != NULL) {
             *tar_pchan = pchan;
@@ -2055,7 +2370,7 @@ static int constraint_add_exec(
     pchan = NULL;
   }
   else {
-    pchan = BKE_pose_channel_active(ob);
+    pchan = BKE_pose_channel_active_if_layer_visible(ob);
 
     /* ensure not to confuse object/pose adding */
     if (pchan == NULL) {
@@ -2098,7 +2413,7 @@ static int constraint_add_exec(
     }
   }
 
-  /* do type-specific tweaking to the constraint settings  */
+  /* Do type-specific tweaking to the constraint settings. */
   switch (type) {
     case CONSTRAINT_TYPE_PYTHON: /* FIXME: this code is not really valid anymore */
     {
@@ -2335,7 +2650,7 @@ void POSE_OT_constraint_add_with_targets(wmOperatorType *ot)
 static int pose_ik_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-  bPoseChannel *pchan = BKE_pose_channel_active(ob);
+  bPoseChannel *pchan = BKE_pose_channel_active_if_layer_visible(ob);
   bConstraint *con = NULL;
 
   uiPopupMenu *pup;
@@ -2459,7 +2774,7 @@ static int pose_ik_clear_exec(bContext *C, wmOperator *UNUSED(op))
       /* Refresh depsgraph. */
       DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 
-      /* Note, notifier might evolve. */
+      /* NOTE: notifier might evolve. */
       WM_event_add_notifier(C, NC_OBJECT | ND_CONSTRAINT | NA_REMOVED, ob);
     }
   }
@@ -2477,7 +2792,7 @@ void POSE_OT_ik_clear(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = pose_ik_clear_exec;
-  ot->poll = ED_operator_posemode_exclusive;
+  ot->poll = ED_operator_object_active_local_editable_posemode_exclusive;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

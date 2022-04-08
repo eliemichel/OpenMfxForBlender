@@ -59,7 +59,7 @@ static struct {
 
 /* *********** FUNCTIONS *********** */
 
-/* TODO find a better way than this. This does not support dupli objects if
+/* TODO: find a better way than this. This does not support dupli objects if
  * the original object is hidden. */
 bool EEVEE_lightprobes_obj_visibility_cb(bool vis_in, void *user_data)
 {
@@ -94,11 +94,11 @@ static void planar_pool_ensure_alloc(EEVEE_Data *vedata, int num_planar_ref)
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *fx = stl->effects;
 
-  /* XXX TODO OPTIMIZATION: This is a complete waist of texture memory.
+  /* XXX TODO: OPTIMIZATION: This is a complete waist of texture memory.
    * Instead of allocating each planar probe for each viewport,
    * only alloc them once using the biggest viewport resolution. */
 
-  /* TODO get screen percentage from layer setting */
+  /* TODO: get screen percentage from layer setting. */
   // const DRWContextState *draw_ctx = DRW_context_state_get();
   // ViewLayer *view_layer = draw_ctx->view_layer;
   int screen_divider = 1;
@@ -202,7 +202,6 @@ void EEVEE_lightprobes_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   }
 }
 
-/* Only init the passes useful for rendering the light cache. */
 void EEVEE_lightbake_cache_init(EEVEE_ViewLayerData *sldata,
                                 EEVEE_Data *vedata,
                                 GPUTexture *rt_color,
@@ -871,7 +870,6 @@ static void lightbake_render_scene_face(int face, EEVEE_BakeRenderData *user_dat
   DRW_draw_pass(psl->transparent_pass);
 }
 
-/* Render the scene to the probe_rt texture. */
 void EEVEE_lightbake_render_scene(EEVEE_ViewLayerData *sldata,
                                   EEVEE_Data *vedata,
                                   struct GPUFrameBuffer *face_fb[6],
@@ -969,13 +967,13 @@ static void eevee_lightbake_render_scene_to_planars(EEVEE_ViewLayerData *sldata,
                      sldata->probes->planar_data,
                      sldata->probes->num_planar);
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Filtering
  * \{ */
 
-/* Glossy filter rt_color to light_cache->cube_tx.tex at index probe_idx */
 void EEVEE_lightbake_filter_glossy(EEVEE_ViewLayerData *sldata,
                                    EEVEE_Data *vedata,
                                    struct GPUTexture *rt_color,
@@ -1064,7 +1062,6 @@ void EEVEE_lightbake_filter_glossy(EEVEE_ViewLayerData *sldata,
   }
 }
 
-/* Diffuse filter rt_color to light_cache->grid_tx.tex at index grid_offset */
 void EEVEE_lightbake_filter_diffuse(EEVEE_ViewLayerData *sldata,
                                     EEVEE_Data *vedata,
                                     struct GPUTexture *rt_color,
@@ -1117,7 +1114,6 @@ void EEVEE_lightbake_filter_diffuse(EEVEE_ViewLayerData *sldata,
   GPU_framebuffer_viewport_reset(fb);
 }
 
-/* Filter rt_depth to light_cache->grid_tx.tex at index grid_offset */
 void EEVEE_lightbake_filter_visibility(EEVEE_ViewLayerData *sldata,
                                        EEVEE_Data *vedata,
                                        struct GPUTexture *UNUSED(rt_depth),
@@ -1133,7 +1129,7 @@ void EEVEE_lightbake_filter_visibility(EEVEE_ViewLayerData *sldata,
   EEVEE_LightProbesInfo *pinfo = sldata->probes;
   LightCache *light_cache = vedata->stl->g_data->light_cache;
 
-  pinfo->samples_len = 512.0f; /* TODO refine */
+  pinfo->samples_len = 512.0f; /* TODO: refine. */
   pinfo->shres = vis_size;
   pinfo->visibility_range = vis_range;
   pinfo->visibility_blur = vis_blur;
@@ -1203,6 +1199,8 @@ void EEVEE_lightprobes_refresh_planar(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     return;
   }
 
+  float hiz_uv_scale_prev[2] = {UNPACK2(common_data->hiz_uv_scale)};
+
   /* Temporary Remove all planar reflections (avoid lag effect). */
   common_data->prb_num_planar = 0;
   /* Turn off ssr to avoid black specular */
@@ -1212,6 +1210,9 @@ void EEVEE_lightprobes_refresh_planar(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
 
   common_data->ray_type = EEVEE_RAY_GLOSSY;
   common_data->ray_depth = 1.0f;
+  /* Planar reflections are rendered at the `hiz` resolution, so no need to scaling. */
+  copy_v2_fl(common_data->hiz_uv_scale, 1.0f);
+
   GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
 
   /* Rendering happens here! */
@@ -1227,6 +1228,7 @@ void EEVEE_lightprobes_refresh_planar(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
   common_data->ssr_toggle = true;
   common_data->ssrefract_toggle = true;
   common_data->sss_toggle = true;
+  copy_v2_v2(common_data->hiz_uv_scale, hiz_uv_scale_prev);
 
   /* Prefilter for SSR */
   if ((vedata->stl->effects->enabled_effects & EFFECT_SSR) != 0) {
@@ -1234,7 +1236,7 @@ void EEVEE_lightprobes_refresh_planar(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
   }
 
   if (DRW_state_is_image_render()) {
-    /* Sort transparents because planar reflections could have re-sorted them. */
+    /* Sort the transparent passes because planar reflections could have re-sorted them. */
     DRW_pass_sort_shgroup_z(vedata->psl->transparent_pass);
   }
 

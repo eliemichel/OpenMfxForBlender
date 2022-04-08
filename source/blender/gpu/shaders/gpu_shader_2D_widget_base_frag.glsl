@@ -1,3 +1,4 @@
+#ifndef USE_GPU_SHADER_CREATE_INFO
 uniform vec3 checkerColorAndSize;
 
 noperspective in vec2 uvInterp;
@@ -12,6 +13,7 @@ flat in vec4 embossColor;
 flat in float lineWidth;
 
 out vec4 fragColor;
+#endif
 
 vec3 compute_masks(vec2 uv)
 {
@@ -36,15 +38,15 @@ vec3 compute_masks(vec2 uv)
     corner_rad = right_half ? outRoundCorners.y : outRoundCorners.x;
   }
 
+  /* Fade emboss at the border. */
+  float emboss_size = upper_half ? 0.0 : min(1.0, uv_sdf.x / (corner_rad * ratio));
+
   /* Signed distance field from the corner (in pixel).
    * inner_sdf is sharp and outer_sdf is rounded. */
   uv_sdf -= corner_rad;
   float inner_sdf = max(0.0, min(uv_sdf.x, uv_sdf.y));
   float outer_sdf = -length(min(uv_sdf, 0.0));
   float sdf = inner_sdf + outer_sdf + corner_rad;
-
-  /* Fade emboss at the border. */
-  float emboss_size = clamp((upper_half) ? 0.0 : (uv.x / corner_rad), 0.0, 1.0);
 
   /* Clamp line width to be at least 1px wide. This can happen if the projection matrix
    * has been scaled (i.e: Node editor)... */

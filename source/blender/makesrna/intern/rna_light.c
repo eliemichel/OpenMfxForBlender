@@ -188,6 +188,7 @@ static void rna_def_light(BlenderRNA *brna)
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
   RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node based lights");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);
@@ -359,7 +360,7 @@ static void rna_def_light_shadow(StructRNA *srna, bool sun)
   RNA_def_property_boolean_sdna(prop, NULL, "mode", LA_SHAD_CONTACT);
   RNA_def_property_ui_text(prop,
                            "Contact Shadow",
-                           "Use screen space raytracing to have correct shadowing "
+                           "Use screen space ray-tracing to have correct shadowing "
                            "near occluder, or for small features that does not appear "
                            "in shadow maps");
   RNA_def_property_update(prop, 0, "rna_Light_update");

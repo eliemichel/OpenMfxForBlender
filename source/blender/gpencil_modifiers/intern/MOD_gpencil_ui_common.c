@@ -9,7 +9,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -203,9 +203,6 @@ void gpencil_modifier_curve_panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiTemplateCurveMapping(layout, ptr, "curve", 0, false, false, false, false);
 }
 
-/**
- * Draw modifier error message.
- */
 void gpencil_modifier_panel_end(uiLayout *layout, PointerRNA *ptr)
 {
   GpencilModifierData *md = ptr->data;
@@ -232,7 +229,7 @@ PointerRNA *gpencil_modifier_panel_get_property_pointers(Panel *panel, PointerRN
   UI_block_lock_clear(block);
   UI_block_lock_set(block, ID_IS_LINKED((Object *)ptr->owner_id), ERROR_LIBDATA_MESSAGE);
 
-  uiLayoutSetContextPointer(panel->layout, "modifier", ptr);
+  UI_panel_context_pointer_set(panel, "modifier", ptr);
 
   return ptr;
 }
@@ -312,7 +309,7 @@ static void gpencil_modifier_panel_header(const bContext *UNUSED(C), Panel *pane
   PointerRNA *ptr = UI_panel_custom_data_get(panel);
   GpencilModifierData *md = (GpencilModifierData *)ptr->data;
 
-  uiLayoutSetContextPointer(panel->layout, "modifier", ptr);
+  UI_panel_context_pointer_set(panel, "modifier", ptr);
 
   const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
   bool narrow_panel = (panel->sizex < UI_UNIT_X * 9 && panel->sizex != 0);
@@ -346,7 +343,7 @@ static void gpencil_modifier_panel_header(const bContext *UNUSED(C), Panel *pane
   uiItemMenuF(row, "", ICON_DOWNARROW_HLT, gpencil_modifier_ops_extra_draw, md);
 
   /* Remove button. */
-  sub = uiLayoutRow(row, true);
+  sub = uiLayoutRow(row, false);
   uiLayoutSetEmboss(sub, UI_EMBOSS_NONE);
   uiItemO(sub, "", ICON_X, "OBJECT_OT_gpencil_modifier_remove");
 
@@ -360,9 +357,6 @@ static void gpencil_modifier_panel_header(const bContext *UNUSED(C), Panel *pane
 /** \name Modifier Registration Helpers
  * \{ */
 
-/**
- * Create a panel in the context's region
- */
 PanelType *gpencil_modifier_panel_register(ARegionType *region_type,
                                            GpencilModifierType type,
                                            PanelDrawFn draw)
@@ -380,7 +374,7 @@ PanelType *gpencil_modifier_panel_register(ARegionType *region_type,
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * modifier rather than a #PanelType. */
-  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_INSTANCED;
   panel_type->reorder = gpencil_modifier_reorder;
   panel_type->get_list_data_expand_flag = get_gpencil_modifier_expand_flag;
   panel_type->set_list_data_expand_flag = set_gpencil_modifier_expand_flag;
@@ -390,12 +384,6 @@ PanelType *gpencil_modifier_panel_register(ARegionType *region_type,
   return panel_type;
 }
 
-/**
- * Add a child panel to the parent.
- *
- * \note To create the panel type's idname, it appends the \a name argument to the \a parent's
- * idname.
- */
 PanelType *gpencil_modifier_subpanel_register(ARegionType *region_type,
                                               const char *name,
                                               const char *label,
@@ -413,7 +401,7 @@ PanelType *gpencil_modifier_subpanel_register(ARegionType *region_type,
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = gpencil_modifier_ui_poll;
-  panel_type->flag = (PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX);
+  panel_type->flag = PANEL_TYPE_DEFAULT_CLOSED;
 
   BLI_assert(parent != NULL);
   BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);

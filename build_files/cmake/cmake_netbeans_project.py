@@ -82,7 +82,7 @@ def create_nb_project_main():
         make_exe = cmake_cache_var("CMAKE_MAKE_PROGRAM")
         make_exe_basename = os.path.basename(make_exe)
 
-        # --------------- NB specific
+        # --------------- NetBeans specific.
         defines = [("%s=%s" % cdef) if cdef[1] else cdef[0] for cdef in defines]
         defines += [cdef.replace("#define", "").strip() for cdef in cmake_compiler_defines()]
 
@@ -180,7 +180,7 @@ def create_nb_project_main():
         f.write('    </logicalFolder>\n')
 
         f.write('  </logicalFolder>\n')
-        # default, but this dir is infact not in blender dir so we can ignore it
+        # default, but this dir is in fact not in blender dir so we can ignore it
         # f.write('  <sourceFolderFilter>^(nbproject)$</sourceFolderFilter>\n')
         f.write(r'  <sourceFolderFilter>^(nbproject|__pycache__|.*\.py|.*\.html|.*\.blend)$</sourceFolderFilter>\n')
 

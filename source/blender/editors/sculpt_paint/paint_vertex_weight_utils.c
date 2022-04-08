@@ -51,7 +51,6 @@
 /** \name Weight Paint Sanity Checks
  * \{ */
 
-/* ensure we have data on wpaint start, add if needed */
 bool ED_wpaint_ensure_data(bContext *C,
                            struct ReportList *reports,
                            enum eWPaintFlag flag,
@@ -79,8 +78,10 @@ bool ED_wpaint_ensure_data(bContext *C,
     WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
   }
 
+  const ListBase *defbase = BKE_object_defgroup_list(ob);
+
   /* this happens on a Bone select, when no vgroup existed yet */
-  if (ob->actdef <= 0) {
+  if (me->vertex_group_active_index <= 0) {
     Object *modob;
     if ((modob = BKE_modifiers_is_deformed_by_armature(ob))) {
       Bone *actbone = ((bArmature *)modob->data)->act_bone;
@@ -94,32 +95,33 @@ bool ED_wpaint_ensure_data(bContext *C,
             DEG_relations_tag_update(CTX_data_main(C));
           }
           else {
-            int actdef = 1 + BLI_findindex(&ob->defbase, dg);
+
+            int actdef = 1 + BLI_findindex(defbase, dg);
             BLI_assert(actdef >= 0);
-            ob->actdef = actdef;
+            me->vertex_group_active_index = actdef;
           }
         }
       }
     }
   }
-  if (BLI_listbase_is_empty(&ob->defbase)) {
+  if (BLI_listbase_is_empty(defbase)) {
     BKE_object_defgroup_add(ob);
     DEG_relations_tag_update(CTX_data_main(C));
   }
 
   /* ensure we don't try paint onto an invalid group */
-  if (ob->actdef <= 0) {
+  if (me->vertex_group_active_index <= 0) {
     BKE_report(reports, RPT_WARNING, "No active vertex group for painting, aborting");
     return false;
   }
 
   if (vgroup_index) {
-    vgroup_index->active = ob->actdef - 1;
+    vgroup_index->active = me->vertex_group_active_index - 1;
   }
 
   if (flag & WPAINT_ENSURE_MIRROR) {
     if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
-      int mirror = ED_wpaint_mirror_vgroup_ensure(ob, ob->actdef - 1);
+      int mirror = ED_wpaint_mirror_vgroup_ensure(ob, me->vertex_group_active_index - 1);
       if (vgroup_index) {
         vgroup_index->mirror = mirror;
       }
@@ -128,12 +130,13 @@ bool ED_wpaint_ensure_data(bContext *C,
 
   return true;
 }
+
 /** \} */
 
-/* mirror_vgroup is set to -1 when invalid */
 int ED_wpaint_mirror_vgroup_ensure(Object *ob, const int vgroup_active)
 {
-  bDeformGroup *defgroup = BLI_findlink(&ob->defbase, vgroup_active);
+  const ListBase *defbase = BKE_object_defgroup_list(ob);
+  bDeformGroup *defgroup = BLI_findlink(defbase, vgroup_active);
 
   if (defgroup) {
     int mirrdef;
@@ -143,7 +146,7 @@ int ED_wpaint_mirror_vgroup_ensure(Object *ob, const int vgroup_active)
     mirrdef = BKE_object_defgroup_name_index(ob, name_flip);
     if (mirrdef == -1) {
       if (BKE_object_defgroup_new(ob, name_flip)) {
-        mirrdef = BLI_listbase_count(&ob->defbase) - 1;
+        mirrdef = BLI_listbase_count(defbase) - 1;
       }
     }
 
@@ -273,14 +276,6 @@ BLI_INLINE float wval_exclusion(float weight, float paintval, float fac)
   return temp * fac + weight * mfac;
 }
 
-/**
- * \param weight: Typically the current weight: #MDeformWeight.weight
- *
- * \return The final weight, note that this is _not_ clamped from [0-1].
- * Clamping must be done on the final #MDeformWeight.weight
- *
- * \note vertex-paint has an equivalent function: #ED_vpaint_blend_tool
- */
 float ED_wpaint_blend_tool(const int tool,
                            const float weight,
                            const float paintval,

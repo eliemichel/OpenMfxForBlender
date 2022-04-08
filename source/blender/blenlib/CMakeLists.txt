@@ -20,18 +20,18 @@
 
 set(INC
   .
-  # ../blenkernel  # dont add this back!
+  # ../blenkernel  # don't add this back!
   ../makesdna
   ../../../intern/atomic
   ../../../intern/eigen
   ../../../intern/guardedalloc
-  ../../../intern/numaapi/include
   ../../../extern/wcwidth
+  ../../../extern/json/include
 )
 
 set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
-  ${FREETYPE_INCLUDE_DIRS}
+  ${ZSTD_INCLUDE_DIRS}
   ${GMP_INCLUDE_DIRS}
 )
 
@@ -39,6 +39,7 @@ set(SRC
   intern/BLI_args.c
   intern/BLI_array.c
   intern/BLI_assert.c
+  intern/BLI_color.cc
   intern/BLI_dial_2d.c
   intern/BLI_dynstr.c
   intern/BLI_filelist.c
@@ -74,12 +75,17 @@ set(SRC
   intern/endian_switch.c
   intern/expr_pylike_eval.c
   intern/fileops.c
+  intern/fileops.cc
+  intern/filereader_file.c
+  intern/filereader_gzip.c
+  intern/filereader_memory.c
+  intern/filereader_zstd.c
   intern/fnmatch.c
-  intern/freetypefont.c
   intern/gsqueue.c
   intern/hash_md5.c
   intern/hash_mm2a.c
   intern/hash_mm3.c
+  intern/index_mask.cc
   intern/jitter_2d.c
   intern/kdtree_1d.c
   intern/kdtree_2d.c
@@ -102,6 +108,7 @@ set(SRC
   intern/math_rotation.c
   intern/math_solvers.c
   intern/math_statistics.c
+  intern/math_time.c
   intern/math_vec.cc
   intern/math_vector.c
   intern/math_vector_inline.c
@@ -109,14 +116,17 @@ set(SRC
   intern/mesh_boolean.cc
   intern/mesh_intersect.cc
   intern/noise.c
+  intern/noise.cc
   intern/path_util.c
   intern/polyfill_2d.c
   intern/polyfill_2d_beautify.c
   intern/quadric.c
   intern/rand.cc
   intern/rct.c
+  intern/resource_scope.cc
   intern/scanfill.c
   intern/scanfill_utils.c
+  intern/serialize.cc
   intern/session_uuid.c
   intern/smallhash.c
   intern/sort.c
@@ -138,11 +148,15 @@ set(SRC
   intern/time.c
   intern/timecode.c
   intern/timeit.cc
+  intern/uuid.cc
   intern/uvproject.c
   intern/voronoi_2d.c
   intern/voxel.c
   intern/winstuff.c
   intern/winstuff_dir.c
+
+  # Private headers.
+  intern/BLI_mempool_private.h
 
   # Header as source (included in C files above).
   intern/kdtree_impl.h
@@ -151,6 +165,7 @@ set(SRC
 
   BLI_alloca.h
   BLI_allocator.hh
+  BLI_any.hh
   BLI_args.h
   BLI_array.h
   BLI_array.hh
@@ -177,19 +192,19 @@ set(SRC
   BLI_dlrbTree.h
   BLI_dot_export.hh
   BLI_dot_export_attribute_enums.hh
-  BLI_double2.hh
-  BLI_double3.hh
   BLI_dynlib.h
   BLI_dynstr.h
   BLI_easing.h
   BLI_edgehash.h
+  BLI_endian_defines.h
   BLI_endian_switch.h
   BLI_endian_switch_inline.h
+  BLI_enumerable_thread_specific.hh
   BLI_expr_pylike_eval.h
   BLI_fileops.h
+  BLI_fileops.hh
   BLI_fileops_types.h
-  BLI_float2.hh
-  BLI_float3.hh
+  BLI_filereader.h
   BLI_float4x4.hh
   BLI_fnmatch.h
   BLI_function_ref.hh
@@ -236,6 +251,9 @@ set(SRC
   BLI_math_rotation.h
   BLI_math_solvers.h
   BLI_math_statistics.h
+  BLI_math_time.h
+  BLI_math_vec_mpq_types.hh
+  BLI_math_vec_types.hh
   BLI_math_vector.h
   BLI_memarena.h
   BLI_memblock.h
@@ -246,10 +264,9 @@ set(SRC
   BLI_mesh_boolean.hh
   BLI_mesh_intersect.hh
   BLI_mmap.h
-  BLI_mpq2.hh
-  BLI_mpq3.hh
   BLI_multi_value_map.hh
   BLI_noise.h
+  BLI_noise.hh
   BLI_path_util.h
   BLI_polyfill_2d.h
   BLI_polyfill_2d_beautify.h
@@ -257,9 +274,11 @@ set(SRC
   BLI_quadric.h
   BLI_rand.h
   BLI_rand.hh
+  BLI_range.h
   BLI_rect.h
   BLI_resource_scope.hh
   BLI_scanfill.h
+  BLI_serialize.hh
   BLI_session_uuid.h
   BLI_set.hh
   BLI_set_slots.hh
@@ -291,12 +310,12 @@ set(SRC
   BLI_utildefines_stack.h
   BLI_utildefines_variadic.h
   BLI_utility_mixins.hh
+  BLI_uuid.h
   BLI_uvproject.h
   BLI_vector.hh
   BLI_vector_adaptor.hh
   BLI_vector_set.hh
   BLI_vector_set_slots.hh
-  BLI_vfontdata.h
   BLI_virtual_array.hh
   BLI_virtual_vector_array.hh
   BLI_voronoi_2d.h
@@ -309,11 +328,10 @@ set(SRC
 set(LIB
   bf_intern_eigen
   bf_intern_guardedalloc
-  bf_intern_numaapi
   extern_wcwidth
 
-  ${FREETYPE_LIBRARY}
   ${ZLIB_LIBRARIES}
+  ${ZSTD_LIBRARIES}
 )
 
 if(WITH_MEM_VALGRIND)
@@ -345,6 +363,10 @@ if(WITH_GMP)
 endif()
 
 if(WIN32)
+  if(WITH_BLENDER_THUMBNAILER)
+    # Needed for querying the `thumbnailer .dll` in `winstuff.c`.
+    add_definitions(-DWITH_BLENDER_THUMBNAILER)
+  endif()
   list(APPEND INC
     ../../../intern/utfconv
   )
@@ -385,13 +407,16 @@ blender_add_lib(bf_blenlib "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 if(WITH_GTESTS)
   set(TEST_SRC
+    tests/BLI_any_test.cc
     tests/BLI_array_store_test.cc
     tests/BLI_array_test.cc
     tests/BLI_array_utils_test.cc
+    tests/BLI_color_test.cc
     tests/BLI_delaunay_2d_test.cc
     tests/BLI_disjoint_set_test.cc
     tests/BLI_edgehash_test.cc
     tests/BLI_expr_pylike_eval_test.cc
+    tests/BLI_fileops_test.cc
     tests/BLI_function_ref_test.cc
     tests/BLI_ghash_test.cc
     tests/BLI_hash_mm2a_test.cc
@@ -413,6 +438,8 @@ if(WITH_GTESTS)
     tests/BLI_math_matrix_test.cc
     tests/BLI_math_rotation_test.cc
     tests/BLI_math_solvers_test.cc
+    tests/BLI_math_time_test.cc
+    tests/BLI_math_vec_types_test.cc
     tests/BLI_math_vector_test.cc
     tests/BLI_memiter_test.cc
     tests/BLI_memory_utils_test.cc
@@ -422,6 +449,7 @@ if(WITH_GTESTS)
     tests/BLI_path_util_test.cc
     tests/BLI_polyfill_2d_test.cc
     tests/BLI_ressource_strings.h
+    tests/BLI_serialize_test.cc
     tests/BLI_session_uuid_test.cc
     tests/BLI_set_test.cc
     tests/BLI_span_test.cc
@@ -433,6 +461,7 @@ if(WITH_GTESTS)
     tests/BLI_string_utf8_test.cc
     tests/BLI_task_graph_test.cc
     tests/BLI_task_test.cc
+    tests/BLI_uuid_test.cc
     tests/BLI_vector_set_test.cc
     tests/BLI_vector_test.cc
     tests/BLI_virtual_array_test.cc

@@ -33,11 +33,11 @@
 const UserDef U_default = {
     .versionfile = BLENDER_FILE_VERSION,
     .subversionfile = BLENDER_FILE_SUBVERSION,
-    .flag = (USER_AUTOSAVE | USER_TOOLTIPS | USER_SAVE_PREVIEWS | USER_RELPATHS |
-             USER_RELEASECONFIRM | USER_SCRIPT_AUTOEXEC_DISABLE | USER_NONEGFRAMES),
-    .dupflag = USER_DUP_MESH | USER_DUP_CURVE | USER_DUP_SURF | USER_DUP_FONT | USER_DUP_MBALL |
-               USER_DUP_LAMP | USER_DUP_ARM | USER_DUP_ACT | USER_DUP_LIGHTPROBE |
-               USER_DUP_GPENCIL,
+    .flag = (USER_AUTOSAVE | USER_TOOLTIPS | USER_RELPATHS | USER_RELEASECONFIRM |
+             USER_SCRIPT_AUTOEXEC_DISABLE | USER_NONEGFRAMES),
+    .dupflag = USER_DUP_MESH | USER_DUP_CURVE | USER_DUP_SURF | USER_DUP_LATTICE | USER_DUP_FONT |
+               USER_DUP_MBALL | USER_DUP_LAMP | USER_DUP_ARM | USER_DUP_CAMERA | USER_DUP_SPEAKER |
+               USER_DUP_ACT | USER_DUP_LIGHTPROBE | USER_DUP_GPENCIL,
     .pref_flag = USER_PREF_FLAG_SAVE,
     .savetime = 2,
     .tempdir = "",
@@ -61,7 +61,7 @@ const UserDef U_default = {
                USER_HIDE_DOT | USER_SHOW_GIZMO_NAVIGATE | USER_SHOW_VIEWPORTNAME | USER_SHOW_FPS |
                USER_CONTINUOUS_MOUSE | USER_SAVE_PROMPT),
     .uiflag2 = USER_REGION_OVERLAP,
-    .gpu_flag = USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE,
+    .gpu_flag = USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE | USER_GPU_FLAG_SUBDIVISION_EVALUATION,
     .app_flag = 0,
     /** Default language of English (1), not Automatic (0). */
     .language = 1,
@@ -113,7 +113,7 @@ const UserDef U_default = {
     .gp_eraser = 25,
     .gp_settings = 0,
 
-    /** Initialized by: #BKE_studiolight_default . */
+    /** Initialized by: #BKE_studiolight_default. */
     .light_param = {{0}},
     .light_ambient = {0, 0, 0},
 
@@ -231,6 +231,7 @@ const UserDef U_default = {
     .collection_instance_empty_size = 1.0f,
 
     .statusbar_flag = STATUSBAR_SHOW_VERSION,
+    .file_preview_type = USER_FILE_PREVIEW_AUTO,
 
     .runtime =
         {

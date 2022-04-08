@@ -68,20 +68,27 @@ class MotionPathButtonsPanel:
                 col.prop(mpath, "frame_start", text="Cache From")
             col.prop(mpath, "frame_end", text="To")
 
-            row = layout.row(align=True)
+            col = layout.column(align=True)
+
             if bones:
-                row.operator("pose.paths_update", text="Update Paths", icon='BONE_DATA')
-                row.operator("pose.paths_clear", text="", icon='X')
+                col.operator("pose.paths_update", text="Update Paths", icon='BONE_DATA')
             else:
-                row.operator("object.paths_update", text="Update Paths", icon='OBJECT_DATA')
-                row.operator("object.paths_clear", text="", icon='X')
+                col.operator("object.paths_update", text="Update Paths", icon='OBJECT_DATA')
         else:
             col = layout.column(align=True)
             col.label(text="Nothing to show yet...", icon='ERROR')
+
             if bones:
                 col.operator("pose.paths_calculate", text="Calculate...", icon='BONE_DATA')
             else:
                 col.operator("object.paths_calculate", text="Calculate...", icon='OBJECT_DATA')
+
+        row = col.row(align=True)
+        row.operator("object.paths_update_visible", text="Update All Paths", icon='WORLD')
+        if bones:
+            row.operator("pose.paths_clear", text="", icon='X')
+        else:
+            row.operator("object.paths_clear", text="", icon='X')
 
 
 class MotionPathButtonsPanel_display:

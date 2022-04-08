@@ -47,6 +47,7 @@ set(SRC
   keyframes_draw.c
   keyframes_edit.c
   keyframes_general.c
+  keyframes_keylist.cc
   keyframing.c
   keyingsets.c
   time_scrub_ui.c
@@ -69,3 +70,15 @@ endif()
 
 
 blender_add_lib(bf_editor_animation "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    keyframes_keylist_test.cc
+  )
+  set(TEST_INC
+  )
+  set(TEST_LIB
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_editor_animation_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+endif()

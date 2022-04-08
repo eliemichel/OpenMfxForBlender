@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "DNA_uuid_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -66,7 +68,7 @@ typedef struct FileAttributeColumn {
 } FileAttributeColumn;
 
 typedef struct FileLayout {
-  /* view settings - XXX - move into own struct */
+  /* view settings - XXX: move into own struct. */
   int offset_top;
   /* Height of the header for the different FileAttributeColumn's. */
   int attribute_column_header_h;
@@ -103,15 +105,29 @@ typedef struct FileSelection {
 struct View2D;
 struct rcti;
 
+/**
+ * If needed, create and return the file select parameters for the active browse mode.
+ */
 struct FileSelectParams *ED_fileselect_ensure_active_params(struct SpaceFile *sfile);
+/**
+ * Get the file select parameters for the active browse mode.
+ */
 struct FileSelectParams *ED_fileselect_get_active_params(const struct SpaceFile *sfile);
 struct FileSelectParams *ED_fileselect_get_file_params(const struct SpaceFile *sfile);
 struct FileAssetSelectParams *ED_fileselect_get_asset_params(const struct SpaceFile *sfile);
+bool ED_fileselect_is_local_asset_library(const struct SpaceFile *sfile);
 
 void ED_fileselect_set_params_from_userdef(struct SpaceFile *sfile);
+/**
+ * Update the user-preference data for the file space. In fact, this also contains some
+ * non-FileSelectParams data, but we can safely ignore this.
+ *
+ * \param temp_win_size: If the browser was opened in a temporary window,
+ * pass its size here so we can store that in the preferences. Otherwise NULL.
+ */
 void ED_fileselect_params_to_userdef(struct SpaceFile *sfile,
-                                     const int temp_win_size[],
-                                     const bool is_maximized);
+                                     const int temp_win_size[2],
+                                     bool is_maximized);
 
 void ED_fileselect_init_layout(struct SpaceFile *sfile, struct ARegion *region);
 
@@ -121,6 +137,10 @@ int ED_fileselect_layout_numfiles(FileLayout *layout, struct ARegion *region);
 int ED_fileselect_layout_offset(FileLayout *layout, int x, int y);
 FileSelection ED_fileselect_layout_offset_rect(FileLayout *layout, const struct rcti *rect);
 
+/**
+ * Get the currently visible bounds of the layout in screen space. Matches View2D.mask minus the
+ * top column-header row.
+ */
 void ED_fileselect_layout_maskrect(const FileLayout *layout,
                                    const struct View2D *v2d,
                                    struct rcti *r_rect);
@@ -136,22 +156,25 @@ void ED_fileselect_layout_tilepos(FileLayout *layout, int tile, int *x, int *y);
 
 void ED_operatormacros_file(void);
 
-void ED_fileselect_clear(struct wmWindowManager *wm,
-                         struct Scene *owner_scene,
-                         struct SpaceFile *sfile);
+void ED_fileselect_clear(struct wmWindowManager *wm, struct SpaceFile *sfile);
 
-void ED_fileselect_exit(struct wmWindowManager *wm,
-                        struct Scene *owner_scene,
-                        struct SpaceFile *sfile);
+void ED_fileselect_exit(struct wmWindowManager *wm, struct SpaceFile *sfile);
 
+bool ED_fileselect_is_file_browser(const struct SpaceFile *sfile);
 bool ED_fileselect_is_asset_browser(const struct SpaceFile *sfile);
+struct AssetLibrary *ED_fileselect_active_asset_library_get(const struct SpaceFile *sfile);
 struct ID *ED_fileselect_active_asset_get(const struct SpaceFile *sfile);
 
-/* Activate the file that corresponds to the given ID.
- * Pass deferred=true to wait for the next refresh before activating. */
-void ED_fileselect_activate_by_id(struct SpaceFile *sfile,
-                                  struct ID *asset_id,
-                                  const bool deferred);
+void ED_fileselect_activate_asset_catalog(const struct SpaceFile *sfile, bUUID catalog_id);
+
+/**
+ * Activate and select the file that corresponds to the given ID.
+ * Pass deferred=true to wait for the next refresh before activating.
+ */
+void ED_fileselect_activate_by_id(struct SpaceFile *sfile, struct ID *asset_id, bool deferred);
+
+void ED_fileselect_deselect_all(struct SpaceFile *sfile);
+void ED_fileselect_activate_by_relpath(struct SpaceFile *sfile, const char *relative_path);
 
 void ED_fileselect_window_params_get(const struct wmWindow *win,
                                      int win_size[2],
@@ -160,13 +183,19 @@ void ED_fileselect_window_params_get(const struct wmWindow *win,
 struct ScrArea *ED_fileselect_handler_area_find(const struct wmWindow *win,
                                                 const struct wmOperator *file_operator);
 
+/* TODO: Maybe we should move this to BLI?
+ * On the other hand, it's using defines from space-file area, so not sure... */
 int ED_path_extension_type(const char *path);
 int ED_file_extension_icon(const char *path);
 int ED_file_icon(const struct FileDirEntry *file);
 
 void ED_file_read_bookmarks(void);
 
-void ED_file_change_dir_ex(struct bContext *C, struct bScreen *screen, struct ScrArea *area);
+/**
+ * Support updating the directory even when this isn't the active space
+ * needed so RNA properties update function isn't context sensitive, see T70255.
+ */
+void ED_file_change_dir_ex(struct bContext *C, struct ScrArea *area);
 void ED_file_change_dir(struct bContext *C);
 
 void ED_file_path_button(struct bScreen *screen,
@@ -225,7 +254,7 @@ char *ED_fsmenu_entry_get_name(struct FSMenuEntry *fsentry);
 void ED_fsmenu_entry_set_name(struct FSMenuEntry *fsentry, const char *name);
 
 int ED_fsmenu_entry_get_icon(struct FSMenuEntry *fsentry);
-void ED_fsmenu_entry_set_icon(struct FSMenuEntry *fsentry, const int icon);
+void ED_fsmenu_entry_set_icon(struct FSMenuEntry *fsentry, int icon);
 
 #ifdef __cplusplus
 }

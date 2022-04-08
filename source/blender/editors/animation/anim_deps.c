@@ -56,9 +56,6 @@
 
 /* **************************** depsgraph tagging ******************************** */
 
-/* tags the given anim list element for refreshes (if applicable)
- * due to Animation Editor editing
- */
 void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
 {
   ID *id;
@@ -93,9 +90,9 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
   fcu = (ale->datatype == ALE_FCURVE) ? ale->key_data : NULL;
 
   if (fcu && fcu->rna_path) {
-    /* if we have an fcurve, call the update for the property we
+    /* If we have an fcurve, call the update for the property we
      * are editing, this is then expected to do the proper redraws
-     * and depsgraph updates  */
+     * and depsgraph updates. */
     PointerRNA id_ptr, ptr;
     PropertyRNA *prop;
 
@@ -109,21 +106,18 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
     /* in other case we do standard depsgraph update, ideally
      * we'd be calling property update functions here too ... */
     DEG_id_tag_update(id,
-                      ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-                          ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
+                      /* XXX: or do we want something more restrictive? */
+                      ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
   }
 }
 
-/* tags the given ID block for refreshes (if applicable) due to
- * Animation Editor editing */
 void ANIM_id_update(Main *bmain, ID *id)
 {
   if (id) {
-    DEG_id_tag_update_ex(
-        bmain,
-        id,
-        ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-            ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
+    DEG_id_tag_update_ex(bmain,
+                         id,
+                         /* XXX: or do we want something more restrictive? */
+                         ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
   }
 }
 
@@ -207,23 +201,17 @@ static void animchan_sync_fcurve_scene(bAnimListElem *ale)
   BLI_assert(GS(owner_id->name) == ID_SCE);
   Scene *scene = (Scene *)owner_id;
   FCurve *fcu = (FCurve *)ale->data;
+  Sequence *seq = NULL;
 
-  /* only affect if F-Curve involves sequence_editor.sequences */
-  if (!strstr(fcu->rna_path, "sequences_all")) {
+  /* Only affect if F-Curve involves sequence_editor.sequences. */
+  char seq_name[sizeof(seq->name)];
+  if (!BLI_str_quoted_substr(fcu->rna_path, "sequences_all[", seq_name, sizeof(seq_name))) {
     return;
   }
 
-  Editing *ed = SEQ_editing_get(scene, false);
-
-  /* get strip name, and check if this strip is selected */
-  char *seq_name = BLI_str_quoted_substrN(fcu->rna_path, "sequences_all[");
-  if (seq_name == NULL) {
-    return;
-  }
-
-  Sequence *seq = SEQ_get_sequence_by_name(ed->seqbasep, seq_name, false);
-  MEM_freeN(seq_name);
-
+  /* Check if this strip is selected. */
+  Editing *ed = SEQ_editing_get(scene);
+  seq = SEQ_get_sequence_by_name(ed->seqbasep, seq_name, false);
   if (seq == NULL) {
     return;
   }
@@ -283,7 +271,6 @@ static void animchan_sync_gplayer(bAnimListElem *ale)
 
 /* ---------------- */
 
-/* Main call to be exported to animation editors */
 void ANIM_sync_animchannels_to_data(const bContext *C)
 {
   bAnimContext ac;

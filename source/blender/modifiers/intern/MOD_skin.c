@@ -296,7 +296,7 @@ static bool build_hull(SkinOutput *so, Frame **frames, int totframe)
       bm, &op, (BMO_FLAG_DEFAULTS & ~BMO_FLAG_RESPECT_HIDE), "convex_hull input=%hv", BM_ELEM_TAG);
   BMO_op_exec(bm, &op);
 
-  if (BMO_error_occurred(bm)) {
+  if (BMO_error_occurred_at_level(bm, BMO_ERROR_CANCEL)) {
     BMO_op_finish(bm, &op);
     return false;
   }
@@ -1202,7 +1202,7 @@ static BMFace *collapse_face_corners(BMesh *bm, BMFace *f, int n, BMVert **orig_
 
     slot_targetmap = BMO_slot_get(op.slots_in, "targetmap");
 
-    /* Note: could probably calculate merges in one go to be
+    /* NOTE: could probably calculate merges in one go to be
      * faster */
 
     v_safe = shortest_edge->v1;
@@ -1479,7 +1479,7 @@ static void quad_from_tris(BMEdge *e, BMFace *adj[2], BMVert *ndx[4])
     ndx[j] = tri[0][i];
     /* When the triangle edge cuts across our quad-to-be,
      * throw in the second triangle's vertex */
-    if ((tri[0][i] == e->v1 || tri[0][i] == e->v2) &&
+    if ((ELEM(tri[0][i], e->v1, e->v2)) &&
         (tri[0][(i + 1) % 3] == e->v1 || tri[0][(i + 1) % 3] == e->v2)) {
       j++;
       ndx[j] = opp;
@@ -1960,7 +1960,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd, eSkinErrorFlag *r_
   result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL, origmesh);
   BM_mesh_free(bm);
 
-  result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+  BKE_mesh_normals_tag_dirty(result);
 
   skin_set_orig_indices(result);
 
@@ -2103,7 +2103,6 @@ ModifierTypeInfo modifierType_Skin = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

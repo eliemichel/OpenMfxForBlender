@@ -28,6 +28,7 @@
 #include "BLI_vector.hh"
 
 #include "gl_batch.hh"
+#include "gl_compute.hh"
 #include "gl_context.hh"
 #include "gl_drawlist.hh"
 #include "gl_framebuffer.hh"
@@ -61,12 +62,12 @@ class GLBackend : public GPUBackend {
     GLBackend::platform_exit();
   }
 
-  static GLBackend *get(void)
+  static GLBackend *get()
   {
     return static_cast<GLBackend *>(GPUBackend::get());
   }
 
-  void samplers_update(void) override
+  void samplers_update() override
   {
     GLTexture::samplers_update();
   };
@@ -76,7 +77,7 @@ class GLBackend : public GPUBackend {
     return new GLContext(ghost_window, shared_orphan_list_);
   };
 
-  Batch *batch_alloc(void) override
+  Batch *batch_alloc() override
   {
     return new GLBatch();
   };
@@ -91,12 +92,12 @@ class GLBackend : public GPUBackend {
     return new GLFrameBuffer(name);
   };
 
-  IndexBuf *indexbuf_alloc(void) override
+  IndexBuf *indexbuf_alloc() override
   {
     return new GLIndexBuf();
   };
 
-  QueryPool *querypool_alloc(void) override
+  QueryPool *querypool_alloc() override
   {
     return new GLQueryPool();
   };
@@ -116,21 +117,27 @@ class GLBackend : public GPUBackend {
     return new GLUniformBuf(size, name);
   };
 
-  VertBuf *vertbuf_alloc(void) override
+  VertBuf *vertbuf_alloc() override
   {
     return new GLVertBuf();
   };
 
-  GLSharedOrphanLists &shared_orphan_list_get(void)
+  GLSharedOrphanLists &shared_orphan_list_get()
   {
     return shared_orphan_list_;
   };
 
- private:
-  static void platform_init(void);
-  static void platform_exit(void);
+  void compute_dispatch(int groups_x_len, int groups_y_len, int groups_z_len) override
+  {
+    GLContext::get()->state_manager_active_get()->apply_state();
+    GLCompute::dispatch(groups_x_len, groups_y_len, groups_z_len);
+  }
 
-  static void capabilities_init(void);
+ private:
+  static void platform_init();
+  static void platform_exit();
+
+  static void capabilities_init();
 };
 
 }  // namespace gpu

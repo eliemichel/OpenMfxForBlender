@@ -185,10 +185,31 @@ bool nla_panel_context(const bContext *C,
   return (found != 0);
 }
 
+bool ANIM_nla_context_track_ptr(const bContext *C, PointerRNA *r_ptr)
+{
+  return nla_panel_context(C, NULL, r_ptr, NULL);
+}
+
+bool ANIM_nla_context_strip_ptr(const bContext *C, PointerRNA *r_ptr)
+{
+  return nla_panel_context(C, NULL, NULL, r_ptr);
+}
+
+NlaTrack *ANIM_nla_context_track(const bContext *C)
+{
+  PointerRNA track_ptr;
+  if (!ANIM_nla_context_track_ptr(C, &track_ptr)) {
+    return NULL;
+  }
+  NlaTrack *track = track_ptr.data;
+
+  return track;
+}
+
 NlaStrip *ANIM_nla_context_strip(const bContext *C)
 {
   PointerRNA strip_ptr;
-  if (!nla_panel_context(C, NULL, NULL, &strip_ptr)) {
+  if (!ANIM_nla_context_strip_ptr(C, &strip_ptr)) {
     return NULL;
   }
   NlaStrip *strip = strip_ptr.data;
@@ -291,7 +312,7 @@ static void nla_panel_animdata(const bContext *C, Panel *panel)
     uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_LEFT);
 
     uiItemL(row, id->name + 2, RNA_struct_ui_icon(id_ptr.type)); /* id-block (src) */
-    uiItemL(row, "", ICON_SMALL_TRI_RIGHT_VEC);                  /* expander */
+    uiItemL(row, "", ICON_RIGHTARROW);                           /* expander */
     uiItemL(row, IFACE_("Animation Data"), ICON_ANIM_DATA);      /* animdata */
 
     uiItemS(layout);

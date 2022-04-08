@@ -91,7 +91,7 @@ struct TaskNode {
 #ifdef WITH_TBB
   tbb::flow::continue_msg run(const tbb::flow::continue_msg UNUSED(input))
   {
-    tbb::this_task_arena::isolate([this] { run_func(task_data); });
+    run_func(task_data);
     return tbb::flow::continue_msg();
   }
 #endif
@@ -109,7 +109,7 @@ struct TaskNode {
 #endif
 };
 
-TaskGraph *BLI_task_graph_create(void)
+TaskGraph *BLI_task_graph_create()
 {
   return new TaskGraph();
 }

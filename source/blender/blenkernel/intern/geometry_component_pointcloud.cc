@@ -62,7 +62,6 @@ bool PointCloudComponent::has_pointcloud() const
   return pointcloud_ != nullptr;
 }
 
-/* Clear the component and replace it with the new point cloud. */
 void PointCloudComponent::replace(PointCloud *pointcloud, GeometryOwnershipType ownership)
 {
   BLI_assert(this->is_mutable());
@@ -71,8 +70,6 @@ void PointCloudComponent::replace(PointCloud *pointcloud, GeometryOwnershipType 
   ownership_ = ownership;
 }
 
-/* Return the point cloud and clear the component. The caller takes over responsibility for freeing
- * the point cloud (if the component was responsible before). */
 PointCloud *PointCloudComponent::release()
 {
   BLI_assert(this->is_mutable());
@@ -81,17 +78,11 @@ PointCloud *PointCloudComponent::release()
   return pointcloud;
 }
 
-/* Get the point cloud from this component. This method can be used by multiple threads at the same
- * time. Therefore, the returned point cloud should not be modified. No ownership is transferred.
- */
 const PointCloud *PointCloudComponent::get_for_read() const
 {
   return pointcloud_;
 }
 
-/* Get the point cloud from this component. This method can only be used when the component is
- * mutable, i.e. it is not shared. The returned point cloud can be modified. No ownership is
- * transferred. */
 PointCloud *PointCloudComponent::get_for_write()
 {
   BLI_assert(this->is_mutable());
@@ -140,16 +131,16 @@ int PointCloudComponent::attribute_domain_size(const AttributeDomain domain) con
 
 namespace blender::bke {
 
-template<typename T, AttributeDomain Domain>
-static ReadAttributePtr make_array_read_attribute(const void *data, const int domain_size)
+template<typename T>
+static GVArray make_array_read_attribute(const void *data, const int domain_size)
 {
-  return std::make_unique<ArrayReadAttribute<T>>(Domain, Span<T>((const T *)data, domain_size));
+  return VArray<T>::ForSpan(Span<T>((const T *)data, domain_size));
 }
 
-template<typename T, AttributeDomain Domain>
-static WriteAttributePtr make_array_write_attribute(void *data, const int domain_size)
+template<typename T>
+static GVMutableArray make_array_write_attribute(void *data, const int domain_size)
 {
-  return std::make_unique<ArrayWriteAttribute<T>>(Domain, MutableSpan<T>((T *)data, domain_size));
+  return VMutableArray<T>::ForSpan(MutableSpan<T>((T *)data, domain_size));
 }
 
 /**
@@ -179,32 +170,41 @@ static ComponentAttributeProviders create_attribute_providers_for_point_cloud()
       },
       update_custom_data_pointers};
 
-  static BuiltinCustomDataLayerProvider position(
-      "position",
-      ATTR_DOMAIN_POINT,
-      CD_PROP_FLOAT3,
-      CD_PROP_FLOAT3,
-      BuiltinAttributeProvider::NonCreatable,
-      BuiltinAttributeProvider::Writable,
-      BuiltinAttributeProvider::NonDeletable,
-      point_access,
-      make_array_read_attribute<float3, ATTR_DOMAIN_POINT>,
-      make_array_write_attribute<float3, ATTR_DOMAIN_POINT>,
-      nullptr);
-  static BuiltinCustomDataLayerProvider radius(
-      "radius",
-      ATTR_DOMAIN_POINT,
-      CD_PROP_FLOAT,
-      CD_PROP_FLOAT,
-      BuiltinAttributeProvider::Creatable,
-      BuiltinAttributeProvider::Writable,
-      BuiltinAttributeProvider::Deletable,
-      point_access,
-      make_array_read_attribute<float, ATTR_DOMAIN_POINT>,
-      make_array_write_attribute<float, ATTR_DOMAIN_POINT>,
-      nullptr);
+  static BuiltinCustomDataLayerProvider position("position",
+                                                 ATTR_DOMAIN_POINT,
+                                                 CD_PROP_FLOAT3,
+                                                 CD_PROP_FLOAT3,
+                                                 BuiltinAttributeProvider::NonCreatable,
+                                                 BuiltinAttributeProvider::Writable,
+                                                 BuiltinAttributeProvider::NonDeletable,
+                                                 point_access,
+                                                 make_array_read_attribute<float3>,
+                                                 make_array_write_attribute<float3>,
+                                                 nullptr);
+  static BuiltinCustomDataLayerProvider radius("radius",
+                                               ATTR_DOMAIN_POINT,
+                                               CD_PROP_FLOAT,
+                                               CD_PROP_FLOAT,
+                                               BuiltinAttributeProvider::Creatable,
+                                               BuiltinAttributeProvider::Writable,
+                                               BuiltinAttributeProvider::Deletable,
+                                               point_access,
+                                               make_array_read_attribute<float>,
+                                               make_array_write_attribute<float>,
+                                               nullptr);
+  static BuiltinCustomDataLayerProvider id("id",
+                                           ATTR_DOMAIN_POINT,
+                                           CD_PROP_INT32,
+                                           CD_PROP_INT32,
+                                           BuiltinAttributeProvider::Creatable,
+                                           BuiltinAttributeProvider::Writable,
+                                           BuiltinAttributeProvider::Deletable,
+                                           point_access,
+                                           make_array_read_attribute<int>,
+                                           make_array_write_attribute<int>,
+                                           nullptr);
   static CustomDataAttributeProvider point_custom_data(ATTR_DOMAIN_POINT, point_access);
-  return ComponentAttributeProviders({&position, &radius}, {&point_custom_data});
+  return ComponentAttributeProviders({&position, &radius, &id}, {&point_custom_data});
 }
 
 }  // namespace blender::bke

@@ -343,7 +343,7 @@ static int ui_block_align_butal_cmp(const void *a, const void *b)
    *     stupid UI code produces widgets which have the same TOP and LEFT positions...
    *     We do not care really,
    *     because this happens when UI is way too small to be usable anyway. */
-  /* BLI_assert(0); */
+  // BLI_assert(0);
   return 0;
 }
 
@@ -377,13 +377,6 @@ static void ui_block_align_but_to_region(uiBut *but, const ARegion *region)
   }
 }
 
-/**
- * Compute the alignment of all 'align groups' of buttons in given block.
- *
- * This is using an order-independent algorithm,
- * i.e. alignment of buttons should be OK regardless of order in which
- * they are added to the block.
- */
 void ui_block_align_calc(uiBlock *block, const ARegion *region)
 {
   int num_buttons = 0;
@@ -590,7 +583,8 @@ static void ui_block_align_calc_but(uiBut *first, short nr)
 
   /* rows == 0: 1 row, cols == 0: 1 column */
 
-  /* note;  how it uses 'flag' in loop below (either set it, or OR it) is confusing */
+  /* NOTE: manipulation of 'flag' in the loop below is confusing.
+   * In some cases it's assigned, other times OR is used. */
   for (but = first, prev = NULL; but && but->alignnr == nr; prev = but, but = but->next) {
     next = but->next;
     if (next && next->alignnr != nr) {

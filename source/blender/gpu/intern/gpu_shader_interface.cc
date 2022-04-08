@@ -65,14 +65,17 @@ static void sort_input_list(MutableSpan<ShaderInput> dst)
   }
 }
 
-/* Sorts all inputs inside their respective array.
- * This is to allow fast hash collision detection.
- * See ShaderInterface::input_lookup for more details. */
 void ShaderInterface::sort_inputs()
 {
+  /* Sorts all inputs inside their respective array.
+   * This is to allow fast hash collision detection.
+   * See `ShaderInterface::input_lookup` for more details. */
+
   sort_input_list(MutableSpan<ShaderInput>(inputs_, attr_len_));
   sort_input_list(MutableSpan<ShaderInput>(inputs_ + attr_len_, ubo_len_));
   sort_input_list(MutableSpan<ShaderInput>(inputs_ + attr_len_ + ubo_len_, uniform_len_));
+  sort_input_list(
+      MutableSpan<ShaderInput>(inputs_ + attr_len_ + ubo_len_ + uniform_len_, ssbo_len_));
 }
 
 void ShaderInterface::debug_print()
@@ -80,6 +83,8 @@ void ShaderInterface::debug_print()
   Span<ShaderInput> attrs = Span<ShaderInput>(inputs_, attr_len_);
   Span<ShaderInput> ubos = Span<ShaderInput>(inputs_ + attr_len_, ubo_len_);
   Span<ShaderInput> uniforms = Span<ShaderInput>(inputs_ + attr_len_ + ubo_len_, uniform_len_);
+  Span<ShaderInput> ssbos = Span<ShaderInput>(inputs_ + attr_len_ + ubo_len_ + uniform_len_,
+                                              ssbo_len_);
   char *name_buf = name_buffer_;
   const char format[] = "      | %.8x : %4d : %s\n";
 
@@ -115,6 +120,13 @@ void ShaderInterface::debug_print()
     if (samp.binding != -1) {
       printf(format, samp.name_hash, samp.binding, name_buf + samp.name_offset);
     }
+  }
+
+  if (ssbos.size() > 0) {
+    printf("\n    Shader Storage Objects :\n");
+  }
+  for (const ShaderInput &ssbo : ssbos) {
+    printf(format, ssbo.name_hash, ssbo.binding, name_buf + ssbo.name_offset);
   }
 
   printf("\n");

@@ -696,7 +696,7 @@ void OVERLAY_light_cache_populate(OVERLAY_Data *vedata, Object *ob)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Lightprobe
+/** \name Light-probe
  * \{ */
 
 void OVERLAY_lightprobe_cache_populate(OVERLAY_Data *vedata, Object *ob)
@@ -762,10 +762,7 @@ void OVERLAY_lightprobe_cache_populate(OVERLAY_Data *vedata, Object *ob)
         instdata.mat[1][3] = prb->grid_resolution_y;
         instdata.mat[2][3] = prb->grid_resolution_z;
         /* Put theme id in matrix. */
-        if (UNLIKELY(ob->base_flag & BASE_FROM_DUPLI)) {
-          instdata.mat[3][3] = 0.0;
-        }
-        else if (theme_id == TH_ACTIVE) {
+        if (theme_id == TH_ACTIVE) {
           instdata.mat[3][3] = 1.0;
         }
         else /* TH_SELECT */ {
@@ -861,11 +858,8 @@ typedef union OVERLAY_CameraInstanceData {
   };
 } OVERLAY_CameraInstanceData;
 
-static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
-                                         Scene *scene,
-                                         View3D *v3d,
-                                         Object *ob,
-                                         const float color[4])
+static void camera_view3d_reconstruction(
+    OVERLAY_ExtraCallBuffers *cb, Scene *scene, View3D *v3d, Object *ob, const float color[4])
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool is_select = DRW_state_is_select();
@@ -886,7 +880,7 @@ static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
   float *bundle_color_solid = G_draw.block.colorBundleSolid;
   float *bundle_color_unselected = G_draw.block.colorWire;
   uchar text_color_selected[4], text_color_unselected[4];
-  /* Color Management: Exception here as texts are drawn in sRGB space directly.  */
+  /* Color Management: Exception here as texts are drawn in sRGB space directly. */
   UI_GetThemeColor4ubv(TH_SELECT, text_color_selected);
   UI_GetThemeColor4ubv(TH_TEXT, text_color_unselected);
 
@@ -927,7 +921,7 @@ static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
       const float *bundle_color;
       if (track->flag & TRACK_CUSTOMCOLOR) {
         /* Meh, hardcoded srgb transform here. */
-        /* TODO change the actual DNA color to be linear. */
+        /* TODO: change the actual DNA color to be linear. */
         srgb_to_linearrgb_v3_v3(bundle_color_custom, track->color);
         bundle_color = bundle_color_custom;
       }
@@ -1356,7 +1350,8 @@ static void OVERLAY_relationship_lines(OVERLAY_ExtraCallBuffers *cb,
         }
       }
     }
-    BKE_constraints_clear_evalob(cob);
+    /* NOTE: Don't use BKE_constraints_clear_evalob here as that will reset ob->constinv. */
+    MEM_freeN(cob);
   }
 }
 
@@ -1543,7 +1538,7 @@ static void OVERLAY_object_name(Object *ob, int theme_id)
 {
   struct DRWTextStore *dt = DRW_text_cache_ensure();
   uchar color[4];
-  /* Color Management: Exception here as texts are drawn in sRGB space directly.  */
+  /* Color Management: Exception here as texts are drawn in sRGB space directly. */
   UI_GetThemeColor4ubv(theme_id, color);
 
   DRW_text_cache_add(dt,

@@ -71,6 +71,12 @@ FrameBuffer::~FrameBuffer()
       reinterpret_cast<Texture *>(attachment.tex)->detach_from(this);
     }
   }
+
+#ifndef GPU_NO_USE_PY_REFERENCES
+  if (this->py_ref) {
+    *this->py_ref = nullptr;
+  }
+#endif
 }
 
 /** \} */
@@ -210,18 +216,12 @@ void GPU_framebuffer_bind(GPUFrameBuffer *gpu_fb)
   unwrap(gpu_fb)->bind(enable_srgb);
 }
 
-/**
- * Workaround for binding a SRGB frame-buffer without doing the SRGB transform.
- */
 void GPU_framebuffer_bind_no_srgb(GPUFrameBuffer *gpu_fb)
 {
   const bool enable_srgb = false;
   unwrap(gpu_fb)->bind(enable_srgb);
 }
 
-/**
- * For stereo rendering.
- */
 void GPU_backbuffer_bind(eGPUBackBuffer buffer)
 {
   Context *ctx = Context::get();
@@ -234,19 +234,18 @@ void GPU_backbuffer_bind(eGPUBackBuffer buffer)
   }
 }
 
-void GPU_framebuffer_restore(void)
+void GPU_framebuffer_restore()
 {
   Context::get()->back_left->bind(false);
 }
 
-GPUFrameBuffer *GPU_framebuffer_active_get(void)
+GPUFrameBuffer *GPU_framebuffer_active_get()
 {
   Context *ctx = Context::get();
   return wrap(ctx ? ctx->active_fb : nullptr);
 }
 
-/* Returns the default frame-buffer. Will always exists even if it's just a dummy. */
-GPUFrameBuffer *GPU_framebuffer_back_get(void)
+GPUFrameBuffer *GPU_framebuffer_back_get()
 {
   Context *ctx = Context::get();
   return wrap(ctx ? ctx->back_left : nullptr);
@@ -296,12 +295,6 @@ void GPU_framebuffer_texture_detach(GPUFrameBuffer *fb, GPUTexture *tex)
   unwrap(tex)->detach_from(unwrap(fb));
 }
 
-/**
- * First GPUAttachment in *config is always the depth/depth_stencil buffer.
- * Following GPUAttachments are color buffers.
- * Setting GPUAttachment.mip to -1 will leave the texture in this slot.
- * Setting GPUAttachment.tex to NULL will detach the texture in this slot.
- */
 void GPU_framebuffer_config_array(GPUFrameBuffer *gpu_fb,
                                   const GPUAttachment *config,
                                   int config_len)
@@ -335,11 +328,6 @@ void GPU_framebuffer_config_array(GPUFrameBuffer *gpu_fb,
 
 /* ---------- Viewport & Scissor Region ----------- */
 
-/**
- * Viewport and scissor size is stored per frame-buffer.
- * It is only reset to its original dimensions explicitly OR when binding the frame-buffer after
- * modifying its attachments.
- */
 void GPU_framebuffer_viewport_set(GPUFrameBuffer *gpu_fb, int x, int y, int width, int height)
 {
   int viewport_rect[4] = {x, y, width, height};
@@ -351,9 +339,6 @@ void GPU_framebuffer_viewport_get(GPUFrameBuffer *gpu_fb, int r_viewport[4])
   unwrap(gpu_fb)->viewport_get(r_viewport);
 }
 
-/**
- * Reset to its attachment(s) size.
- */
 void GPU_framebuffer_viewport_reset(GPUFrameBuffer *gpu_fb)
 {
   unwrap(gpu_fb)->viewport_reset();
@@ -370,9 +355,6 @@ void GPU_framebuffer_clear(GPUFrameBuffer *gpu_fb,
   unwrap(gpu_fb)->clear(buffers, clear_col, clear_depth, clear_stencil);
 }
 
-/**
- * Clear all textures attached to this frame-buffer with a different color.
- */
 void GPU_framebuffer_multi_clear(GPUFrameBuffer *gpu_fb, const float (*clear_cols)[4])
 {
   unwrap(gpu_fb)->clear_multi(clear_cols);
@@ -419,7 +401,6 @@ void GPU_frontbuffer_read_pixels(
   Context::get()->front_left->read(GPU_COLOR_BIT, format, rect, channels, 0, data);
 }
 
-/* read_slot and write_slot are only used for color buffers. */
 /* TODO(fclem): port as texture operation. */
 void GPU_framebuffer_blit(GPUFrameBuffer *gpufb_read,
                           int read_slot,
@@ -460,11 +441,6 @@ void GPU_framebuffer_blit(GPUFrameBuffer *gpufb_read,
   prev_fb->bind(true);
 }
 
-/**
- * Use this if you need to custom down-sample your texture and use the previous mip-level as
- * input. This function only takes care of the correct texture handling. It execute the callback
- * for each texture level.
- */
 void GPU_framebuffer_recursive_downsample(GPUFrameBuffer *gpu_fb,
                                           int max_lvl,
                                           void (*callback)(void *userData, int level),
@@ -473,10 +449,23 @@ void GPU_framebuffer_recursive_downsample(GPUFrameBuffer *gpu_fb,
   unwrap(gpu_fb)->recursive_downsample(max_lvl, callback, userData);
 }
 
+#ifndef GPU_NO_USE_PY_REFERENCES
+void **GPU_framebuffer_py_reference_get(GPUFrameBuffer *gpu_fb)
+{
+  return unwrap(gpu_fb)->py_ref;
+}
+
+void GPU_framebuffer_py_reference_set(GPUFrameBuffer *gpu_fb, void **py_ref)
+{
+  BLI_assert(py_ref == nullptr || unwrap(gpu_fb)->py_ref == nullptr);
+  unwrap(gpu_fb)->py_ref = py_ref;
+}
+#endif
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name  Frame-Buffer Stack
+/** \name Frame-Buffer Stack
  *
  * Keeps track of frame-buffer binding operation to restore previously bound frame-buffers.
  * \{ */
@@ -495,14 +484,14 @@ void GPU_framebuffer_push(GPUFrameBuffer *fb)
   FrameBufferStack.top++;
 }
 
-GPUFrameBuffer *GPU_framebuffer_pop(void)
+GPUFrameBuffer *GPU_framebuffer_pop()
 {
   BLI_assert(FrameBufferStack.top > 0);
   FrameBufferStack.top--;
   return FrameBufferStack.framebuffers[FrameBufferStack.top];
 }
 
-uint GPU_framebuffer_stack_level_get(void)
+uint GPU_framebuffer_stack_level_get()
 {
   return FrameBufferStack.top;
 }
@@ -572,17 +561,16 @@ static GPUFrameBuffer *gpu_offscreen_fb_get(GPUOffScreen *ofs)
 }
 
 GPUOffScreen *GPU_offscreen_create(
-    int width, int height, bool depth, bool high_bitdepth, char err_out[256])
+    int width, int height, bool depth, eGPUTextureFormat format, char err_out[256])
 {
-  GPUOffScreen *ofs = (GPUOffScreen *)MEM_callocN(sizeof(GPUOffScreen), __func__);
+  GPUOffScreen *ofs = MEM_cnew<GPUOffScreen>(__func__);
 
   /* Sometimes areas can have 0 height or width and this will
    * create a 1D texture which we don't want. */
   height = max_ii(1, height);
   width = max_ii(1, width);
 
-  ofs->color = GPU_texture_create_2d(
-      "ofs_color", width, height, 1, (high_bitdepth) ? GPU_RGBA16F : GPU_RGBA8, nullptr);
+  ofs->color = GPU_texture_create_2d("ofs_color", width, height, 1, format, nullptr);
 
   if (depth) {
     ofs->depth = GPU_texture_create_2d(
@@ -590,7 +578,13 @@ GPUOffScreen *GPU_offscreen_create(
   }
 
   if ((depth && !ofs->depth) || !ofs->color) {
-    BLI_snprintf(err_out, 256, "GPUTexture: Texture allocation failed.");
+    const char error[] = "GPUTexture: Texture allocation failed.";
+    if (err_out) {
+      BLI_snprintf(err_out, 256, error);
+    }
+    else {
+      fprintf(stderr, error);
+    }
     GPU_offscreen_free(ofs);
     return nullptr;
   }
@@ -680,9 +674,6 @@ GPUTexture *GPU_offscreen_color_texture(const GPUOffScreen *ofs)
   return ofs->color;
 }
 
-/**
- * \note only to be used by viewport code!
- */
 void GPU_offscreen_viewport_data_get(GPUOffScreen *ofs,
                                      GPUFrameBuffer **r_fb,
                                      GPUTexture **r_color,

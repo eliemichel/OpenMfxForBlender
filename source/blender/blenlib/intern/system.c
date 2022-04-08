@@ -73,9 +73,6 @@ int BLI_cpu_support_sse2(void)
 
 /* Windows stack-walk lives in system_win32.c */
 #if !defined(_MSC_VER)
-/**
- * Write a backtrace into a file for systems which support it.
- */
 void BLI_system_backtrace(FILE *fp)
 {
   /* ------------- */
@@ -100,8 +97,8 @@ void BLI_system_backtrace(FILE *fp)
 #    undef SIZE
 
 #  else
-  /* ------------------ */
-  /* non msvc/osx/linux */
+  /* --------------------- */
+  /* Non MSVC/Apple/Linux. */
   (void)fp;
 #  endif
 }
@@ -184,7 +181,7 @@ size_t BLI_system_memory_max_in_megabytes(void)
   /* Maximum addressable bytes on this platform.
    *
    * NOTE: Due to the shift arithmetic this is a half of the memory. */
-  const size_t limit_bytes_half = (((size_t)1) << ((sizeof(size_t[8])) - 1));
+  const size_t limit_bytes_half = (((size_t)1) << (sizeof(size_t[8]) - 1));
   /* Convert it to megabytes and return. */
   return (limit_bytes_half >> 20) * 2;
 }

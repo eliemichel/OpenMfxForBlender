@@ -251,7 +251,6 @@ void WM_toolsystem_reinit(bContext *C, WorkSpace *workspace, const bToolKey *tke
   }
 }
 
-/* Operate on all active tools. */
 void WM_toolsystem_unlink_all(struct bContext *C, struct WorkSpace *workspace)
 {
   LISTBASE_FOREACH (bToolRef *, tref, &workspace->tools) {
@@ -326,7 +325,10 @@ void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
   bool use_fallback_keymap = false;
 
   if (tref->idname_fallback[0] || tref->runtime->keymap_fallback[0]) {
-    if (tref_rt->gizmo_group[0]) {
+    if (tref_rt->flag & TOOLREF_FLAG_FALLBACK_KEYMAP) {
+      use_fallback_keymap = true;
+    }
+    else if (tref_rt->gizmo_group[0]) {
       wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(tref_rt->gizmo_group, false);
       if (gzgt) {
         if (gzgt->flag & WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP) {
@@ -359,12 +361,6 @@ void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
   }
 }
 
-/**
- * Sync the internal active state of a tool back into the tool system,
- * this is needed for active brushes where the real active state is not stored in the tool system.
- *
- * \see #toolsystem_ref_link
- */
 void WM_toolsystem_ref_sync_from_context(Main *bmain, WorkSpace *workspace, bToolRef *tref)
 {
   bToolRef_Runtime *tref_rt = tref->runtime;
@@ -502,14 +498,6 @@ bool WM_toolsystem_key_from_context(ViewLayer *view_layer, ScrArea *area, bToolK
   return false;
 }
 
-/**
- * Use to update the active tool (shown in the top bar) in the least disruptive way.
- *
- * This is a little involved since there may be multiple valid active tools
- * depending on the mode and space type.
- *
- * Used when undoing since the active mode may have changed.
- */
 void WM_toolsystem_refresh_active(bContext *C)
 {
   Main *bmain = CTX_data_main(C);
@@ -569,25 +557,29 @@ void WM_toolsystem_refresh_screen_area(WorkSpace *workspace, ViewLayer *view_lay
   }
 }
 
+void WM_toolsystem_refresh_screen_window(wmWindow *win)
+{
+  WorkSpace *workspace = WM_window_get_active_workspace(win);
+  bool space_type_has_tools[SPACE_TYPE_LAST + 1] = {0};
+  LISTBASE_FOREACH (bToolRef *, tref, &workspace->tools) {
+    space_type_has_tools[tref->space_type] = true;
+  }
+  bScreen *screen = WM_window_get_active_screen(win);
+  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    area->runtime.tool = NULL;
+    area->runtime.is_tool_set = true;
+    if (space_type_has_tools[area->spacetype]) {
+      WM_toolsystem_refresh_screen_area(workspace, view_layer, area);
+    }
+  }
+}
+
 void WM_toolsystem_refresh_screen_all(Main *bmain)
 {
   /* Update all ScrArea's tools */
   for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
     LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
-      WorkSpace *workspace = WM_window_get_active_workspace(win);
-      bool space_type_has_tools[SPACE_TYPE_LAST + 1] = {0};
-      LISTBASE_FOREACH (bToolRef *, tref, &workspace->tools) {
-        space_type_has_tools[tref->space_type] = true;
-      }
-      bScreen *screen = WM_window_get_active_screen(win);
-      ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
-        area->runtime.tool = NULL;
-        area->runtime.is_tool_set = true;
-        if (space_type_has_tools[area->spacetype]) {
-          WM_toolsystem_refresh_screen_area(workspace, view_layer, area);
-        }
-      }
     }
   }
 }
@@ -793,16 +785,12 @@ void WM_toolsystem_update_from_context(bContext *C,
   }
 }
 
-/**
- * For paint modes to support non-brush tools.
- */
 bool WM_toolsystem_active_tool_is_brush(const bContext *C)
 {
   bToolRef_Runtime *tref_rt = WM_toolsystem_runtime_from_context((bContext *)C);
   return tref_rt && (tref_rt->data_block[0] != '\0');
 }
 
-/* Follow wmMsgNotifyFn spec */
 void WM_toolsystem_do_msg_notify_tag_refresh(bContext *C,
                                              wmMsgSubscribeKey *UNUSED(msg_key),
                                              wmMsgSubscribeValue *msg_val)
@@ -830,13 +818,34 @@ void WM_toolsystem_do_msg_notify_tag_refresh(bContext *C,
   WM_toolsystem_refresh_screen_area(workspace, view_layer, area);
 }
 
+static IDProperty *idprops_ensure_named_group(IDProperty *group, const char *idname)
+{
+  IDProperty *prop = IDP_GetPropertyFromGroup(group, idname);
+  if ((prop == NULL) || (prop->type != IDP_GROUP)) {
+    IDPropertyTemplate val = {0};
+    prop = IDP_New(IDP_GROUP, &val, __func__);
+    STRNCPY(prop->name, idname);
+    IDP_ReplaceInGroup_ex(group, prop, NULL);
+  }
+  return prop;
+}
+
+IDProperty *WM_toolsystem_ref_properties_get_idprops(bToolRef *tref)
+{
+  IDProperty *group = tref->properties;
+  if (group == NULL) {
+    return NULL;
+  }
+  return IDP_GetPropertyFromGroup(group, tref->idname);
+}
+
 IDProperty *WM_toolsystem_ref_properties_ensure_idprops(bToolRef *tref)
 {
   if (tref->properties == NULL) {
     IDPropertyTemplate val = {0};
-    tref->properties = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
+    tref->properties = IDP_New(IDP_GROUP, &val, __func__);
   }
-  return tref->properties;
+  return idprops_ensure_named_group(tref->properties, tref->idname);
 }
 
 bool WM_toolsystem_ref_properties_get_ex(bToolRef *tref,
@@ -844,7 +853,7 @@ bool WM_toolsystem_ref_properties_get_ex(bToolRef *tref,
                                          StructRNA *type,
                                          PointerRNA *r_ptr)
 {
-  IDProperty *group = tref->properties;
+  IDProperty *group = WM_toolsystem_ref_properties_get_idprops(tref);
   IDProperty *prop = group ? IDP_GetPropertyFromGroup(group, idname) : NULL;
   RNA_pointer_create(NULL, type, prop, r_ptr);
   return (prop != NULL);
@@ -856,17 +865,7 @@ void WM_toolsystem_ref_properties_ensure_ex(bToolRef *tref,
                                             PointerRNA *r_ptr)
 {
   IDProperty *group = WM_toolsystem_ref_properties_ensure_idprops(tref);
-  IDProperty *prop = IDP_GetPropertyFromGroup(group, idname);
-  if (prop == NULL) {
-    IDPropertyTemplate val = {0};
-    prop = IDP_New(IDP_GROUP, &val, "wmGenericProperties");
-    STRNCPY(prop->name, idname);
-    IDP_ReplaceInGroup_ex(group, prop, NULL);
-  }
-  else {
-    BLI_assert(prop->type == IDP_GROUP);
-  }
-
+  IDProperty *prop = idprops_ensure_named_group(group, idname);
   RNA_pointer_create(NULL, type, prop, r_ptr);
 }
 
@@ -883,8 +882,9 @@ void WM_toolsystem_ref_properties_init_for_keymap(bToolRef *tref,
     IDPropertyTemplate val = {0};
     dst_ptr->data = IDP_New(IDP_GROUP, &val, "wmOpItemProp");
   }
-  if (tref->properties != NULL) {
-    IDProperty *prop = IDP_GetPropertyFromGroup(tref->properties, ot->idname);
+  IDProperty *group = WM_toolsystem_ref_properties_get_idprops(tref);
+  if (group != NULL) {
+    IDProperty *prop = IDP_GetPropertyFromGroup(group, ot->idname);
     if (prop) {
       /* Important key-map items properties don't get overwritten by the tools.
        * - When a key-map item doesn't set a property, the tool-systems is used.

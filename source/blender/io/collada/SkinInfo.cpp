@@ -36,6 +36,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_action.h"
+#include "BKE_deform.h"
 #include "BKE_object.h"
 #include "BKE_object_deform.h"
 
@@ -52,9 +53,6 @@ template<class T> static const char *bc_get_joint_name(T *node)
   return id.empty() ? node->getOriginalId().c_str() : id.c_str();
 }
 
-/* This is used to store data passed in write_controller_data.
- * Arrays from COLLADAFW::SkinControllerData lose ownership, so do this class members
- * so that arrays don't get freed until we free them explicitly. */
 SkinInfo::SkinInfo() = default;
 
 SkinInfo::SkinInfo(const SkinInfo &skin)
@@ -76,7 +74,6 @@ SkinInfo::SkinInfo(UnitConverter *conv) : unit_converter(conv), ob_arm(nullptr),
 {
 }
 
-/* nobody owns the data after this, so it should be freed manually with releaseMemory */
 template<class T> void SkinInfo::transfer_array_data(T &src, T &dest)
 {
   dest.setData(src.getData(), src.getCount());
@@ -84,7 +81,6 @@ template<class T> void SkinInfo::transfer_array_data(T &src, T &dest)
   dest.yieldOwnerShip();
 }
 
-/* when src is const we cannot src.yieldOwnerShip, this is used by copy constructor */
 void SkinInfo::transfer_int_array_data_const(const COLLADAFW::IntValuesArray &src,
                                              COLLADAFW::IntValuesArray &dest)
 {
@@ -123,9 +119,6 @@ void SkinInfo::free()
   // weights.releaseMemory();
 }
 
-/* using inverse bind matrices to construct armature
- * it is safe to invert them to get the original matrices
- * because if they are inverse matrices, they can be inverted */
 void SkinInfo::add_joint(const COLLADABU::Math::Matrix4 &matrix)
 {
   JointData jd;
@@ -151,7 +144,6 @@ void SkinInfo::set_controller(const COLLADAFW::SkinController *co)
   }
 }
 
-/* called from write_controller */
 Object *SkinInfo::create_armature(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
   ob_arm = bc_add_object(bmain, scene, view_layer, OB_ARMATURE, nullptr);
@@ -192,11 +184,6 @@ const COLLADAFW::UniqueId &SkinInfo::get_controller_uid()
   return controller_uid;
 }
 
-/* check if this skin controller references a joint or any descendant of it
- *
- * some nodes may not be referenced by SkinController,
- * in this case to determine if the node belongs to this armature,
- * we need to search down the tree */
 bool SkinInfo::uses_joint_or_descendant(COLLADAFW::Node *node)
 {
   const COLLADAFW::UniqueId &uid = node->getUniqueId();
@@ -231,7 +218,7 @@ void SkinInfo::link_armature(bContext *C,
   amd->object = ob_arm;
 
 #if 1
-  /* XXX Why do we enforce objects to be children of Armatures if they weren't so before ?*/
+  /* XXX Why do we enforce objects to be children of Armatures if they weren't so before? */
   if (!BKE_object_is_child_recursive(ob_arm, ob)) {
     bc_set_parent(ob, ob_arm, C);
   }
@@ -289,7 +276,8 @@ void SkinInfo::link_armature(bContext *C,
 
       /* -1 means "weight towards the bind shape", we just don't assign it to any group */
       if (joint != -1) {
-        bDeformGroup *def = (bDeformGroup *)BLI_findlink(&ob->defbase, joint);
+        const ListBase *defbase = BKE_object_defgroup_list(ob);
+        bDeformGroup *def = (bDeformGroup *)BLI_findlink(defbase, joint);
 
         ED_vgroup_vert_add(ob, def, vertex, weights[joint_weight], WEIGHT_REPLACE);
       }

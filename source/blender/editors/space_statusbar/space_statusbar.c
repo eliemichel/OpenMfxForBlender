@@ -39,7 +39,7 @@
 #include "WM_message.h"
 #include "WM_types.h"
 
-/* ******************** default callbacks for statusbar space ********************  */
+/* ******************** default callbacks for statusbar space ******************** */
 
 static SpaceLink *statusbar_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
@@ -144,7 +144,6 @@ static void statusbar_header_region_message_subscribe(const wmRegionMessageSubsc
   WM_msg_subscribe_rna_anon_prop(mbus, ViewLayer, name, &msg_sub_value_region_tag_redraw);
 }
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_statusbar(void)
 {
   SpaceType *st = MEM_callocN(sizeof(*st), "spacetype statusbar");

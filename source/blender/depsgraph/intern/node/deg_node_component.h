@@ -23,11 +23,17 @@
 
 #pragma once
 
+#include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node.h"
+#include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
+
+#include "BKE_object.h"
+
+#include "DNA_object_types.h"
 
 struct ID;
 struct bPoseChannel;
@@ -61,6 +67,7 @@ struct ComponentNode : public Node {
   ComponentNode();
   ~ComponentNode();
 
+  /** Initialize 'component' node - from pointer data given. */
   void init(const ID *id, const char *subdata) override;
 
   virtual string identifier() const override;
@@ -165,6 +172,15 @@ struct ComponentNode : public Node {
     } \
   }
 
+#define DEG_COMPONENT_NODE_DECLARE_NO_COW(name) \
+  struct name##ComponentNode : public ComponentNode { \
+    DEG_COMPONENT_NODE_DECLARE; \
+    virtual bool depends_on_cow() \
+    { \
+      return false; \
+    } \
+  }
+
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Animation);
 DEG_COMPONENT_NODE_DECLARE_NO_COW_TAG_ON_UPDATE(BatchCache);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Cache);
@@ -172,7 +188,6 @@ DEG_COMPONENT_NODE_DECLARE_GENERIC(CopyOnWrite);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Geometry);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(ImageAnimation);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(LayerCollections);
-DEG_COMPONENT_NODE_DECLARE_GENERIC(Parameters);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Particles);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(ParticleSettings);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Pose);
@@ -188,13 +203,32 @@ DEG_COMPONENT_NODE_DECLARE_GENERIC(Synchronization);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Audio);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Armature);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(GenericDatablock);
+DEG_COMPONENT_NODE_DECLARE_NO_COW(Visibility);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Simulation);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(NTreeOutput);
 
 /* Bone Component */
 struct BoneComponentNode : public ComponentNode {
+  /** Initialize 'bone component' node - from pointer data given. */
   void init(const ID *id, const char *subdata);
 
   struct bPoseChannel *pchan; /* the bone that this component represents */
+
+  DEG_COMPONENT_NODE_DECLARE;
+};
+
+/* Eventually we would not tag parameters in all cases.
+ * Support for this each ID needs to be added on an individual basis. */
+struct ParametersComponentNode : public ComponentNode {
+  virtual bool need_tag_cow_before_update() override
+  {
+    if (ID_TYPE_SUPPORTS_PARAMS_WITHOUT_COW(owner->id_type)) {
+      /* Disabled as this is not true for newly added objects, needs investigation. */
+      // BLI_assert(deg_copy_on_write_is_expanded(owner->id_cow));
+      return false;
+    }
+    return true;
+  }
 
   DEG_COMPONENT_NODE_DECLARE;
 };

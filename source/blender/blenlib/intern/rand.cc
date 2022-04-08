@@ -28,6 +28,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_rand.hh"
@@ -58,9 +59,6 @@ RNG *BLI_rng_new(unsigned int seed)
   return rng;
 }
 
-/**
- * A version of #BLI_rng_new that hashes the seed.
- */
 RNG *BLI_rng_new_srandom(unsigned int seed)
 {
   RNG *rng = new RNG();
@@ -83,9 +81,6 @@ void BLI_rng_seed(RNG *rng, unsigned int seed)
   rng->rng.seed(seed);
 }
 
-/**
- * Use a hash table to create better seed.
- */
 void BLI_rng_srandom(RNG *rng, unsigned int seed)
 {
   rng->rng.seed_random(seed);
@@ -106,17 +101,11 @@ unsigned int BLI_rng_get_uint(RNG *rng)
   return rng->rng.get_uint32();
 }
 
-/**
- * \return Random value (0..1), but never 1.0.
- */
 double BLI_rng_get_double(RNG *rng)
 {
   return rng->rng.get_double();
 }
 
-/**
- * \return Random value (0..1), but never 1.0.
- */
 float BLI_rng_get_float(RNG *rng)
 {
   return rng->rng.get_float();
@@ -132,9 +121,6 @@ void BLI_rng_get_float_unit_v3(RNG *rng, float v[3])
   copy_v3_v3(v, rng->rng.get_unit_float3());
 }
 
-/**
- * Generate a random point inside given tri.
- */
 void BLI_rng_get_tri_sample_float_v2(
     RNG *rng, const float v1[2], const float v2[2], const float v3[2], float r_pt[2])
 {
@@ -149,18 +135,16 @@ void BLI_rng_get_tri_sample_float_v3(
 
 void BLI_rng_shuffle_array(RNG *rng, void *data, unsigned int elem_size_i, unsigned int elem_tot)
 {
-  const uint elem_size = elem_size_i;
-  unsigned int i = elem_tot;
-  void *temp;
-
   if (elem_tot <= 1) {
     return;
   }
 
-  temp = malloc(elem_size);
+  const uint elem_size = elem_size_i;
+  unsigned int i = elem_tot;
+  void *temp = malloc(elem_size);
 
   while (i--) {
-    unsigned int j = BLI_rng_get_uint(rng) % elem_tot;
+    const unsigned int j = BLI_rng_get_uint(rng) % elem_tot;
     if (i != j) {
       void *iElem = (unsigned char *)data + i * elem_size_i;
       void *jElem = (unsigned char *)data + j * elem_size_i;
@@ -173,11 +157,24 @@ void BLI_rng_shuffle_array(RNG *rng, void *data, unsigned int elem_size_i, unsig
   free(temp);
 }
 
-/**
- * Simulate getting \a n random values.
- *
- * \note Useful when threaded code needs consistent values, independent of task division.
- */
+void BLI_rng_shuffle_bitmap(struct RNG *rng, BLI_bitmap *bitmap, unsigned int bits_tot)
+{
+  if (bits_tot <= 1) {
+    return;
+  }
+
+  unsigned int i = bits_tot;
+  while (i--) {
+    const unsigned int j = BLI_rng_get_uint(rng) % bits_tot;
+    if (i != j) {
+      const bool i_bit = BLI_BITMAP_TEST(bitmap, i);
+      const bool j_bit = BLI_BITMAP_TEST(bitmap, j);
+      BLI_BITMAP_SET(bitmap, i, j_bit);
+      BLI_BITMAP_SET(bitmap, j, i_bit);
+    }
+  }
+}
+
 void BLI_rng_skip(RNG *rng, int n)
 {
   rng->rng.skip((uint)n);
@@ -185,7 +182,6 @@ void BLI_rng_skip(RNG *rng, int n)
 
 /***/
 
-/* fill an array with random numbers */
 void BLI_array_frand(float *ar, int count, unsigned int seed)
 {
   RNG rng;
@@ -214,6 +210,14 @@ void BLI_array_randomize(void *data,
 
   BLI_rng_seed(&rng, seed);
   BLI_rng_shuffle_array(&rng, data, elem_size, elem_tot);
+}
+
+void BLI_bitmap_randomize(BLI_bitmap *bitmap, unsigned int bits_tot, unsigned int seed)
+{
+  RNG rng;
+
+  BLI_rng_seed(&rng, seed);
+  BLI_rng_shuffle_bitmap(&rng, bitmap, bits_tot);
 }
 
 /* ********* for threaded random ************** */
@@ -247,7 +251,7 @@ struct RNG_THREAD_ARRAY {
   RNG rng_tab[BLENDER_MAX_THREADS];
 };
 
-RNG_THREAD_ARRAY *BLI_rng_threaded_new(void)
+RNG_THREAD_ARRAY *BLI_rng_threaded_new()
 {
   unsigned int i;
   RNG_THREAD_ARRAY *rngarr = (RNG_THREAD_ARRAY *)MEM_mallocN(sizeof(RNG_THREAD_ARRAY),
@@ -377,9 +381,6 @@ void BLI_hammersley_2d_sequence(unsigned int n, double *r)
 
 namespace blender {
 
-/**
- * Set a randomized hash of the value as seed.
- */
 void RandomNumberGenerator::seed_random(uint32_t seed)
 {
   this->seed(seed + hash[seed & 255]);
@@ -409,9 +410,6 @@ float3 RandomNumberGenerator::get_unit_float3()
   return {0.0f, 0.0f, 1.0f};
 }
 
-/**
- * Generate a random point inside the given triangle.
- */
 float2 RandomNumberGenerator::get_triangle_sample(float2 v1, float2 v2, float2 v3)
 {
   float u = this->get_float();

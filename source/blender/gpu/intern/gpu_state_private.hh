@@ -62,7 +62,7 @@ union GPUState {
     uint32_t polygon_smooth : 1;
     uint32_t line_smooth : 1;
   };
-  /* Here to allow fast bitwise ops. */
+  /* Here to allow fast bit-wise ops. */
   uint64_t data;
 };
 
@@ -96,7 +96,7 @@ inline GPUState operator~(const GPUState &a)
 union GPUStateMutable {
   struct {
     /* Viewport State */
-    /** TODO remove */
+    /** TODO: remove. */
     float depth_range[2];
     /** Positive if using program point size. */
     /* TODO(fclem): should be passed as uniform to all shaders. */
@@ -159,18 +159,18 @@ class StateManager {
   StateManager();
   virtual ~StateManager(){};
 
-  virtual void apply_state(void) = 0;
-  virtual void force_state(void) = 0;
+  virtual void apply_state() = 0;
+  virtual void force_state() = 0;
 
   virtual void issue_barrier(eGPUBarrier barrier_bits) = 0;
 
   virtual void texture_bind(Texture *tex, eGPUSamplerState sampler, int unit) = 0;
   virtual void texture_unbind(Texture *tex) = 0;
-  virtual void texture_unbind_all(void) = 0;
+  virtual void texture_unbind_all() = 0;
 
   virtual void image_bind(Texture *tex, int unit) = 0;
   virtual void image_unbind(Texture *tex) = 0;
-  virtual void image_unbind_all(void) = 0;
+  virtual void image_unbind_all() = 0;
 
   virtual void texture_unpack_row_length_set(uint len) = 0;
 };

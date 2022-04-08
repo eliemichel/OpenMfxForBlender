@@ -34,18 +34,22 @@ class GPUPlatformGlobal {
   eGPUOSType os;
   eGPUDriverType driver;
   eGPUSupportLevel support_level;
+  char *vendor = nullptr;
+  char *renderer = nullptr;
+  char *version = nullptr;
   char *support_key = nullptr;
   char *gpu_name = nullptr;
 
  public:
-  void create_key(eGPUSupportLevel support_level,
-                  const char *vendor,
-                  const char *renderer,
-                  const char *version);
+  void init(eGPUDeviceType gpu_device,
+            eGPUOSType os_type,
+            eGPUDriverType driver_type,
+            eGPUSupportLevel gpu_support_level,
+            const char *vendor_str,
+            const char *renderer_str,
+            const char *version_str);
 
-  void create_gpu_name(const char *vendor, const char *renderer, const char *version);
-
-  void clear(void);
+  void clear();
 };
 
 extern GPUPlatformGlobal GPG;

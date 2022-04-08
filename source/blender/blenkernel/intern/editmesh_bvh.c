@@ -117,7 +117,7 @@ BMBVHTree *BKE_bmbvh_new_ex(BMesh *bm,
 
   for (int i = 0; i < looptris_tot; i++) {
     if (test_fn) {
-      /* note, the arrays wont align now! take care */
+      /* NOTE: the arrays won't align now! Take care. */
       f_test = looptris[i][0]->f;
       if (f_test != f_test_prev) {
         test_fn_ret = test_fn(f_test, user_data);
@@ -221,7 +221,7 @@ static void bmbvh_tri_from_face(const float *cos[3],
   }
 }
 
-/* taken from bvhutils.c */
+/* Taken from `bvhutils.c`. */
 
 /* -------------------------------------------------------------------- */
 /* BKE_bmbvh_ray_cast */
@@ -565,9 +565,6 @@ static bool bmbvh_overlap_cb(void *userdata, int index_a, int index_b, int UNUSE
           ((verts_shared == 0) || (len_squared_v3v3(ix_pair[0], ix_pair[1]) > data->epsilon)));
 }
 
-/**
- * Overlap indices reference the looptri's
- */
 BVHTreeOverlap *BKE_bmbvh_overlap(const BMBVHTree *bmtree_a,
                                   const BMBVHTree *bmtree_b,
                                   unsigned int *r_overlap_tot)
@@ -591,9 +588,6 @@ static bool bmbvh_overlap_self_cb(void *userdata, int index_a, int index_b, int 
   return false;
 }
 
-/**
- * Overlap indices reference the looptri's
- */
 BVHTreeOverlap *BKE_bmbvh_overlap_self(const BMBVHTree *bmtree, unsigned int *r_overlap_tot)
 {
   struct BMBVHTree_OverlapData data;

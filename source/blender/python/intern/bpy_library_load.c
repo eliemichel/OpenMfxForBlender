@@ -34,6 +34,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_blendfile_link_append.h"
 #include "BKE_context.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -61,11 +62,15 @@
 #endif
 
 typedef struct {
-  PyObject_HEAD /* required python macro */
-      /* collection iterator specific parts */
-      char relpath[FILE_MAX];
+  PyObject_HEAD /* Required Python macro. */
+  /* Collection iterator specific parts. */
+  char relpath[FILE_MAX];
   char abspath[FILE_MAX]; /* absolute path */
   BlendHandle *blo_handle;
+  /* Referenced by `blo_handle`, so stored here to keep alive for long enough. */
+  ReportList reports;
+  BlendFileReadReport bf_reports;
+
   int flag;
   PyObject *dict;
   /* Borrowed reference to the `bmain`, taken from the RNA instance of #RNA_BlendDataLibraries.
@@ -159,12 +164,12 @@ static PyTypeObject bpy_lib_Type = {
     NULL,                        /* allocfunc tp_alloc; */
     NULL,                        /* newfunc tp_new; */
     /*  Low-level free-memory routine */
-    NULL, /* freefunc tp_free;  */
+    NULL, /* freefunc tp_free; */
     /* For PyObject_IS_GC */
-    NULL, /* inquiry tp_is_gc;  */
+    NULL, /* inquiry tp_is_gc; */
     NULL, /* PyObject *tp_bases; */
     /* method resolution order */
-    NULL, /* PyObject *tp_mro;  */
+    NULL, /* PyObject *tp_mro; */
     NULL, /* PyObject *tp_cache; */
     NULL, /* PyObject *tp_subclasses; */
     NULL, /* PyObject *tp_weaklist; */
@@ -195,7 +200,7 @@ static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *k
   bool is_rel = false, is_link = false, use_assets_only = false;
 
   static const char *_keywords[] = {"filepath", "link", "relative", "assets_only", NULL};
-  static _PyArg_Parser _parser = {"s|O&O&O&:load", _keywords, 0};
+  static _PyArg_Parser _parser = {"s|$O&O&O&:load", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args,
                                         kw,
                                         &_parser,
@@ -254,14 +259,17 @@ static PyObject *bpy_lib_enter(BPy_Library *self)
   PyObject *ret;
   BPy_Library *self_from;
   PyObject *from_dict = _PyDict_NewPresized(INDEX_ID_MAX);
-  ReportList reports;
+  ReportList *reports = &self->reports;
+  BlendFileReadReport *bf_reports = &self->bf_reports;
 
-  BKE_reports_init(&reports, RPT_STORE);
+  BKE_reports_init(reports, RPT_STORE);
+  memset(bf_reports, 0, sizeof(*bf_reports));
+  bf_reports->reports = reports;
 
-  self->blo_handle = BLO_blendhandle_from_file(self->abspath, &reports);
+  self->blo_handle = BLO_blendhandle_from_file(self->abspath, bf_reports);
 
   if (self->blo_handle == NULL) {
-    if (BPy_reports_to_error(&reports, PyExc_IOError, true) != -1) {
+    if (BPy_reports_to_error(reports, PyExc_IOError, true) != -1) {
       PyErr_Format(PyExc_IOError, "load: %s failed to open blend file", self->abspath);
     }
     return NULL;
@@ -297,7 +305,7 @@ static PyObject *bpy_lib_enter(BPy_Library *self)
   PyTuple_SET_ITEMS(ret, (PyObject *)self_from, (PyObject *)self);
   Py_INCREF(self);
 
-  BKE_reports_clear(&reports);
+  BKE_reports_clear(reports);
 
   return ret;
 }
@@ -339,11 +347,63 @@ static void bpy_lib_exit_warn_type(BPy_Library *self, PyObject *item)
   PyErr_Restore(exc, val, tb);
 }
 
+struct LibExitLappContextItemsIterData {
+  short idcode;
+  BPy_Library *py_library;
+  PyObject *py_list;
+  Py_ssize_t py_list_size;
+};
+
+static bool bpy_lib_exit_lapp_context_items_cb(BlendfileLinkAppendContext *lapp_context,
+                                               BlendfileLinkAppendContextItem *item,
+                                               void *userdata)
+{
+  struct LibExitLappContextItemsIterData *data = userdata;
+
+  /* Since `bpy_lib_exit` loops over all ID types, all items in `lapp_context` end up being looped
+   * over for each ID type, so when it does not match the item can simply be skipped: it either has
+   * already been processed, or will be processed in a later loop. */
+  if (BKE_blendfile_link_append_context_item_idcode_get(lapp_context, item) != data->idcode) {
+    return true;
+  }
+
+  const int py_list_index = POINTER_AS_INT(
+      BKE_blendfile_link_append_context_item_userdata_get(lapp_context, item));
+  ID *new_id = BKE_blendfile_link_append_context_item_newid_get(lapp_context, item);
+
+  BLI_assert(py_list_index < data->py_list_size);
+
+  /* Fully invalid items (which got set to `Py_None` already in first loop of `bpy_lib_exit`)
+   * should never be accessed here, since their index should never be set to any item in
+   * `lapp_context`. */
+  PyObject *item_src = PyList_GET_ITEM(data->py_list, py_list_index);
+  BLI_assert(item_src != Py_None);
+
+  PyObject *py_item;
+  if (new_id != NULL) {
+    PointerRNA newid_ptr;
+    RNA_id_pointer_create(new_id, &newid_ptr);
+    py_item = pyrna_struct_CreatePyObject(&newid_ptr);
+  }
+  else {
+    const char *item_idname = PyUnicode_AsUTF8(item_src);
+    const char *idcode_name_plural = BKE_idtype_idcode_to_name_plural(data->idcode);
+
+    bpy_lib_exit_warn_idname(data->py_library, idcode_name_plural, item_idname);
+
+    py_item = Py_INCREF_RET(Py_None);
+  }
+
+  PyList_SET_ITEM(data->py_list, py_list_index, py_item);
+
+  Py_DECREF(item_src);
+
+  return true;
+}
+
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 {
   Main *bmain = self->bmain;
-  Main *mainl = NULL;
-  const int err = 0;
   const bool do_append = ((self->flag & FILE_LINK) == 0);
 
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
@@ -353,134 +413,100 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
   struct LibraryLink_Params liblink_params;
   BLO_library_link_params_init(&liblink_params, bmain, self->flag, id_tag_extra);
 
-  mainl = BLO_library_link_begin(&(self->blo_handle), self->relpath, &liblink_params);
+  BlendfileLinkAppendContext *lapp_context = BKE_blendfile_link_append_context_new(
+      &liblink_params);
+  BKE_blendfile_link_append_context_library_add(lapp_context, self->abspath, self->blo_handle);
 
-  {
-    int idcode_step = 0, idcode;
-    while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
-      if (BKE_idtype_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
-        const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
-        PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
-        // printf("lib: %s\n", name_plural);
-        if (ls && PyList_Check(ls)) {
-          /* loop */
-          const Py_ssize_t size = PyList_GET_SIZE(ls);
-          Py_ssize_t i;
+  int idcode_step = 0;
+  short idcode;
+  while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
+    if (!BKE_idtype_idcode_is_linkable(idcode) || (idcode == ID_WS && !do_append)) {
+      continue;
+    }
 
-          for (i = 0; i < size; i++) {
-            PyObject *item_src = PyList_GET_ITEM(ls, i);
-            PyObject *item_dst; /* must be set below */
-            const char *item_idname = PyUnicode_AsUTF8(item_src);
+    const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
+    PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
+    // printf("lib: %s\n", name_plural);
+    if (ls == NULL || !PyList_Check(ls)) {
+      continue;
+    }
 
-            // printf("  %s\n", item_idname);
+    const Py_ssize_t size = PyList_GET_SIZE(ls);
+    if (size == 0) {
+      continue;
+    }
 
-            if (item_idname) {
-              ID *id = BLO_library_link_named_part(
-                  mainl, &(self->blo_handle), idcode, item_idname, &liblink_params);
-              if (id) {
+    /* loop */
+    for (Py_ssize_t i = 0; i < size; i++) {
+      PyObject *item_src = PyList_GET_ITEM(ls, i);
+      const char *item_idname = PyUnicode_AsUTF8(item_src);
 
-                if (self->bmain_is_temp) {
-                  /* If this fails, #LibraryLink_Params.id_tag_extra is not being applied. */
-                  BLI_assert(id->tag & LIB_TAG_TEMP_MAIN);
-                }
+      // printf("  %s\n", item_idname);
+
+      /* NOTE: index of item in py list is stored in userdata pointer, so that it can be found
+       * later on to replace the ID name by the actual ID pointer. */
+      if (item_idname != NULL) {
+        BlendfileLinkAppendContextItem *item = BKE_blendfile_link_append_context_item_add(
+            lapp_context, item_idname, idcode, POINTER_FROM_INT(i));
+        BKE_blendfile_link_append_context_item_library_index_enable(lapp_context, item, 0);
+      }
+      else {
+        /* XXX, could complain about this */
+        bpy_lib_exit_warn_type(self, item_src);
+        PyErr_Clear();
 
 #ifdef USE_RNA_DATABLOCKS
-                /* swap name for pointer to the id */
-                item_dst = PyCapsule_New((void *)id, NULL, NULL);
-#else
-                /* leave as is */
-                continue;
+        /* We can replace the item immediately with `None`. */
+        PyObject *py_item = Py_INCREF_RET(Py_None);
+        PyList_SET_ITEM(ls, i, py_item);
+        Py_DECREF(item_src);
 #endif
-              }
-              else {
-                bpy_lib_exit_warn_idname(self, name_plural, item_idname);
-                /* just warn for now */
-                /* err = -1; */
-                item_dst = Py_INCREF_RET(Py_None);
-              }
-
-              /* ID or None */
-            }
-            else {
-              /* XXX, could complain about this */
-              bpy_lib_exit_warn_type(self, item_src);
-              PyErr_Clear();
-              item_dst = Py_INCREF_RET(Py_None);
-            }
-
-            /* item_dst must be new or already incref'd */
-            Py_DECREF(item_src);
-            PyList_SET_ITEM(ls, i, item_dst);
-          }
-        }
       }
     }
   }
 
-  if (err == -1) {
-    /* exception raised above, XXX, this leaks some memory */
-    BLO_blendhandle_close(self->blo_handle);
-    self->blo_handle = NULL;
-    BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
-    return NULL;
+  BKE_blendfile_link(lapp_context, NULL);
+  if (do_append) {
+    BKE_blendfile_append(lapp_context, NULL);
   }
 
-  Library *lib = mainl->curlib; /* newly added lib, assign before append end */
-  BLO_library_link_end(mainl, &(self->blo_handle), &liblink_params);
+  /* If enabled, replace named items in given lists by the final matching new ID pointer. */
+#ifdef USE_RNA_DATABLOCKS
+  idcode_step = 0;
+  while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
+    if (!BKE_idtype_idcode_is_linkable(idcode) || (idcode == ID_WS && !do_append)) {
+      continue;
+    }
+    const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
+    PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
+    // printf("lib: %s\n", name_plural);
+    if (ls == NULL || !PyList_Check(ls)) {
+      continue;
+    }
+
+    const Py_ssize_t size = PyList_GET_SIZE(ls);
+    if (size == 0) {
+      continue;
+    }
+
+    /* Loop over linked items in `lapp_context` to find matching python one in the list, and
+     * replace them with proper ID pointer. */
+    struct LibExitLappContextItemsIterData iter_data = {
+        .idcode = idcode, .py_library = self, .py_list = ls, .py_list_size = size};
+    BKE_blendfile_link_append_context_item_foreach(
+        lapp_context,
+        bpy_lib_exit_lapp_context_items_cb,
+        BKE_BLENDFILE_LINK_APPEND_FOREACH_ITEM_FLAG_DO_DIRECT,
+        &iter_data);
+  }
+#endif  // USE_RNA_DATABLOCKS
+
   BLO_blendhandle_close(self->blo_handle);
   self->blo_handle = NULL;
 
-  GHash *old_to_new_ids = BLI_ghash_ptr_new(__func__);
-
-  /* copied from wm_operator.c */
-  {
-    /* mark all library linked objects to be updated */
-    BKE_main_lib_objects_recalc_all(bmain);
-
-    /* append, rather than linking */
-    if (do_append) {
-      BKE_library_make_local(bmain, lib, old_to_new_ids, true, false);
-    }
-  }
-
+  BKE_blendfile_link_append_context_free(lapp_context);
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
 
-  /* finally swap the capsules for real bpy objects
-   * important since BLO_library_append_end initializes NodeTree types used by srna->refine */
-#ifdef USE_RNA_DATABLOCKS
-  {
-    int idcode_step = 0, idcode;
-    while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
-      if (BKE_idtype_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
-        const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
-        PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
-        if (ls && PyList_Check(ls)) {
-          const Py_ssize_t size = PyList_GET_SIZE(ls);
-          Py_ssize_t i;
-          PyObject *item;
-
-          for (i = 0; i < size; i++) {
-            item = PyList_GET_ITEM(ls, i);
-            if (PyCapsule_CheckExact(item)) {
-              PointerRNA id_ptr;
-              ID *id;
-
-              id = PyCapsule_GetPointer(item, NULL);
-              id = BLI_ghash_lookup_default(old_to_new_ids, id, id);
-              Py_DECREF(item);
-
-              RNA_id_pointer_create(id, &id_ptr);
-              item = pyrna_struct_CreatePyObject(&id_ptr);
-              PyList_SET_ITEM(ls, i, item);
-            }
-          }
-        }
-      }
-    }
-  }
-#endif /* USE_RNA_DATABLOCKS */
-
-  BLI_ghash_free(old_to_new_ids, NULL, NULL);
   Py_RETURN_NONE;
 }
 

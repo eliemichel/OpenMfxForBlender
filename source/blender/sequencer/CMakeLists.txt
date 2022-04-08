@@ -33,6 +33,7 @@ set(INC
   ../render
   ../windowmanager
   ../../../intern/atomic
+  ../../../intern/clog
   ../../../intern/guardedalloc
 
   # dna_type_offsets.h
@@ -45,6 +46,7 @@ set(INC_SYS
 
 set(SRC
   SEQ_add.h
+  SEQ_animation.h
   SEQ_clipboard.h
   SEQ_edit.h
   SEQ_effects.h
@@ -61,7 +63,10 @@ set(SRC
   SEQ_transform.h
   SEQ_utils.h
 
+  intern/animation.c
   intern/clipboard.c
+  intern/disk_cache.c
+  intern/disk_cache.h
   intern/effects.c
   intern/effects.h
   intern/image_cache.c
@@ -77,6 +82,7 @@ set(SRC
   intern/proxy_job.c
   intern/render.c
   intern/render.h
+  intern/sequence_lookup.c
   intern/sequencer.c
   intern/sequencer.h
   intern/sound.c

@@ -92,11 +92,6 @@ static void camera_copy_data(Main *UNUSED(bmain),
   BLI_duplicatelist(&cam_dst->bg_images, &cam_src->bg_images);
 }
 
-static void camera_make_local(Main *bmain, ID *id, const int flags)
-{
-  BKE_lib_id_make_local_generic(bmain, id, flags);
-}
-
 /** Free (or release) any data used by this camera (does not free the camera itself). */
 static void camera_free_data(ID *id)
 {
@@ -108,13 +103,13 @@ static void camera_foreach_id(ID *id, LibraryForeachIDData *data)
 {
   Camera *camera = (Camera *)id;
 
-  BKE_LIB_FOREACHID_PROCESS(data, camera->dof.focus_object, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, camera->dof.focus_object, IDWALK_CB_NOP);
   LISTBASE_FOREACH (CameraBGImage *, bgpic, &camera->bg_images) {
     if (bgpic->source == CAM_BGIMG_SOURCE_IMAGE) {
-      BKE_LIB_FOREACHID_PROCESS(data, bgpic->ima, IDWALK_CB_USER);
+      BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, bgpic->ima, IDWALK_CB_USER);
     }
     else if (bgpic->source == CAM_BGIMG_SOURCE_MOVIE) {
-      BKE_LIB_FOREACHID_PROCESS(data, bgpic->clip, IDWALK_CB_USER);
+      BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, bgpic->clip, IDWALK_CB_USER);
     }
   }
 }
@@ -122,18 +117,17 @@ static void camera_foreach_id(ID *id, LibraryForeachIDData *data)
 static void camera_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Camera *cam = (Camera *)id;
-  if (cam->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* write LibData */
-    BLO_write_id_struct(writer, Camera, id_address, &cam->id);
-    BKE_id_blend_write(writer, &cam->id);
 
-    if (cam->adt) {
-      BKE_animdata_blend_write(writer, cam->adt);
-    }
+  /* write LibData */
+  BLO_write_id_struct(writer, Camera, id_address, &cam->id);
+  BKE_id_blend_write(writer, &cam->id);
 
-    LISTBASE_FOREACH (CameraBGImage *, bgpic, &cam->bg_images) {
-      BLO_write_struct(writer, CameraBGImage, bgpic);
-    }
+  if (cam->adt) {
+    BKE_animdata_blend_write(writer, cam->adt);
+  }
+
+  LISTBASE_FOREACH (CameraBGImage *, bgpic, &cam->bg_images) {
+    BLO_write_struct(writer, CameraBGImage, bgpic);
   }
 }
 
@@ -146,7 +140,6 @@ static void camera_blend_read_data(BlendDataReader *reader, ID *id)
   BLO_read_list(reader, &ca->bg_images);
 
   LISTBASE_FOREACH (CameraBGImage *, bgpic, &ca->bg_images) {
-    bgpic->iuser.ok = 1;
     bgpic->iuser.scene = NULL;
   }
 }
@@ -188,14 +181,16 @@ IDTypeInfo IDType_ID_CA = {
     .name = "Camera",
     .name_plural = "cameras",
     .translation_context = BLT_I18NCONTEXT_ID_CAMERA,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
+    .asset_type_info = NULL,
 
     .init_data = camera_init_data,
     .copy_data = camera_copy_data,
     .free_data = camera_free_data,
-    .make_local = camera_make_local,
+    .make_local = NULL,
     .foreach_id = camera_foreach_id,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = camera_blend_write,
@@ -223,8 +218,7 @@ void *BKE_camera_add(Main *bmain, const char *name)
   return cam;
 }
 
-/* get the camera's dof value, takes the dof object into account */
-float BKE_camera_object_dof_distance(Object *ob)
+float BKE_camera_object_dof_distance(const Object *ob)
 {
   Camera *cam = (Camera *)ob->data;
   if (ob->type != OB_CAMERA) {
@@ -432,7 +426,6 @@ void BKE_camera_params_compute_viewplane(
   params->viewplane = viewplane;
 }
 
-/* viewplane is assumed to be already computed */
 void BKE_camera_params_compute_matrix(CameraParams *params)
 {
   rctf viewplane = params->viewplane;
@@ -573,9 +566,8 @@ void BKE_camera_view_frame(const Scene *scene, const Camera *camera, float r_vec
 #define CAMERA_VIEWFRAME_NUM_PLANES 4
 
 typedef struct CameraViewFrameData {
-  float plane_tx[CAMERA_VIEWFRAME_NUM_PLANES][4]; /* 4 planes */
-  float normal_tx[CAMERA_VIEWFRAME_NUM_PLANES][3];
-  float dist_vals_sq[CAMERA_VIEWFRAME_NUM_PLANES]; /* distance squared (signed) */
+  float plane_tx[CAMERA_VIEWFRAME_NUM_PLANES][4]; /* 4 planes normalized */
+  float dist_vals[CAMERA_VIEWFRAME_NUM_PLANES];   /* distance (signed) */
   unsigned int tot;
 
   /* Ortho camera only. */
@@ -592,8 +584,8 @@ static void camera_to_frame_view_cb(const float co[3], void *user_data)
   CameraViewFrameData *data = (CameraViewFrameData *)user_data;
 
   for (uint i = 0; i < CAMERA_VIEWFRAME_NUM_PLANES; i++) {
-    const float nd = dist_signed_squared_to_plane_v3(co, data->plane_tx[i]);
-    CLAMP_MAX(data->dist_vals_sq[i], nd);
+    const float nd = plane_point_side_v3(data->plane_tx[i], co);
+    CLAMP_MAX(data->dist_vals[i], nd);
   }
 
   if (data->is_ortho) {
@@ -615,7 +607,7 @@ static void camera_frame_fit_data_init(const Scene *scene,
   BKE_camera_params_init(params);
   BKE_camera_params_from_object(params, ob);
 
-  /* compute matrix, viewplane, .. */
+  /* Compute matrix, view-plane, etc. */
   if (scene) {
     BKE_camera_params_compute_viewplane(
         params, scene->r.xsch, scene->r.ysch, scene->r.xasp, scene->r.yasp);
@@ -648,10 +640,11 @@ static void camera_frame_fit_data_init(const Scene *scene,
   /* Rotate planes and get normals from them */
   for (uint i = 0; i < CAMERA_VIEWFRAME_NUM_PLANES; i++) {
     mul_m4_v4(camera_rotmat_transposed_inversed, data->plane_tx[i]);
-    normalize_v3_v3(data->normal_tx[i], data->plane_tx[i]);
+    /* Normalize. */
+    data->plane_tx[i][3] /= normalize_v3(data->plane_tx[i]);
   }
 
-  copy_v4_fl(data->dist_vals_sq, FLT_MAX);
+  copy_v4_fl(data->dist_vals, FLT_MAX);
   data->tot = 0;
   data->is_ortho = params->is_ortho;
   if (params->is_ortho) {
@@ -676,13 +669,8 @@ static bool camera_frame_fit_calc_from_data(CameraParams *params,
     const float *cam_axis_x = data->camera_rotmat[0];
     const float *cam_axis_y = data->camera_rotmat[1];
     const float *cam_axis_z = data->camera_rotmat[2];
-    float dists[CAMERA_VIEWFRAME_NUM_PLANES];
+    const float *dists = data->dist_vals;
     float scale_diff;
-
-    /* apply the dist-from-plane's to the transformed plane points */
-    for (int i = 0; i < CAMERA_VIEWFRAME_NUM_PLANES; i++) {
-      dists[i] = sqrtf_signed(data->dist_vals_sq[i]);
-    }
 
     if ((dists[0] + dists[2]) > (dists[1] + dists[3])) {
       scale_diff = (dists[1] + dists[3]) *
@@ -710,8 +698,8 @@ static bool camera_frame_fit_calc_from_data(CameraParams *params,
   /* apply the dist-from-plane's to the transformed plane points */
   for (int i = 0; i < CAMERA_VIEWFRAME_NUM_PLANES; i++) {
     float co[3];
-    mul_v3_v3fl(co, data->normal_tx[i], sqrtf_signed(data->dist_vals_sq[i]));
-    plane_from_point_normal_v3(plane_tx[i], co, data->normal_tx[i]);
+    mul_v3_v3fl(co, data->plane_tx[i], data->dist_vals[i]);
+    plane_from_point_normal_v3(plane_tx[i], co, data->plane_tx[i]);
   }
 
   if ((!isect_plane_plane_v3(plane_tx[0], plane_tx[2], plane_isect_1, plane_isect_1_no)) ||
@@ -763,8 +751,6 @@ static bool camera_frame_fit_calc_from_data(CameraParams *params,
   return false;
 }
 
-/* don't move the camera, just yield the fit location */
-/* r_scale only valid/useful for ortho cameras */
 bool BKE_camera_view_frame_fit_to_scene(
     Depsgraph *depsgraph, const Scene *scene, Object *camera_ob, float r_co[3], float *r_scale)
 {
@@ -915,7 +901,6 @@ static void camera_stereo3d_model_matrix(const Object *camera,
   }
 }
 
-/* the view matrix is used by the viewport drawing, it is basically the inverted model matrix */
 void BKE_camera_multiview_view_matrix(const RenderData *rd,
                                       const Object *camera,
                                       const bool is_left,
@@ -975,7 +960,7 @@ void BKE_camera_multiview_window_matrix(const RenderData *rd,
   BKE_camera_params_from_object(&params, camera);
   BKE_camera_multiview_params(rd, &params, camera, viewname);
 
-  /* Compute matrix, viewplane, .. */
+  /* Compute matrix, view-plane, etc. */
   BKE_camera_params_compute_viewplane(&params, rd->xsch, rd->ysch, rd->xasp, rd->yasp);
   BKE_camera_params_compute_matrix(&params);
 
@@ -1038,7 +1023,6 @@ static Object *camera_multiview_advanced(const Scene *scene, Object *camera, con
   return camera;
 }
 
-/* returns the camera to be used for render */
 Object *BKE_camera_multiview_render(const Scene *scene, Object *camera, const char *viewname)
 {
   const bool is_multiview = (camera != NULL) && (scene->r.scemode & R_MULTIVIEW) != 0;
@@ -1134,7 +1118,6 @@ CameraBGImage *BKE_camera_background_image_new(Camera *cam)
 
   bgpic->scale = 1.0f;
   bgpic->alpha = 0.5f;
-  bgpic->iuser.ok = 1;
   bgpic->iuser.flag |= IMA_ANIM_ALWAYS;
   bgpic->flag |= CAM_BGIMG_FLAG_EXPANDED;
 

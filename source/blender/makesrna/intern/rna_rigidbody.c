@@ -215,9 +215,10 @@ static void rna_RigidBodyWorld_constraints_collection_update(Main *bmain,
 
 static void rna_RigidBodyOb_reset(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
 {
-  RigidBodyWorld *rbw = scene->rigidbody_world;
-
-  BKE_rigidbody_cache_reset(rbw);
+  if (scene != NULL) {
+    RigidBodyWorld *rbw = scene->rigidbody_world;
+    BKE_rigidbody_cache_reset(rbw);
+  }
 }
 
 static void rna_RigidBodyOb_shape_update(Main *bmain, Scene *scene, PointerRNA *ptr)
@@ -232,10 +233,12 @@ static void rna_RigidBodyOb_shape_update(Main *bmain, Scene *scene, PointerRNA *
 
 static void rna_RigidBodyOb_shape_reset(Main *UNUSED(bmain), Scene *scene, PointerRNA *ptr)
 {
-  RigidBodyWorld *rbw = scene->rigidbody_world;
-  RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
+  if (scene != NULL) {
+    RigidBodyWorld *rbw = scene->rigidbody_world;
+    BKE_rigidbody_cache_reset(rbw);
+  }
 
-  BKE_rigidbody_cache_reset(rbw);
+  RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
   if (rbo->shared->physics_shape) {
     rbo->flag |= RBO_FLAG_NEEDS_RESHAPE;
   }
@@ -954,6 +957,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
   prop = RNA_def_property(srna, "effector_weights", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "EffectorWeights");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Effector Weights", "");
 
   /* Sweep test */

@@ -65,6 +65,7 @@
 #include "DNA_sound_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_texture_types.h"
+#include "DNA_vfont_types.h"
 #include "DNA_volume_types.h"
 #include "DNA_world_types.h"
 
@@ -118,6 +119,7 @@
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
+#include "intern/depsgraph.h"
 #include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_type.h"
 
@@ -220,7 +222,7 @@ OperationCode bone_target_opcode(ID *target,
                                  const char *component_subdata,
                                  RootPChanMap *root_map)
 {
-  /* Same armature.  */
+  /* Same armature. */
   if (target == id) {
     /* Using "done" here breaks in-chain deps, while using
      * "ready" here breaks most production rigs instead.
@@ -240,7 +242,7 @@ bool object_have_geometry_component(const Object *object)
 
 }  // namespace
 
-/* **** General purpose functions ****  */
+/* **** General purpose functions **** */
 
 DepsgraphRelationBuilder::DepsgraphRelationBuilder(Main *bmain,
                                                    Depsgraph *graph,
@@ -326,7 +328,7 @@ void DepsgraphRelationBuilder::add_customdata_mask(Object *object,
     IDNode *id_node = graph_->find_id_node(&object->id);
 
     if (id_node == nullptr) {
-      BLI_assert(!"ID should always be valid");
+      BLI_assert_msg(0, "ID should always be valid");
     }
     else {
       id_node->customdata_masks |= customdata_masks;
@@ -338,7 +340,7 @@ void DepsgraphRelationBuilder::add_special_eval_flag(ID *id, uint32_t flag)
 {
   IDNode *id_node = graph_->find_id_node(id);
   if (id_node == nullptr) {
-    BLI_assert(!"ID should always be valid");
+    BLI_assert_msg(0, "ID should always be valid");
   }
   else {
     id_node->eval_flags |= flag;
@@ -364,6 +366,13 @@ Relation *DepsgraphRelationBuilder::add_time_relation(TimeSourceNode *timesrc,
                    description);
 
   return nullptr;
+}
+
+void DepsgraphRelationBuilder::add_visibility_relation(ID *id_from, ID *id_to)
+{
+  ComponentKey from_key(id_from, NodeType::VISIBILITY);
+  ComponentKey to_key(id_to, NodeType::VISIBILITY);
+  add_relation(from_key, to_key, "visibility");
 }
 
 Relation *DepsgraphRelationBuilder::add_operation_relation(OperationNode *node_from,
@@ -1005,11 +1014,13 @@ void DepsgraphRelationBuilder::build_object_parent(Object *object)
 
     /* Bone Parent */
     case PARBONE: {
-      ComponentKey parent_bone_key(parent_id, NodeType::BONE, object->parsubstr);
-      OperationKey parent_transform_key(
-          parent_id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
-      add_relation(parent_bone_key, object_transform_key, "Bone Parent");
-      add_relation(parent_transform_key, object_transform_key, "Armature Parent");
+      if (object->parsubstr[0] != '\0') {
+        ComponentKey parent_bone_key(parent_id, NodeType::BONE, object->parsubstr);
+        OperationKey parent_transform_key(
+            parent_id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
+        add_relation(parent_bone_key, object_transform_key, "Bone Parent");
+        add_relation(parent_transform_key, object_transform_key, "Armature Parent");
+      }
       break;
     }
 
@@ -1146,7 +1157,7 @@ void DepsgraphRelationBuilder::build_constraints(ID *id,
     /* Special case for camera tracking -- it doesn't use targets to
      * define relations. */
     /* TODO: we can now represent dependencies in a much richer manner,
-     * so review how this is done.  */
+     * so review how this is done. */
     if (ELEM(cti->type,
              CONSTRAINT_TYPE_FOLLOWTRACK,
              CONSTRAINT_TYPE_CAMERASOLVER,
@@ -1455,12 +1466,30 @@ void DepsgraphRelationBuilder::build_animdata_drivers(ID *id)
 
 void DepsgraphRelationBuilder::build_animation_images(ID *id)
 {
+  /* See #DepsgraphNodeBuilder::build_animation_images. */
+  const bool can_have_gpu_material = ELEM(GS(id->name), ID_MA, ID_WO);
+
   /* TODO: can we check for existence of node for performance? */
-  if (BKE_image_user_id_has_animation(id)) {
+  if (BKE_image_user_id_has_animation(id) || can_have_gpu_material) {
     OperationKey image_animation_key(
         id, NodeType::IMAGE_ANIMATION, OperationCode::IMAGE_ANIMATION);
     TimeSourceKey time_src_key;
     add_relation(time_src_key, image_animation_key, "TimeSrc -> Image Animation");
+
+    /* The image users of these ids may change during evaluation. Make sure that the image
+     * animation update happens after evaluation. */
+    if (GS(id->name) == ID_MA) {
+      OperationKey material_update_key(id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
+      add_relation(material_update_key, image_animation_key, "Material Update -> Image Animation");
+    }
+    else if (GS(id->name) == ID_WO) {
+      OperationKey world_update_key(id, NodeType::SHADING, OperationCode::WORLD_UPDATE);
+      add_relation(world_update_key, image_animation_key, "World Update -> Image Animation");
+    }
+    else if (GS(id->name) == ID_NT) {
+      OperationKey ntree_output_key(id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
+      add_relation(ntree_output_key, image_animation_key, "NTree Output -> Image Animation");
+    }
   }
 }
 
@@ -1608,7 +1637,7 @@ void DepsgraphRelationBuilder::build_driver_data(ID *id, FCurve *fcu)
         }
       }
     }
-    if (property_entry_key.prop != nullptr && RNA_property_is_idprop(property_entry_key.prop)) {
+    if (rna_prop_affects_parameters_node(&property_entry_key.ptr, property_entry_key.prop)) {
       RNAPathKey property_exit_key(property_entry_key.id,
                                    property_entry_key.ptr,
                                    property_entry_key.prop,
@@ -1616,6 +1645,14 @@ void DepsgraphRelationBuilder::build_driver_data(ID *id, FCurve *fcu)
       OperationKey parameters_key(id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
       add_relation(property_exit_key, parameters_key, "Driven Property -> Properties");
     }
+  }
+
+  /* Assume drivers on a node tree affect the evaluated output of the node tree. In theory we could
+   * check if the driven value actually affects the output, i.e. if it drives a node that is linked
+   * to the output. */
+  if (GS(id_ptr->name) == ID_NT) {
+    ComponentKey ntree_output_key(id_ptr, NodeType::NTREE_OUTPUT);
+    add_relation(driver_key, ntree_output_key, "Drivers -> NTree Output");
   }
 }
 
@@ -1711,12 +1748,26 @@ void DepsgraphRelationBuilder::build_driver_id_property(ID *id, const char *rna_
   if (prop == nullptr) {
     return;
   }
-  if (!RNA_property_is_idprop(prop)) {
+  if (!rna_prop_affects_parameters_node(&ptr, prop)) {
     return;
   }
   const char *prop_identifier = RNA_property_identifier((PropertyRNA *)prop);
-  OperationKey id_property_key(
-      id, NodeType::PARAMETERS, OperationCode::ID_PROPERTY, prop_identifier);
+  /* Custom properties of bones are placed in their components to improve granularity. */
+  OperationKey id_property_key;
+  if (RNA_struct_is_a(ptr.type, &RNA_PoseBone)) {
+    const bPoseChannel *pchan = static_cast<const bPoseChannel *>(ptr.data);
+    id_property_key = OperationKey(
+        id, NodeType::BONE, pchan->name, OperationCode::ID_PROPERTY, prop_identifier);
+    /* Create relation from the parameters component so that tagging armature for parameters update
+     * properly propagates updates to all properties on bones and deeper (if needed). */
+    OperationKey parameters_init_key(id, NodeType::PARAMETERS, OperationCode::PARAMETERS_ENTRY);
+    add_relation(
+        parameters_init_key, id_property_key, "Init -> ID Property", RELATION_CHECK_BEFORE_ADD);
+  }
+  else {
+    id_property_key = OperationKey(
+        id, NodeType::PARAMETERS, OperationCode::ID_PROPERTY, prop_identifier);
+  }
   OperationKey parameters_exit_key(id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EXIT);
   add_relation(
       id_property_key, parameters_exit_key, "ID Property -> Done", RELATION_CHECK_BEFORE_ADD);
@@ -1759,7 +1810,7 @@ void DepsgraphRelationBuilder::build_world(World *world)
   if (world->nodetree != nullptr) {
     build_nodetree(world->nodetree);
     OperationKey ntree_key(
-        &world->nodetree->id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
+        &world->nodetree->id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
     add_relation(ntree_key, world_key, "World's NTree");
     build_nested_nodetree(&world->id, world->nodetree);
   }
@@ -1909,7 +1960,7 @@ void DepsgraphRelationBuilder::build_particle_systems(Object *object)
     /* Effectors. */
     add_particle_forcefield_relations(
         psys_key, object, psys, part->effector_weights, part->type == PART_HAIR, "Particle Field");
-    /* Boids .*/
+    /* Boids. */
     if (part->boids != nullptr) {
       LISTBASE_FOREACH (BoidState *, state, &part->boids->states) {
         LISTBASE_FOREACH (BoidRule *, rule, &state->rules) {
@@ -1945,7 +1996,7 @@ void DepsgraphRelationBuilder::build_particle_systems(Object *object)
     switch (part->ren_as) {
       case PART_DRAW_OB:
         if (part->instance_object != nullptr) {
-          /* Make sure object's relations are all built.  */
+          /* Make sure object's relations are all built. */
           build_object(part->instance_object);
           /* Build relation for the particle visualization. */
           build_particle_system_visualization_object(object, psys, part->instance_object);
@@ -2062,7 +2113,8 @@ void DepsgraphRelationBuilder::build_shapekeys(Key *key)
  *        and also for the links coming from the shapekey data-blocks
  * - Animation/Drivers affecting the parameters of the geometry are made to
  *   trigger updates on the obdata geometry component, which then trigger
- *   downstream re-evaluation of the individual instances of this geometry. */
+ *   downstream re-evaluation of the individual instances of this geometry.
+ */
 void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
 {
   ID *obdata = (ID *)object->data;
@@ -2093,7 +2145,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
         ctx.node = reinterpret_cast<::DepsNodeHandle *>(&handle);
         mti->updateDepsgraph(md, &ctx);
       }
-      if (BKE_object_modifier_use_time(object, md)) {
+      if (BKE_object_modifier_use_time(scene_, object, md, graph_->mode)) {
         TimeSourceKey time_src_key;
         add_relation(time_src_key, obdata_ubereval_key, "Time Source");
       }
@@ -2222,6 +2274,11 @@ void DepsgraphRelationBuilder::build_object_data_geometry_datablock(ID *obdata)
   OperationKey obdata_geom_eval_key(obdata, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL);
   OperationKey obdata_geom_done_key(obdata, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL_DONE);
   add_relation(obdata_geom_eval_key, obdata_geom_done_key, "ObData Geom Eval Done");
+
+  /* Link object data evaluation to parameter evaluation. */
+  ComponentKey parameters_key(obdata, NodeType::PARAMETERS);
+  add_relation(parameters_key, obdata_geom_eval_key, "ObData Geom Params");
+
   /* Type-specific links. */
   const ID_Type id_type = GS(obdata->name);
   switch (id_type) {
@@ -2312,7 +2369,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry_datablock(ID *obdata)
       break;
     }
     default:
-      BLI_assert(!"Should not happen");
+      BLI_assert_msg(0, "Should not happen");
       break;
   }
 }
@@ -2364,17 +2421,18 @@ void DepsgraphRelationBuilder::build_light(Light *lamp)
 
   ComponentKey lamp_parameters_key(&lamp->id, NodeType::PARAMETERS);
 
-  /* light's nodetree */
-  if (lamp->nodetree != nullptr) {
-    build_nodetree(lamp->nodetree);
-    ComponentKey nodetree_key(&lamp->nodetree->id, NodeType::SHADING);
-    add_relation(nodetree_key, lamp_parameters_key, "NTree->Light Parameters");
-    build_nested_nodetree(&lamp->id, lamp->nodetree);
-  }
-
   /* For allowing drivers on lamp properties. */
   ComponentKey shading_key(&lamp->id, NodeType::SHADING);
   add_relation(lamp_parameters_key, shading_key, "Light Shading Parameters");
+
+  /* light's nodetree */
+  if (lamp->nodetree != nullptr) {
+    build_nodetree(lamp->nodetree);
+    OperationKey ntree_key(
+        &lamp->nodetree->id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
+    add_relation(ntree_key, shading_key, "NTree->Light Parameters");
+    build_nested_nodetree(&lamp->id, lamp->nodetree);
+  }
 }
 
 void DepsgraphRelationBuilder::build_nodetree_socket(bNodeSocket *socket)
@@ -2399,6 +2457,18 @@ void DepsgraphRelationBuilder::build_nodetree_socket(bNodeSocket *socket)
       build_collection(nullptr, nullptr, collection);
     }
   }
+  else if (socket->type == SOCK_TEXTURE) {
+    Tex *texture = ((bNodeSocketValueTexture *)socket->default_value)->value;
+    if (texture != nullptr) {
+      build_texture(texture);
+    }
+  }
+  else if (socket->type == SOCK_MATERIAL) {
+    Material *material = ((bNodeSocketValueMaterial *)socket->default_value)->value;
+    if (material != nullptr) {
+      build_material(material);
+    }
+  }
 }
 
 void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
@@ -2412,7 +2482,7 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
   build_idproperties(ntree->id.properties);
   build_animdata(&ntree->id);
   build_parameters(&ntree->id);
-  ComponentKey shading_key(&ntree->id, NodeType::SHADING);
+  OperationKey ntree_output_key(&ntree->id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
   /* nodetree's nodes... */
   LISTBASE_FOREACH (bNode *, bnode, &ntree->nodes) {
     build_idproperties(bnode->prop);
@@ -2431,25 +2501,25 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
     if (id_type == ID_MA) {
       build_material((Material *)bnode->id);
       ComponentKey material_key(id, NodeType::SHADING);
-      add_relation(material_key, shading_key, "Material -> Node");
+      add_relation(material_key, ntree_output_key, "Material -> Node");
     }
     else if (id_type == ID_TE) {
       build_texture((Tex *)bnode->id);
       ComponentKey texture_key(id, NodeType::GENERIC_DATABLOCK);
-      add_relation(texture_key, shading_key, "Texture -> Node");
+      add_relation(texture_key, ntree_output_key, "Texture -> Node");
     }
     else if (id_type == ID_IM) {
       build_image((Image *)bnode->id);
       ComponentKey image_key(id, NodeType::GENERIC_DATABLOCK);
-      add_relation(image_key, shading_key, "Image -> Node");
+      add_relation(image_key, ntree_output_key, "Image -> Node");
     }
     else if (id_type == ID_OB) {
       build_object((Object *)id);
       ComponentKey object_transform_key(id, NodeType::TRANSFORM);
-      add_relation(object_transform_key, shading_key, "Object Transform -> Node");
+      add_relation(object_transform_key, ntree_output_key, "Object Transform -> Node");
       if (object_have_geometry_component(reinterpret_cast<Object *>(id))) {
         ComponentKey object_geometry_key(id, NodeType::GEOMETRY);
-        add_relation(object_geometry_key, shading_key, "Object Geometry -> Node");
+        add_relation(object_geometry_key, ntree_output_key, "Object Geometry -> Node");
       }
     }
     else if (id_type == ID_SCE) {
@@ -2469,21 +2539,29 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
     else if (id_type == ID_MSK) {
       build_mask((Mask *)id);
       OperationKey mask_key(id, NodeType::PARAMETERS, OperationCode::MASK_EVAL);
-      add_relation(mask_key, shading_key, "Mask -> Node");
+      add_relation(mask_key, ntree_output_key, "Mask -> Node");
     }
     else if (id_type == ID_MC) {
       build_movieclip((MovieClip *)id);
       OperationKey clip_key(id, NodeType::PARAMETERS, OperationCode::MOVIECLIP_EVAL);
-      add_relation(clip_key, shading_key, "Clip -> Node");
+      add_relation(clip_key, ntree_output_key, "Clip -> Node");
+    }
+    else if (id_type == ID_VF) {
+      build_vfont((VFont *)id);
+      ComponentKey vfont_key(id, NodeType::GENERIC_DATABLOCK);
+      add_relation(vfont_key, ntree_output_key, "VFont -> Node");
     }
     else if (ELEM(bnode->type, NODE_GROUP, NODE_CUSTOM_GROUP)) {
       bNodeTree *group_ntree = (bNodeTree *)id;
       build_nodetree(group_ntree);
-      ComponentKey group_shading_key(&group_ntree->id, NodeType::SHADING);
-      add_relation(group_shading_key, shading_key, "Group Node");
+      ComponentKey group_output_key(&group_ntree->id, NodeType::NTREE_OUTPUT);
+      /* This relation is not necessary in all cases (e.g. when the group node is not connected to
+       * the output). Currently, we lack the infrastructure to check for these cases efficiently.
+       * That can be added later. */
+      add_relation(group_output_key, ntree_output_key, "Group Node");
     }
     else {
-      BLI_assert(!"Unknown ID type used for node");
+      BLI_assert_msg(0, "Unknown ID type used for node");
     }
   }
 
@@ -2494,17 +2572,10 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
     build_idproperties(socket->prop);
   }
 
-  OperationKey shading_update_key(&ntree->id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
-  OperationKey shading_parameters_key(
-      &ntree->id, NodeType::SHADING_PARAMETERS, OperationCode::MATERIAL_UPDATE);
-  add_relation(shading_parameters_key, shading_update_key, "NTree Shading Parameters");
-
   if (check_id_has_anim_component(&ntree->id)) {
     ComponentKey animation_key(&ntree->id, NodeType::ANIMATION);
-    add_relation(animation_key, shading_parameters_key, "NTree Shading Parameters");
+    add_relation(animation_key, ntree_output_key, "NTree Shading Parameters");
   }
-  ComponentKey parameters_key(&ntree->id, NodeType::PARAMETERS);
-  add_relation(parameters_key, shading_parameters_key, "NTree Shading Parameters");
 }
 
 /* Recursively build graph for material */
@@ -2527,7 +2598,7 @@ void DepsgraphRelationBuilder::build_material(Material *material)
   if (material->nodetree != nullptr) {
     build_nodetree(material->nodetree);
     OperationKey ntree_key(
-        &material->nodetree->id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
+        &material->nodetree->id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
     add_relation(ntree_key, material_key, "Material's NTree");
     build_nested_nodetree(&material->id, material->nodetree);
   }
@@ -2556,8 +2627,13 @@ void DepsgraphRelationBuilder::build_texture(Tex *texture)
   build_parameters(&texture->id);
 
   /* texture's nodetree */
-  build_nodetree(texture->nodetree);
-  build_nested_nodetree(&texture->id, texture->nodetree);
+  if (texture->nodetree) {
+    build_nodetree(texture->nodetree);
+    OperationKey ntree_key(
+        &texture->nodetree->id, NodeType::NTREE_OUTPUT, OperationCode::NTREE_OUTPUT);
+    add_relation(ntree_key, texture_key, "Texture's NTree");
+    build_nested_nodetree(&texture->id, texture->nodetree);
+  }
 
   /* Special cases for different IDs which texture uses. */
   if (texture->type == TEX_IMAGE) {
@@ -2737,6 +2813,45 @@ void DepsgraphRelationBuilder::build_simulation(Simulation *simulation)
   add_relation(nodetree_key, simulation_eval_key, "NodeTree -> Simulation", 0);
 }
 
+using Seq_build_prop_cb_data = struct Seq_build_prop_cb_data {
+  DepsgraphRelationBuilder *builder;
+  ComponentKey sequencer_key;
+  bool has_audio_strips;
+};
+
+static bool seq_build_prop_cb(Sequence *seq, void *user_data)
+{
+  Seq_build_prop_cb_data *cd = (Seq_build_prop_cb_data *)user_data;
+
+  cd->builder->build_idproperties(seq->prop);
+  if (seq->sound != nullptr) {
+    cd->builder->build_sound(seq->sound);
+    ComponentKey sound_key(&seq->sound->id, NodeType::AUDIO);
+    cd->builder->add_relation(sound_key, cd->sequencer_key, "Sound -> Sequencer");
+    cd->has_audio_strips = true;
+  }
+  if (seq->scene != nullptr) {
+    cd->builder->build_scene_parameters(seq->scene);
+    /* This is to support 3D audio. */
+    cd->has_audio_strips = true;
+  }
+  if (seq->type == SEQ_TYPE_SCENE && seq->scene != nullptr) {
+    if (seq->flag & SEQ_SCENE_STRIPS) {
+      cd->builder->build_scene_sequencer(seq->scene);
+      ComponentKey sequence_scene_audio_key(&seq->scene->id, NodeType::AUDIO);
+      cd->builder->add_relation(
+          sequence_scene_audio_key, cd->sequencer_key, "Sequence Scene Audio -> Sequencer");
+      ComponentKey sequence_scene_key(&seq->scene->id, NodeType::SEQUENCER);
+      cd->builder->add_relation(
+          sequence_scene_key, cd->sequencer_key, "Sequence Scene -> Sequencer");
+    }
+    ViewLayer *sequence_view_layer = BKE_view_layer_default_render(seq->scene);
+    cd->builder->build_scene_speakers(seq->scene, sequence_view_layer);
+  }
+  /* TODO(sergey): Movie clip, camera, mask. */
+  return true;
+}
+
 void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
 {
   if (scene->ed == nullptr) {
@@ -2749,36 +2864,11 @@ void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
   ComponentKey scene_audio_key(&scene->id, NodeType::AUDIO);
   /* Make sure dependencies from sequences data goes to the sequencer evaluation. */
   ComponentKey sequencer_key(&scene->id, NodeType::SEQUENCER);
-  Sequence *seq;
-  bool has_audio_strips = false;
-  SEQ_ALL_BEGIN (scene->ed, seq) {
-    build_idproperties(seq->prop);
-    if (seq->sound != nullptr) {
-      build_sound(seq->sound);
-      ComponentKey sound_key(&seq->sound->id, NodeType::AUDIO);
-      add_relation(sound_key, sequencer_key, "Sound -> Sequencer");
-      has_audio_strips = true;
-    }
-    if (seq->scene != nullptr) {
-      build_scene_parameters(seq->scene);
-      /* This is to support 3D audio. */
-      has_audio_strips = true;
-    }
-    if (seq->type == SEQ_TYPE_SCENE && seq->scene != nullptr) {
-      if (seq->flag & SEQ_SCENE_STRIPS) {
-        build_scene_sequencer(seq->scene);
-        ComponentKey sequence_scene_audio_key(&seq->scene->id, NodeType::AUDIO);
-        add_relation(sequence_scene_audio_key, sequencer_key, "Sequence Scene Audio -> Sequencer");
-        ComponentKey sequence_scene_key(&seq->scene->id, NodeType::SEQUENCER);
-        add_relation(sequence_scene_key, sequencer_key, "Sequence Scene -> Sequencer");
-      }
-      ViewLayer *sequence_view_layer = BKE_view_layer_default_render(seq->scene);
-      build_scene_speakers(seq->scene, sequence_view_layer);
-    }
-    /* TODO(sergey): Movie clip, camera, mask. */
-  }
-  SEQ_ALL_END;
-  if (has_audio_strips) {
+
+  Seq_build_prop_cb_data cb_data = {this, sequencer_key, false};
+
+  SEQ_for_each_callback(&scene->ed->seqbase, seq_build_prop_cb, &cb_data);
+  if (cb_data.has_audio_strips) {
     add_relation(sequencer_key, scene_audio_key, "Sequencer -> Audio");
   }
 }
@@ -2808,6 +2898,15 @@ void DepsgraphRelationBuilder::build_scene_speakers(Scene * /*scene*/, ViewLayer
   }
 }
 
+void DepsgraphRelationBuilder::build_vfont(VFont *vfont)
+{
+  if (built_map_.checkIsBuiltAndTag(vfont)) {
+    return;
+  }
+  build_parameters(&vfont->id);
+  build_idproperties(vfont->id.properties);
+}
+
 void DepsgraphRelationBuilder::build_copy_on_write_relations()
 {
   for (IDNode *id_node : graph_->id_nodes) {
@@ -2815,17 +2914,22 @@ void DepsgraphRelationBuilder::build_copy_on_write_relations()
   }
 }
 
-/* Nested datablocks (node trees, shape keys) requires special relation to
+/**
+ * Nested datablocks (node trees, shape keys) requires special relation to
  * ensure owner's datablock remapping happens after node tree itself is ready.
  *
  * This is similar to what happens in ntree_hack_remap_pointers().
  */
-void DepsgraphRelationBuilder::build_nested_datablock(ID *owner, ID *id)
+void DepsgraphRelationBuilder::build_nested_datablock(ID *owner, ID *id, bool flush_cow_changes)
 {
+  int relation_flag = 0;
+  if (!flush_cow_changes) {
+    relation_flag |= RELATION_FLAG_NO_FLUSH;
+  }
   OperationKey owner_copy_on_write_key(
       owner, NodeType::COPY_ON_WRITE, OperationCode::COPY_ON_WRITE);
   OperationKey id_copy_on_write_key(id, NodeType::COPY_ON_WRITE, OperationCode::COPY_ON_WRITE);
-  add_relation(id_copy_on_write_key, owner_copy_on_write_key, "Eval Order");
+  add_relation(id_copy_on_write_key, owner_copy_on_write_key, "Eval Order", relation_flag);
 }
 
 void DepsgraphRelationBuilder::build_nested_nodetree(ID *owner, bNodeTree *ntree)
@@ -2833,7 +2937,10 @@ void DepsgraphRelationBuilder::build_nested_nodetree(ID *owner, bNodeTree *ntree
   if (ntree == nullptr) {
     return;
   }
-  build_nested_datablock(owner, &ntree->id);
+  /* Don't flush cow changes, because the node tree may change in ways that do not affect the
+   * owner data block (e.g. when a node is deleted that is not connected to any output).
+   * Data blocks owning node trees should add a relation to the `NTREE_OUTPUT` node instead. */
+  build_nested_datablock(owner, &ntree->id, false);
 }
 
 void DepsgraphRelationBuilder::build_nested_shapekey(ID *owner, Key *key)
@@ -2841,7 +2948,7 @@ void DepsgraphRelationBuilder::build_nested_shapekey(ID *owner, Key *key)
   if (key == nullptr) {
     return;
   }
-  build_nested_datablock(owner, &key->id);
+  build_nested_datablock(owner, &key->id, true);
 }
 
 void DepsgraphRelationBuilder::build_copy_on_write_relations(IDNode *id_node)

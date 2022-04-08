@@ -88,7 +88,7 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const eGPUType
     name = outnode->name;
     input = outnode->inputs.first;
 
-    if ((STR_ELEM(name, "set_value", "set_rgb", "set_rgba")) && (input->type == type)) {
+    if (STR_ELEM(name, "set_value", "set_rgb", "set_rgba") && (input->type == type)) {
       input = MEM_dupallocN(outnode->inputs.first);
       if (input->link) {
         input->link->users++;
@@ -174,7 +174,7 @@ static const char *gpu_uniform_set_function_from_type(eNodeSocketDatatype type)
     case SOCK_RGBA:
       return "set_rgba";
     default:
-      BLI_assert(!"No gpu function for non-supported eNodeSocketDatatype");
+      BLI_assert_msg(0, "No gpu function for non-supported eNodeSocketDatatype");
       return NULL;
   }
 }
@@ -259,7 +259,7 @@ static void gpu_node_output(GPUNode *node, const eGPUType type, GPUNodeLink **li
     output->link->link_type = GPU_NODE_LINK_OUTPUT;
     output->link->output = output;
 
-    /* note: the caller owns the reference to the link, GPUOutput
+    /* NOTE: the caller owns the reference to the link, GPUOutput
      * merely points to it, and if the node is destroyed it will
      * set that pointer to NULL */
   }
@@ -439,7 +439,10 @@ static GPUMaterialTexture *gpu_node_graph_add_texture(GPUNodeGraph *graph,
   if (tex == NULL) {
     tex = MEM_callocN(sizeof(*tex), __func__);
     tex->ima = ima;
-    tex->iuser = iuser;
+    if (iuser != NULL) {
+      tex->iuser = *iuser;
+      tex->iuser_available = true;
+    }
     tex->colorband = colorband;
     tex->sampler_state = sampler_state;
     BLI_snprintf(tex->sampler_name, sizeof(tex->sampler_name), "samp%d", num_textures);
@@ -791,7 +794,6 @@ static void gpu_node_free(GPUNode *node)
   MEM_freeN(node);
 }
 
-/* Free intermediate node graph. */
 void gpu_node_graph_free_nodes(GPUNodeGraph *graph)
 {
   GPUNode *node;
@@ -803,7 +805,6 @@ void gpu_node_graph_free_nodes(GPUNodeGraph *graph)
   graph->outlink = NULL;
 }
 
-/* Free both node graph and requested attributes and textures. */
 void gpu_node_graph_free(GPUNodeGraph *graph)
 {
   BLI_freelistN(&graph->outlink_aovs);

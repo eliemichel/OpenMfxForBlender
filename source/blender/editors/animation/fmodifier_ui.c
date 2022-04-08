@@ -187,7 +187,7 @@ static PanelType *fmodifier_panel_register(ARegionType *region_type,
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * modifier rather than a #PanelType. */
-  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_INSTANCED;
   panel_type->reorder = fmodifier_reorder;
   panel_type->get_list_data_expand_flag = get_fmodifier_expand_flag;
   panel_type->set_list_data_expand_flag = set_fmodifier_expand_flag;
@@ -221,7 +221,7 @@ static PanelType *fmodifier_subpanel_register(ARegionType *region_type,
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = poll;
-  panel_type->flag = PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX;
+  panel_type->flag = PANEL_TYPE_DEFAULT_CLOSED;
 
   BLI_assert(parent != NULL);
   BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);
@@ -246,7 +246,7 @@ static PanelType *fmodifier_subpanel_register(ARegionType *region_type,
 #define B_REDR 1
 #define B_FMODIFIER_REDRAW 20
 
-/* callback to remove the given modifier  */
+/* Callback to remove the given modifier. */
 typedef struct FModifierDeleteContext {
   ID *owner_id;
   ListBase *modifiers;
@@ -403,10 +403,10 @@ static void generator_panel_draw(const bContext *C, Panel *panel)
       char xval[32];
 
       /* The first value gets a "Coefficient" label. */
-      BLI_strncpy(xval, "Coefficient", sizeof(xval));
+      BLI_strncpy(xval, N_("Coefficient"), sizeof(xval));
 
       for (int i = 0; i < data->arraysize; i++) {
-        uiItemFullR(col, ptr, prop, i, 0, 0, N_(xval), ICON_NONE);
+        uiItemFullR(col, ptr, prop, i, 0, 0, IFACE_(xval), ICON_NONE);
         BLI_snprintf(xval, sizeof(xval), "x^%d", i + 1);
       }
       break;
@@ -420,17 +420,17 @@ static void generator_panel_draw(const bContext *C, Panel *panel)
         uiLayoutColumn(split, false);
         uiLayout *title_col = uiLayoutColumn(split, false);
         uiLayout *title_row = uiLayoutRow(title_col, true);
-        uiItemL(title_row, N_("A"), ICON_NONE);
-        uiItemL(title_row, N_("B"), ICON_NONE);
+        uiItemL(title_row, IFACE_("A"), ICON_NONE);
+        uiItemL(title_row, IFACE_("B"), ICON_NONE);
       }
 
       uiLayout *first_row = uiLayoutRow(col, true);
-      uiItemFullR(first_row, ptr, prop, 0, 0, 0, N_("y = (Ax + B)"), ICON_NONE);
+      uiItemFullR(first_row, ptr, prop, 0, 0, 0, IFACE_("y = (Ax + B)"), ICON_NONE);
       uiItemFullR(first_row, ptr, prop, 1, 0, 0, "", ICON_NONE);
-      for (int i = 2; i < data->arraysize - 1; i++) {
+      for (int i = 2; i < data->arraysize - 1; i += 2) {
         /* \u2715 is the multiplication symbol. */
         uiLayout *row = uiLayoutRow(col, true);
-        uiItemFullR(row, ptr, prop, i, 0, 0, N_("\u2715 (Ax + B)"), ICON_NONE);
+        uiItemFullR(row, ptr, prop, i, 0, 0, IFACE_("\u2715 (Ax + B)"), ICON_NONE);
         uiItemFullR(row, ptr, prop, i + 1, 0, 0, "", ICON_NONE);
       }
       break;
@@ -672,10 +672,7 @@ static void fmod_envelope_deletepoint_cb(bContext *UNUSED(C), void *fcm_dv, void
   }
   else {
     /* just free array, since the only vert was deleted */
-    if (env->data) {
-      MEM_freeN(env->data);
-      env->data = NULL;
-    }
+    MEM_SAFE_FREE(env->data);
     env->totvert = 0;
   }
 }
@@ -894,9 +891,6 @@ static void panel_register_stepped(ARegionType *region_type,
 /** \name Panel Creation
  * \{ */
 
-/**
- * Checks if the panels match the active strip / curve, rebuilds them if they don't.
- */
 void ANIM_fmodifier_panels(const bContext *C,
                            ID *owner_id,
                            ListBase *fmodifiers,
@@ -972,17 +966,12 @@ static ListBase fmodifier_copypaste_buf = {NULL, NULL};
 
 /* ---------- */
 
-/* free the copy/paste buffer */
 void ANIM_fmodifiers_copybuf_free(void)
 {
   /* just free the whole buffer */
   free_fmodifiers(&fmodifier_copypaste_buf);
 }
 
-/* copy the given F-Modifiers to the buffer, returning whether anything was copied or not
- * assuming that the buffer has been cleared already with ANIM_fmodifiers_copybuf_free()
- * - active: only copy the active modifier
- */
 bool ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, bool active)
 {
   bool ok = true;
@@ -1012,9 +1001,6 @@ bool ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, bool active)
   return ok;
 }
 
-/* 'Paste' the F-Modifier(s) from the buffer to the specified list
- * - replace: free all the existing modifiers to leave only the pasted ones
- */
 bool ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, bool replace, FCurve *curve)
 {
   FModifier *fcm;

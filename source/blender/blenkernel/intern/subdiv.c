@@ -29,6 +29,9 @@
 
 #include "BLI_utildefines.h"
 
+#include "BKE_modifier.h"
+#include "BKE_subdiv_modifier.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "subdiv_converter.h"
@@ -68,7 +71,7 @@ eSubdivFVarLinearInterpolation BKE_subdiv_fvar_interpolation_from_uv_smooth(int 
     case SUBSURF_UV_SMOOTH_ALL:
       return SUBDIV_FVAR_LINEAR_INTERPOLATION_NONE;
   }
-  BLI_assert(!"Unknown uv smooth flag");
+  BLI_assert_msg(0, "Unknown uv smooth flag");
   return SUBDIV_FVAR_LINEAR_INTERPOLATION_ALL;
 }
 
@@ -81,7 +84,7 @@ eSubdivVtxBoundaryInterpolation BKE_subdiv_vtx_boundary_interpolation_from_subsu
     case SUBSURF_BOUNDARY_SMOOTH_ALL:
       return SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
   }
-  BLI_assert(!"Unknown boundary smooth flag");
+  BLI_assert_msg(0, "Unknown boundary smooth flag");
   return SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
 }
 
@@ -189,6 +192,12 @@ Subdiv *BKE_subdiv_update_from_mesh(Subdiv *subdiv,
 void BKE_subdiv_free(Subdiv *subdiv)
 {
   if (subdiv->evaluator != NULL) {
+    const eOpenSubdivEvaluator evaluator_type = subdiv->evaluator->type;
+    if (evaluator_type != OPENSUBDIV_EVALUATOR_CPU) {
+      /* Let the draw code do the freeing, to ensure that the OpenGL context is valid. */
+      BKE_subsurf_modifier_free_gpu_cache_cb(subdiv);
+      return;
+    }
     openSubdiv_deleteEvaluator(subdiv->evaluator);
   }
   if (subdiv->topology_refiner != NULL) {
@@ -214,12 +223,13 @@ int *BKE_subdiv_face_ptex_offset_get(Subdiv *subdiv)
   }
   const int num_coarse_faces = topology_refiner->getNumFaces(topology_refiner);
   subdiv->cache_.face_ptex_offset = MEM_malloc_arrayN(
-      num_coarse_faces, sizeof(int), "subdiv face_ptex_offset");
+      num_coarse_faces + 1, sizeof(int), "subdiv face_ptex_offset");
   int ptex_offset = 0;
   for (int face_index = 0; face_index < num_coarse_faces; face_index++) {
     const int num_ptex_faces = topology_refiner->getNumFacePtexFaces(topology_refiner, face_index);
     subdiv->cache_.face_ptex_offset[face_index] = ptex_offset;
     ptex_offset += num_ptex_faces;
   }
+  subdiv->cache_.face_ptex_offset[num_coarse_faces] = ptex_offset;
   return subdiv->cache_.face_ptex_offset;
 }

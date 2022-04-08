@@ -26,6 +26,7 @@
 #include "BLI_assert.h"
 #include "BLI_math_vector.h"
 
+#include "BKE_attribute.h"
 #include "BKE_customdata.h"
 #include "BKE_lib_id.h"
 #include "BKE_material.h"
@@ -109,6 +110,12 @@ struct USDMeshData {
    * single sharpness or a value per-edge, USD will encode either a single sharpness per crease on
    * a mesh, or sharpness's for all edges making up the creases on a mesh. */
   pxr::VtFloatArray crease_sharpnesses;
+
+  /* The lengths of this array specifies the number of sharp corners (or vertex crease) on the
+   * surface. Each value is the index of a vertex in the mesh's vertex list. */
+  pxr::VtIntArray corner_indices;
+  /* The per-vertex sharpnesses. The lengths of this array must match that of `corner_indices`. */
+  pxr::VtFloatArray corner_sharpnesses;
 };
 
 void USDGenericMeshWriter::write_uv_maps(const Mesh *mesh, pxr::UsdGeomMesh usd_mesh)
@@ -165,7 +172,7 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
     /* The material path will be of the form </_materials/{material name}>, which is outside the
      * sub-tree pointed to by ref_path. As a result, the referenced data is not allowed to point
      * out of its own sub-tree. It does work when we override the material with exactly the same
-     * path, though.*/
+     * path, though. */
     if (usd_export_context_.export_params.export_materials) {
       assign_materials(context, usd_mesh, usd_mesh_data.face_groups);
     }
@@ -213,13 +220,30 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
         attr_crease_sharpness, pxr::VtValue(usd_mesh_data.crease_sharpnesses), timecode);
   }
 
+  if (!usd_mesh_data.corner_indices.empty() &&
+      usd_mesh_data.corner_indices.size() == usd_mesh_data.corner_sharpnesses.size()) {
+    pxr::UsdAttribute attr_corner_indices = usd_mesh.CreateCornerIndicesAttr(pxr::VtValue(), true);
+    pxr::UsdAttribute attr_corner_sharpnesses = usd_mesh.CreateCornerSharpnessesAttr(
+        pxr::VtValue(), true);
+
+    if (!attr_corner_indices.HasValue()) {
+      attr_corner_indices.Set(usd_mesh_data.corner_indices, defaultTime);
+      attr_corner_sharpnesses.Set(usd_mesh_data.corner_sharpnesses, defaultTime);
+    }
+
+    usd_value_writer_.SetAttribute(
+        attr_corner_indices, pxr::VtValue(usd_mesh_data.corner_indices), timecode);
+    usd_value_writer_.SetAttribute(
+        attr_corner_sharpnesses, pxr::VtValue(usd_mesh_data.crease_sharpnesses), timecode);
+  }
+
   if (usd_export_context_.export_params.export_uvmaps) {
     write_uv_maps(mesh, usd_mesh);
   }
   if (usd_export_context_.export_params.export_normals) {
     write_normals(mesh, usd_mesh);
   }
-  write_surface_velocity(context.object, mesh, usd_mesh);
+  write_surface_velocity(mesh, usd_mesh);
 
   /* TODO(Sybren): figure out what happens when the face groups change. */
   if (frame_has_been_written_) {
@@ -267,7 +291,7 @@ static void get_loops_polys(const Mesh *mesh, USDMeshData &usd_mesh_data)
   }
 }
 
-static void get_creases(const Mesh *mesh, USDMeshData &usd_mesh_data)
+static void get_edge_creases(const Mesh *mesh, USDMeshData &usd_mesh_data)
 {
   const float factor = 1.0f / 255.0f;
 
@@ -292,11 +316,30 @@ static void get_creases(const Mesh *mesh, USDMeshData &usd_mesh_data)
   }
 }
 
+static void get_vert_creases(const Mesh *mesh, USDMeshData &usd_mesh_data)
+{
+  const float *creases = static_cast<const float *>(CustomData_get_layer(&mesh->vdata, CD_CREASE));
+
+  if (!creases) {
+    return;
+  }
+
+  for (int i = 0, v = mesh->totvert; i < v; i++) {
+    const float sharpness = creases[i];
+
+    if (sharpness != 0.0f) {
+      usd_mesh_data.corner_indices.push_back(i);
+      usd_mesh_data.corner_sharpnesses.push_back(sharpness);
+    }
+  }
+}
+
 void USDGenericMeshWriter::get_geometry_data(const Mesh *mesh, USDMeshData &usd_mesh_data)
 {
   get_vertices(mesh, usd_mesh_data);
   get_loops_polys(mesh, usd_mesh_data);
-  get_creases(mesh, usd_mesh_data);
+  get_edge_creases(mesh, usd_mesh_data);
+  get_vert_creases(mesh, usd_mesh_data);
 }
 
 void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
@@ -318,7 +361,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
       continue;
     }
 
-    pxr::UsdShadeMaterial usd_material = ensure_usd_material(material);
+    pxr::UsdShadeMaterial usd_material = ensure_usd_material(context, material);
     material_binding_api.Bind(usd_material);
 
     /* USD seems to support neither per-material nor per-face-group double-sidedness, so we just
@@ -352,7 +395,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
       continue;
     }
 
-    pxr::UsdShadeMaterial usd_material = ensure_usd_material(material);
+    pxr::UsdShadeMaterial usd_material = ensure_usd_material(context, material);
     pxr::TfToken material_name = usd_material.GetPath().GetNameToken();
 
     pxr::UsdGeomSubset usd_face_subset = material_binding_api.CreateMaterialBindSubset(
@@ -377,16 +420,15 @@ void USDGenericMeshWriter::write_normals(const Mesh *mesh, pxr::UsdGeomMesh usd_
   }
   else {
     /* Compute the loop normals based on the 'smooth' flag. */
-    float normal[3];
+    const float(*vert_normals)[3] = BKE_mesh_vertex_normals_ensure(mesh);
+    const float(*face_normals)[3] = BKE_mesh_poly_normals_ensure(mesh);
     MPoly *mpoly = mesh->mpoly;
-    const MVert *mvert = mesh->mvert;
     for (int poly_idx = 0, totpoly = mesh->totpoly; poly_idx < totpoly; ++poly_idx, ++mpoly) {
       MLoop *mloop = mesh->mloop + mpoly->loopstart;
 
       if ((mpoly->flag & ME_SMOOTH) == 0) {
         /* Flat shaded, use common normal for all verts. */
-        BKE_mesh_calc_poly_normal(mpoly, mloop, mvert, normal);
-        pxr::GfVec3f pxr_normal(normal);
+        pxr::GfVec3f pxr_normal(face_normals[poly_idx]);
         for (int loop_idx = 0; loop_idx < mpoly->totloop; ++loop_idx) {
           loop_normals.push_back(pxr_normal);
         }
@@ -394,8 +436,7 @@ void USDGenericMeshWriter::write_normals(const Mesh *mesh, pxr::UsdGeomMesh usd_
       else {
         /* Smooth shaded, use individual vert normals. */
         for (int loop_idx = 0; loop_idx < mpoly->totloop; ++loop_idx, ++mloop) {
-          normal_short_to_float_v3(normal, mvert[mloop->v].no);
-          loop_normals.push_back(pxr::GfVec3f(normal));
+          loop_normals.push_back(pxr::GfVec3f(vert_normals[mloop->v]));
         }
       }
     }
@@ -409,42 +450,25 @@ void USDGenericMeshWriter::write_normals(const Mesh *mesh, pxr::UsdGeomMesh usd_
   usd_mesh.SetNormalsInterpolation(pxr::UsdGeomTokens->faceVarying);
 }
 
-void USDGenericMeshWriter::write_surface_velocity(Object *object,
-                                                  const Mesh *mesh,
-                                                  pxr::UsdGeomMesh usd_mesh)
+void USDGenericMeshWriter::write_surface_velocity(const Mesh *mesh, pxr::UsdGeomMesh usd_mesh)
 {
-  /* Only velocities from the fluid simulation are exported. This is the most important case,
-   * though, as the baked mesh changes topology all the time, and thus computing the velocities
-   * at import time in a post-processing step is hard. */
-  ModifierData *md = BKE_modifiers_findby_type(object, eModifierType_Fluidsim);
-  if (md == nullptr) {
+  /* Export velocity attribute output by fluid sim, sequence cache modifier
+   * and geometry nodes. */
+  CustomDataLayer *velocity_layer = BKE_id_attribute_find(
+      &mesh->id, "velocity", CD_PROP_FLOAT3, ATTR_DOMAIN_POINT);
+
+  if (velocity_layer == nullptr) {
     return;
   }
 
-  /* Check that the fluid sim modifier is enabled and has useful data. */
-  const bool use_render = (DEG_get_mode(usd_export_context_.depsgraph) == DAG_EVAL_RENDER);
-  const ModifierMode required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
-  const Scene *scene = DEG_get_evaluated_scene(usd_export_context_.depsgraph);
-  if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
-    return;
-  }
-  FluidsimModifierData *fsmd = reinterpret_cast<FluidsimModifierData *>(md);
-  if (!fsmd->fss || fsmd->fss->type != OB_FLUIDSIM_DOMAIN) {
-    return;
-  }
-  FluidsimSettings *fss = fsmd->fss;
-  if (!fss->meshVelocities) {
-    return;
-  }
+  const float(*velocities)[3] = reinterpret_cast<float(*)[3]>(velocity_layer->data);
 
   /* Export per-vertex velocity vectors. */
   pxr::VtVec3fArray usd_velocities;
   usd_velocities.reserve(mesh->totvert);
 
-  FluidVertexVelocity *mesh_velocities = fss->meshVelocities;
-  for (int vertex_idx = 0, totvert = mesh->totvert; vertex_idx < totvert;
-       ++vertex_idx, ++mesh_velocities) {
-    usd_velocities.push_back(pxr::GfVec3f(mesh_velocities->vel));
+  for (int vertex_idx = 0, totvert = mesh->totvert; vertex_idx < totvert; ++vertex_idx) {
+    usd_velocities.push_back(pxr::GfVec3f(velocities[vertex_idx]));
   }
 
   pxr::UsdTimeCode timecode = get_export_time_code();

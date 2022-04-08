@@ -92,9 +92,10 @@ float bc_get_float_value(const COLLADAFW::FloatOrDoubleArray &array, unsigned in
   return array.getDoubleValues()->getData()[index];
 }
 
-/* copied from /editors/object/object_relations.c */
 int bc_test_parent_loop(Object *par, Object *ob)
 {
+  /* Copied from /editors/object/object_relations.c */
+
   /* test if 'ob' is a parent somewhere in par's parents */
 
   if (par == nullptr) {
@@ -159,7 +160,7 @@ std::vector<bAction *> bc_getSceneActions(const bContext *C, Object *ob, bool al
     for (id = (ID *)bmain->actions.first; id; id = (ID *)(id->next)) {
       bAction *act = (bAction *)id;
       /* XXX This currently creates too many actions.
-       * TODO Need to check if the action is compatible to the given object. */
+       * TODO: Need to check if the action is compatible to the given object. */
       actions.push_back(act);
     }
   }
@@ -281,7 +282,7 @@ bool bc_has_object_type(LinkNode *export_set, short obtype)
 
   for (node = export_set; node; node = node->next) {
     Object *ob = (Object *)node->link;
-    /* XXX - why is this checking for ob->data? - we could be looking for empties */
+    /* XXX: why is this checking for ob->data? - we could be looking for empties. */
     if (ob->type == obtype && ob->data) {
       return true;
     }
@@ -289,9 +290,10 @@ bool bc_has_object_type(LinkNode *export_set, short obtype)
   return false;
 }
 
-/* Use bubble sort algorithm for sorting the export set */
 void bc_bubble_sort_by_Object_name(LinkNode *export_set)
 {
+  /* Use bubble sort algorithm for sorting the export set. */
+
   bool sorted = false;
   LinkNode *node;
   for (node = export_set; node->next && !sorted; node = node->next) {
@@ -312,11 +314,6 @@ void bc_bubble_sort_by_Object_name(LinkNode *export_set)
   }
 }
 
-/* Check if a bone is the top most exportable bone in the bone hierarchy.
- * When deform_bones_only == false, then only bones with NO parent
- * can be root bones. Otherwise the top most deform bones in the hierarchy
- * are root bones.
- */
 bool bc_is_root_bone(Bone *aBone, bool deform_bones_only)
 {
   if (deform_bones_only) {
@@ -360,12 +357,6 @@ std::string bc_replace_string(std::string data,
   return data;
 }
 
-/**
- * Calculate a rescale factor such that the imported scene's scale
- * is preserved. I.e. 1 meter in the import will also be
- * 1 meter in the current scene.
- */
-
 void bc_match_scale(Object *ob, UnitConverter &bc_unit, bool scale_to_scene)
 {
   if (scale_to_scene) {
@@ -386,9 +377,6 @@ void bc_match_scale(std::vector<Object *> *objects_done,
   }
 }
 
-/*
- * Convenience function to get only the needed components of a matrix
- */
 void bc_decompose(float mat[4][4], float *loc, float eul[3], float quat[4], float *size)
 {
   if (size) {
@@ -408,17 +396,6 @@ void bc_decompose(float mat[4][4], float *loc, float eul[3], float quat[4], floa
   }
 }
 
-/*
- * Create rotation_quaternion from a delta rotation and a reference quat
- *
- * Input:
- * mat_from: The rotation matrix before rotation
- * mat_to  : The rotation matrix after rotation
- * qref    : the quat corresponding to mat_from
- *
- * Output:
- * rot     : the calculated result (quaternion)
- */
 void bc_rotate_from_reference_quat(float quat_to[4], float quat_from[4], float mat_to[4][4])
 {
   float qd[4];
@@ -444,22 +421,20 @@ void bc_triangulate_mesh(Mesh *me)
   /* XXX: The triangulation method selection could be offered in the UI. */
   int quad_method = MOD_TRIANGULATE_QUAD_SHORTEDGE;
 
-  const struct BMeshCreateParams bm_create_params = {0};
+  const BMeshCreateParams bm_create_params{};
   BMesh *bm = BM_mesh_create(&bm_mesh_allocsize_default, &bm_create_params);
-  BMeshFromMeshParams bm_from_me_params = {0};
+  BMeshFromMeshParams bm_from_me_params{};
   bm_from_me_params.calc_face_normal = true;
+  bm_from_me_params.calc_vert_normal = true;
   BM_mesh_bm_from_me(bm, me, &bm_from_me_params);
   BM_mesh_triangulate(bm, quad_method, use_beauty, 4, tag_only, nullptr, nullptr, nullptr);
 
-  BMeshToMeshParams bm_to_me_params = {0};
+  BMeshToMeshParams bm_to_me_params{};
   bm_to_me_params.calc_object_remap = false;
   BM_mesh_bm_to_me(nullptr, bm, me, &bm_to_me_params);
   BM_mesh_free(bm);
 }
 
-/*
- * A bone is a leaf when it has no children or all children are not connected.
- */
 bool bc_is_leaf_bone(Bone *bone)
 {
   for (Bone *child = (Bone *)bone->childbase.first; child; child = child->next) {
@@ -501,11 +476,6 @@ int bc_set_layer(int bitfield, int layer, bool enable)
   return bitfield;
 }
 
-/**
- * This method creates a new extension map when needed.
- * \note The ~BoneExtensionManager destructor takes care
- * to delete the created maps when the manager is removed.
- */
 BoneExtensionMap &BoneExtensionManager::getExtensionMap(bArmature *armature)
 {
   std::string key = armature->id.name;
@@ -535,7 +505,6 @@ BoneExtensionManager::~BoneExtensionManager()
  * See ArmatureImporter::fix_leaf_bones()
  * and ArmatureImporter::connect_bone_chains()
  */
-
 BoneExtended::BoneExtended(EditBone *aBone)
 {
   this->set_name(aBone->name);
@@ -636,7 +605,7 @@ void BoneExtended::set_bone_layers(std::string layerString, std::vector<std::str
 
   while (ss >> layer) {
 
-    /* Blender uses numbers to specify layers*/
+    /* Blender uses numbers to specify layers. */
     if (isInteger(layer)) {
       pos = atoi(layer.c_str());
       if (pos >= 0 && pos < 32) {
@@ -645,10 +614,10 @@ void BoneExtended::set_bone_layers(std::string layerString, std::vector<std::str
       }
     }
 
-    /* layer uses labels (not supported by blender). Map to layer numbers:*/
+    /* Layer uses labels (not supported by blender). Map to layer numbers: */
     pos = find(layer_labels.begin(), layer_labels.end(), layer) - layer_labels.begin();
     if (pos >= layer_labels.size()) {
-      layer_labels.push_back(layer); /* remember layer number for future usage*/
+      layer_labels.push_back(layer); /* Remember layer number for future usage. */
     }
 
     if (pos > 31) {
@@ -697,9 +666,6 @@ int BoneExtended::get_use_connect()
   return this->use_connect;
 }
 
-/**
- * Stores a 4*4 matrix as a custom bone property array of size 16
- */
 void bc_set_IDPropertyMatrix(EditBone *ebone, const char *key, float mat[4][4])
 {
   IDProperty *idgroup = (IDProperty *)ebone->prop;
@@ -728,7 +694,7 @@ void bc_set_IDPropertyMatrix(EditBone *ebone, const char *key, float mat[4][4])
 /**
  * Stores a Float value as a custom bone property
  *
- * Note: This function is currently not needed. Keep for future usage
+ * NOTE: This function is currently not needed. Keep for future usage
  */
 static void bc_set_IDProperty(EditBone *ebone, const char *key, float value)
 {
@@ -745,19 +711,11 @@ static void bc_set_IDProperty(EditBone *ebone, const char *key, float value)
 }
 #endif
 
-/**
- * Get a custom property when it exists.
- * This function is also used to check if a property exists.
- */
 IDProperty *bc_get_IDProperty(Bone *bone, std::string key)
 {
   return (bone->prop == nullptr) ? nullptr : IDP_GetPropertyFromGroup(bone->prop, key.c_str());
 }
 
-/**
- * Read a custom bone property and convert to float
- * Return def if the property does not exist.
- */
 float bc_get_property(Bone *bone, std::string key, float def)
 {
   float result = def;
@@ -780,14 +738,6 @@ float bc_get_property(Bone *bone, std::string key, float def)
   return result;
 }
 
-/**
- * Read a custom bone property and convert to matrix
- * Return true if conversion was successful
- *
- * Return false if:
- * - the property does not exist
- * - is not an array of size 16
- */
 bool bc_get_property_matrix(Bone *bone, std::string key, float mat[4][4])
 {
   IDProperty *property = bc_get_IDProperty(bone, key);
@@ -803,9 +753,6 @@ bool bc_get_property_matrix(Bone *bone, std::string key, float mat[4][4])
   return false;
 }
 
-/**
- * get a vector that is stored in 3 custom properties (used in Blender <= 2.78)
- */
 void bc_get_property_vector(Bone *bone, std::string key, float val[3], const float def[3])
 {
   val[0] = bc_get_property(bone, key + "_x", def[0]);
@@ -1014,12 +961,6 @@ void bc_apply_global_transform(Vector &to_vec, const BCMatrix &global_transform,
   mul_v3_m4v3(to_vec, transform, to_vec);
 }
 
-/**
- * Check if custom information about bind matrix exists and modify the from_mat
- * accordingly.
- *
- * Note: This is old style for Blender <= 2.78 only kept for compatibility
- */
 void bc_create_restpose_mat(BCExportSettings &export_settings,
                             Bone *bone,
                             float to_mat[4][4],
@@ -1216,8 +1157,10 @@ static bNodeSocket *bc_group_add_input_socket(bNodeTree *ntree,
 {
   bNodeSocket *to_socket = (bNodeSocket *)BLI_findlink(&to_node->inputs, to_index);
 
-  //bNodeSocket *socket = ntreeAddSocketInterfaceFromSocket(ntree, to_node, to_socket);
-  //return socket;
+#  if 0
+  bNodeSocket *socket = ntreeAddSocketInterfaceFromSocket(ntree, to_node, to_socket);
+  return socket;
+#  endif
 
   bNodeSocket *gsock = ntreeAddSocketInterfaceFromSocket(ntree, to_node, to_socket);
   bNode *inputGroup = ntreeFindType(ntree, NODE_GROUP_INPUT);
@@ -1235,8 +1178,10 @@ static bNodeSocket *bc_group_add_output_socket(bNodeTree *ntree,
 {
   bNodeSocket *from_socket = (bNodeSocket *)BLI_findlink(&from_node->outputs, from_index);
 
-  //bNodeSocket *socket = ntreeAddSocketInterfaceFromSocket(ntree, to_node, to_socket);
-  //return socket;
+#  if 0
+  bNodeSocket *socket = ntreeAddSocketInterfaceFromSocket(ntree, to_node, to_socket);
+  return socket;
+#  endif
 
   bNodeSocket *gsock = ntreeAddSocketInterfaceFromSocket(ntree, from_node, from_socket);
   bNode *outputGroup = ntreeFindType(ntree, NODE_GROUP_OUTPUT);

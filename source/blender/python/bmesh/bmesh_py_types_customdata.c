@@ -78,7 +78,7 @@ static CustomDataLayer *bpy_bmlayeritem_get(BPy_BMLayerItem *self)
 /* getseters
  * ========= */
 
-/* used for many different types  */
+/* used for many different types. */
 
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__float_doc,
              "Generic float custom-data layer.\n\ntype: :class:`BMLayerCollection`");
@@ -1104,13 +1104,6 @@ static void *bpy_bmlayeritem_ptr_get(BPy_BMElem *py_ele, BPy_BMLayerItem *py_lay
   return value;
 }
 
-/**
- *\brief BMElem.__getitem__()
- *
- * assume all error checks are done, eg:
- *
- *     uv = vert[uv_layer]
- */
 PyObject *BPy_BMLayerItem_GetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer)
 {
   void *value = bpy_bmlayeritem_ptr_get(py_ele, py_layer);

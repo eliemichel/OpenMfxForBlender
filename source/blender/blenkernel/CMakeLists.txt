@@ -60,6 +60,9 @@ set(INC
 
 set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
+
+  # For `vfontdata_freetype.c`.
+  ${FREETYPE_INCLUDE_DIRS}
 )
 
 set(SRC
@@ -69,18 +72,25 @@ set(SRC
   intern/CCGSubSurf_util.c
   intern/DerivedMesh.cc
   intern/action.c
+  intern/action_bones.cc
   intern/action_mirror.c
   intern/addon.c
   intern/anim_data.c
   intern/anim_path.c
   intern/anim_sys.c
   intern/anim_visualization.c
+  intern/anonymous_attribute.cc
   intern/appdir.c
   intern/armature.c
   intern/armature_deform.c
   intern/armature_pose.cc
+  intern/armature_selection.cc
   intern/armature_update.c
   intern/asset.cc
+  intern/asset_catalog.cc
+  intern/asset_catalog_path.cc
+  intern/asset_library.cc
+  intern/asset_library_service.cc
   intern/attribute.c
   intern/attribute_access.cc
   intern/attribute_math.cc
@@ -90,10 +100,11 @@ set(SRC
   intern/blender_undo.c
   intern/blender_user_menu.c
   intern/blendfile.c
+  intern/blendfile_link_append.c
   intern/boids.c
   intern/bpath.c
   intern/brush.c
-  intern/bvhutils.c
+  intern/bvhutils.cc
   intern/cachefile.c
   intern/callbacks.c
   intern/camera.c
@@ -107,17 +118,19 @@ set(SRC
   intern/context.c
   intern/crazyspace.c
   intern/cryptomatte.cc
-  intern/curve.c
+  intern/curve.cc
   intern/curve_bevel.c
   intern/curve_convert.c
   intern/curve_decimate.c
   intern/curve_deform.c
-  intern/curveprofile.c
-  intern/customdata.c
+  intern/curve_eval.cc
+  intern/curve_to_mesh_convert.cc
+  intern/curveprofile.cc
+  intern/customdata.cc
   intern/customdata_file.c
   intern/data_transfer.c
   intern/deform.c
-  intern/displist.c
+  intern/displist.cc
   intern/displist_tangent.c
   intern/dynamicpaint.c
   intern/editlattice.c
@@ -131,8 +144,8 @@ set(SRC
   intern/fcurve_driver.c
   intern/fluid.c
   intern/fmodifier.c
-  intern/font.c
   intern/freestyle.c
+  intern/geometry_component_curve.cc
   intern/geometry_component_instances.cc
   intern/geometry_component_mesh.cc
   intern/geometry_component_pointcloud.cc
@@ -141,17 +154,20 @@ set(SRC
   intern/geometry_set_instances.cc
   intern/gpencil.c
   intern/gpencil_curve.c
-  intern/gpencil_geom.c
+  intern/gpencil_geom.cc
   intern/gpencil_modifier.c
-  intern/hair.c
+  intern/hair.cc
   intern/icons.cc
   intern/icons_rasterize.c
   intern/idprop.c
+  intern/idprop_create.cc
+  intern/idprop_serialize.cc
   intern/idprop_utils.c
   intern/idtype.c
   intern/image.c
+  intern/image_partial_update.cc
   intern/image_gen.c
-  intern/image_gpu.c
+  intern/image_gpu.cc
   intern/image_save.c
   intern/ipo.c
   intern/kelvinlet.c
@@ -163,6 +179,8 @@ set(SRC
   intern/layer_utils.c
   intern/lib_id.c
   intern/lib_id_delete.c
+  intern/lib_id_eval.c
+  intern/lib_id_remapper.cc
   intern/lib_override.c
   intern/lib_query.c
   intern/lib_remap.c
@@ -178,19 +196,23 @@ set(SRC
   intern/material.c
   intern/mball.c
   intern/mball_tessellate.c
-  intern/mesh.c
+  intern/mesh.cc
   intern/mesh_boolean_convert.cc
-  intern/mesh_convert.c
-  intern/mesh_evaluate.c
+  intern/mesh_convert.cc
+  intern/mesh_debug.cc
+  intern/mesh_evaluate.cc
   intern/mesh_fair.cc
   intern/mesh_iterators.c
   intern/mesh_mapping.c
   intern/mesh_merge.c
   intern/mesh_mirror.c
+  intern/mesh_normals.cc
   intern/mesh_remap.c
-  intern/mesh_remesh_voxel.c
+  intern/mesh_remesh_voxel.cc
   intern/mesh_runtime.c
+  intern/mesh_sample.cc
   intern/mesh_tangent.c
+  intern/mesh_tessellate.c
   intern/mesh_validate.c
   intern/mesh_validate.cc
   intern/mesh_wrapper.c
@@ -209,8 +231,8 @@ set(SRC
   intern/multires_versioning.c
   intern/nla.c
   intern/node.cc
-  intern/node_ui_storage.cc
-  intern/object.c
+  intern/node_tree_update.cc
+  intern/object.cc
   intern/object_deform.c
   intern/object_dupli.cc
   intern/object_facemap.c
@@ -240,6 +262,10 @@ set(SRC
   intern/softbody.c
   intern/sound.c
   intern/speaker.c
+  intern/spline_base.cc
+  intern/spline_bezier.cc
+  intern/spline_nurbs.cc
+  intern/spline_poly.cc
   intern/studiolight.c
   intern/subdiv.c
   intern/subdiv_ccg.c
@@ -253,6 +279,7 @@ set(SRC
   intern/subdiv_eval.c
   intern/subdiv_foreach.c
   intern/subdiv_mesh.c
+  intern/subdiv_modifier.c
   intern/subdiv_stats.c
   intern/subdiv_topology.c
   intern/subsurf_ccg.c
@@ -267,8 +294,11 @@ set(SRC
   intern/tracking_solver.c
   intern/tracking_stabilize.c
   intern/tracking_util.c
+  intern/type_conversions.cc
   intern/undo_system.c
   intern/unit.c
+  intern/vfont.c
+  intern/vfontdata_freetype.c
   intern/volume.cc
   intern/volume_render.cc
   intern/volume_to_mesh.cc
@@ -278,14 +308,22 @@ set(SRC
 
   BKE_DerivedMesh.h
   BKE_action.h
+  BKE_action.hh
   BKE_addon.h
   BKE_anim_data.h
   BKE_anim_path.h
   BKE_anim_visualization.h
   BKE_animsys.h
+  BKE_anonymous_attribute.h
+  BKE_anonymous_attribute.hh
   BKE_appdir.h
   BKE_armature.h
+  BKE_armature.hh
   BKE_asset.h
+  BKE_asset_catalog.hh
+  BKE_asset_catalog_path.hh
+  BKE_asset_library.h
+  BKE_asset_library.hh
   BKE_attribute.h
   BKE_attribute_access.hh
   BKE_attribute_math.hh
@@ -296,6 +334,7 @@ set(SRC
   BKE_blender_user_menu.h
   BKE_blender_version.h
   BKE_blendfile.h
+  BKE_blendfile_link_append.h
   BKE_boids.h
   BKE_bpath.h
   BKE_brush.h
@@ -316,6 +355,7 @@ set(SRC
   BKE_cryptomatte.h
   BKE_cryptomatte.hh
   BKE_curve.h
+  BKE_curve_to_mesh.hh
   BKE_curveprofile.h
   BKE_customdata.h
   BKE_customdata_file.h
@@ -334,7 +374,6 @@ set(SRC
   BKE_fcurve.h
   BKE_fcurve_driver.h
   BKE_fluid.h
-  BKE_font.h
   BKE_freestyle.h
   BKE_geometry_set.h
   BKE_geometry_set.hh
@@ -347,6 +386,7 @@ set(SRC
   BKE_hair.h
   BKE_icons.h
   BKE_idprop.h
+  BKE_idprop.hh
   BKE_idtype.h
   BKE_image.h
   BKE_image_save.h
@@ -379,6 +419,7 @@ set(SRC
   BKE_mesh_remap.h
   BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
+  BKE_mesh_sample.hh
   BKE_mesh_tangent.h
   BKE_mesh_types.h
   BKE_mesh_wrapper.h
@@ -387,7 +428,7 @@ set(SRC
   BKE_multires.h
   BKE_nla.h
   BKE_node.h
-  BKE_node_ui_storage.hh
+  BKE_node_tree_update.h
   BKE_object.h
   BKE_object_deform.h
   BKE_object_facemap.h
@@ -397,7 +438,6 @@ set(SRC
   BKE_paint.h
   BKE_particle.h
   BKE_pbvh.h
-  BKE_persistent_data_handle.hh
   BKE_pointcache.h
   BKE_pointcloud.h
   BKE_preferences.h
@@ -412,6 +452,7 @@ set(SRC
   BKE_softbody.h
   BKE_sound.h
   BKE_speaker.h
+  BKE_spline.hh
   BKE_studiolight.h
   BKE_subdiv.h
   BKE_subdiv_ccg.h
@@ -419,14 +460,18 @@ set(SRC
   BKE_subdiv_eval.h
   BKE_subdiv_foreach.h
   BKE_subdiv_mesh.h
+  BKE_subdiv_modifier.h
   BKE_subdiv_topology.h
   BKE_subsurf.h
   BKE_text.h
   BKE_text_suggestions.h
   BKE_texture.h
   BKE_tracking.h
+  BKE_type_conversions.hh
   BKE_undo_system.h
   BKE_unit.h
+  BKE_vfont.h
+  BKE_vfontdata.h
   BKE_volume.h
   BKE_volume_render.h
   BKE_volume_to_mesh.hh
@@ -440,6 +485,7 @@ set(SRC
   intern/CCGSubSurf.h
   intern/CCGSubSurf_inline.h
   intern/CCGSubSurf_intern.h
+  intern/asset_library_service.hh
   intern/attribute_access_intern.hh
   intern/data_transfer_intern.h
   intern/lib_intern.h
@@ -476,6 +522,9 @@ set(LIB
   bf_rna
   bf_shader_fx
   bf_simulation
+
+  # For `vfontdata_freetype.c`.
+  ${FREETYPE_LIBRARIES} ${BROTLI_LIBRARIES}
 )
 
 if(WITH_BINRELOC)
@@ -685,6 +734,13 @@ if(WITH_ALEMBIC)
   add_definitions(-DWITH_ALEMBIC)
 endif()
 
+if(WITH_USD)
+  list(APPEND INC
+    ../io/usd
+  )
+  add_definitions(-DWITH_USD)
+endif()
+
 if(WITH_OPENSUBDIV)
   list(APPEND INC_SYS
     ${OPENSUBDIV_INCLUDE_DIRS}
@@ -756,11 +812,23 @@ add_dependencies(bf_blenkernel bf_dna)
 
 if(WITH_GTESTS)
   set(TEST_SRC
+    intern/action_test.cc
     intern/armature_test.cc
+    intern/asset_catalog_path_test.cc
+    intern/asset_catalog_test.cc
+    intern/asset_library_service_test.cc
+    intern/asset_library_test.cc
+    intern/asset_test.cc
+    intern/bpath_test.cc
     intern/cryptomatte_test.cc
     intern/fcurve_test.cc
+    intern/idprop_serialize_test.cc
+    intern/image_partial_update_test.cc
     intern/lattice_deform_test.cc
     intern/layer_test.cc
+    intern/lib_id_remapper_test.cc
+    intern/lib_id_test.cc
+    intern/lib_remap_test.cc
     intern/tracking_test.cc
   )
   set(TEST_INC

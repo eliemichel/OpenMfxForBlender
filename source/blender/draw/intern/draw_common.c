@@ -41,7 +41,9 @@
 #define UI_COLOR_RGBA_FROM_U8(r, g, b, a, v4) \
   ARRAY_SET_ITEMS(v4, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, (float)a / 255.0f)
 
-/* Colors & Constant */
+/**
+ * Colors & Constant.
+ */
 struct DRW_Global G_draw = {{{0}}};
 
 static bool weight_ramp_custom = false;
@@ -100,11 +102,6 @@ void DRW_globals_update(void)
   copy_v3_fl(
       gb->colorEditMeshMiddle,
       dot_v3v3(gb->colorEditMeshMiddle, (float[3]){0.3333f, 0.3333f, 0.3333f})); /* Desaturate */
-
-  interp_v4_v4v4(gb->colorDupliSelect, gb->colorBackground, gb->colorSelect, 0.5f);
-  /* Was 50% in 2.7x since the background was lighter making it easier to tell the color from
-   * black, with a darker background we need a more faded color. */
-  interp_v4_v4v4(gb->colorDupli, gb->colorBackground, gb->colorWire, 0.3f);
 
 #ifdef WITH_FREESTYLE
   UI_GetThemeColor4fv(TH_FREESTYLE_EDGE_MARK, gb->colorEdgeFreestyle);
@@ -192,7 +189,7 @@ void DRW_globals_update(void)
                    (max_ff(1.0f, UI_GetThemeValuef(TH_VERTEX_SIZE) * (float)M_SQRT2 / 2.0f));
   gb->sizeVertexGpencil = U.pixelsize * UI_GetThemeValuef(TH_GP_VERTEX_SIZE);
   gb->sizeFaceDot = U.pixelsize * UI_GetThemeValuef(TH_FACEDOT_SIZE);
-  gb->sizeEdge = U.pixelsize * (1.0f / 2.0f); /* TODO Theme */
+  gb->sizeEdge = U.pixelsize * (1.0f / 2.0f); /* TODO: Theme. */
   gb->sizeEdgeFix = U.pixelsize * (0.5f + 2.0f * (2.0f * (gb->sizeEdge * (float)M_SQRT1_2)));
 
   const float(*screen_vecs)[3] = (float(*)[3])DRW_viewport_screenvecs_get();
@@ -210,7 +207,7 @@ void DRW_globals_update(void)
   {
     float *color = gb->UBO_FIRST_COLOR;
     do {
-      /* TODO more accurate transform. */
+      /* TODO: more accurate transform. */
       srgb_to_linearrgb_v4(color, color);
       color += 4;
     } while (color <= gb->UBO_LAST_COLOR);
@@ -291,20 +288,20 @@ DRWView *DRW_view_create_with_zoffset(const DRWView *parent_view,
 
 /* ******************************************** COLOR UTILS ************************************ */
 
-/* TODO FINISH */
-/**
- * Get the wire color theme_id of an object based on its state
- * \a r_color is a way to get a pointer to the static color var associated
- */
+/* TODO: FINISH. */
 int DRW_object_wire_theme_get(Object *ob, ViewLayer *view_layer, float **r_color)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool is_edit = (draw_ctx->object_mode & OB_MODE_EDIT) && (ob->mode & OB_MODE_EDIT);
-  const bool active = (view_layer->basact && view_layer->basact->object == ob);
+  const bool active = view_layer->basact &&
+                      ((ob->base_flag & BASE_FROM_DUPLI) ?
+                           (DRW_object_get_dupli_parent(ob) == view_layer->basact->object) :
+                           (view_layer->basact->object == ob));
+
   /* confusing logic here, there are 2 methods of setting the color
    * 'colortab[colindex]' and 'theme_id', colindex overrides theme_id.
    *
-   * note: no theme yet for 'colindex' */
+   * NOTE: no theme yet for 'colindex'. */
   int theme_id = is_edit ? TH_WIRE_EDIT : TH_WIRE;
 
   if (is_edit) {
@@ -345,21 +342,7 @@ int DRW_object_wire_theme_get(Object *ob, ViewLayer *view_layer, float **r_color
 
   if (r_color != NULL) {
     if (UNLIKELY(ob->base_flag & BASE_FROM_SET)) {
-      *r_color = G_draw.block.colorDupli;
-    }
-    else if (UNLIKELY(ob->base_flag & BASE_FROM_DUPLI)) {
-      switch (theme_id) {
-        case TH_ACTIVE:
-        case TH_SELECT:
-          *r_color = G_draw.block.colorDupliSelect;
-          break;
-        case TH_TRANSFORM:
-          *r_color = G_draw.block.colorTransform;
-          break;
-        default:
-          *r_color = G_draw.block.colorDupli;
-          break;
-      }
+      *r_color = G_draw.block.colorWire;
     }
     else {
       switch (theme_id) {

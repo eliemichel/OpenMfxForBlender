@@ -51,11 +51,11 @@
 /* Z-depth of cleared depth buffer */
 #define DEPTH_MAX 0xffffffff
 
-/* ----------------------------------------------------------------------------
- * SubRectStride
- */
+/* -------------------------------------------------------------------- */
+/** \name #SubRectStride
+ * \{ */
 
-/* For looping over a sub-region of a rect, could be moved into 'rct.c'*/
+/* For looping over a sub-region of a rect, could be moved into 'rct.c'. */
 typedef struct SubRectStride {
   uint start;    /* start here */
   uint span;     /* read these */
@@ -99,14 +99,16 @@ BLI_INLINE bool depth_is_filled(const depth_t *prev, const depth_t *curr)
   return (*prev != *curr) && (*curr != DEPTH_MAX);
 }
 
-/* ----------------------------------------------------------------------------
- * DepthBufCache
- *
- * Result of reading glReadPixels,
- * use for both cache and non-cached storage.
- */
+/** \} */
 
-/* store result of glReadPixels */
+/* -------------------------------------------------------------------- */
+/** \name #DepthBufCache
+ *
+ * Result of reading #glReadPixels,
+ * use for both cache and non-cached storage.
+ * \{ */
+
+/** Store result of #glReadPixels. */
 typedef struct DepthBufCache {
   struct DepthBufCache *next, *prev;
   uint id;
@@ -188,11 +190,13 @@ static bool depth_buf_subrect_depth_any_filled(const DepthBufCache *rect_src,
   return false;
 }
 
-/* ----------------------------------------------------------------------------
- * DepthID
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name #DepthID
  *
  * Internal structure for storing hits.
- */
+ * \{ */
 
 typedef struct DepthID {
   uint id;
@@ -225,12 +229,18 @@ static int depth_cmp(const void *v1, const void *v2)
   return 0;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Main Selection Begin/End/Load API
+ * \{ */
+
 /* depth sorting */
 typedef struct GPUPickState {
   /* cache on initialization */
   uint (*buffer)[4];
 
-  /* buffer size (stores number of integers, for actual size multiply by sizeof integer)*/
+  /* Buffer size (stores number of integers, for actual size multiply by sizeof integer). */
   uint bufsize;
   /* mode of operation */
   char mode;
@@ -484,7 +494,7 @@ bool gpu_select_pick_load_id(uint id, bool end)
     GPUFrameBuffer *fb = GPU_framebuffer_active_get();
     GPU_framebuffer_read_depth(
         fb, UNPACK4(ps->gl.clip_readpixels), GPU_DATA_UINT, ps->gl.rect_depth_test->buf);
-    /* perform initial check since most cases the array remains unchanged  */
+    /* Perform initial check since most cases the array remains unchanged. */
 
     bool do_pass = false;
     if (g_pick_state.mode == GPU_SELECT_PICK_ALL) {
@@ -663,7 +673,7 @@ uint gpu_select_pick_end(void)
 #endif
       /* first 3 are dummy values */
       g_pick_state.buffer[hits][0] = 1;
-      g_pick_state.buffer[hits][1] = 0x0; /* depth_data[i].depth; */ /* unused */
+      g_pick_state.buffer[hits][1] = depth_data[i].depth;
       g_pick_state.buffer[hits][2] = 0x0; /* z-far is currently never used. */
       g_pick_state.buffer[hits][3] = depth_data[i].id;
       hits++;
@@ -691,11 +701,13 @@ uint gpu_select_pick_end(void)
   return hits;
 }
 
-/* ----------------------------------------------------------------------------
- * Caching
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Caching
  *
  * Support multiple begin/end's reusing depth buffers.
- */
+ * \{ */
 
 void gpu_select_pick_cache_begin(void)
 {
@@ -718,7 +730,6 @@ void gpu_select_pick_cache_end(void)
   BLI_freelistN(&g_pick_state.cache.bufs);
 }
 
-/* is drawing needed? */
 bool gpu_select_pick_is_cached(void)
 {
   return g_pick_state.is_cached;
@@ -749,3 +760,5 @@ void gpu_select_pick_cache_load_id(void)
     }
   }
 }
+
+/** \} */

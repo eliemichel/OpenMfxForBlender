@@ -24,6 +24,8 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
+#include "BLI_math_color.h"
+
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
@@ -101,14 +103,21 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
 /* -------------------------------------------------------------------- */
 /* Utility Functions
  */
+
 /** \name Generic Shared Functions
  * \{ */
+
 static void eyedropper_draw_cursor_text_ex(const int x, const int y, const char *name)
 {
   const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
 
-  const float col_fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-  const float col_bg[4] = {0.0f, 0.0f, 0.0f, 0.2f};
+  /* Use the theme settings from tooltips. */
+  const bTheme *btheme = UI_GetTheme();
+  const uiWidgetColors *wcol = &btheme->tui.wcol_tooltip;
+
+  float col_fg[4], col_bg[4];
+  rgba_uchar_to_float(col_fg, wcol->text);
+  rgba_uchar_to_float(col_bg, wcol->inner);
 
   UI_fontstyle_draw_simple_backdrop(fstyle, x, y + U.widget_unit, name, col_fg, col_bg);
 }
@@ -119,46 +128,26 @@ void eyedropper_draw_cursor_text_window(const struct wmWindow *window, const cha
     return;
   }
 
-  const int x = window->eventstate->x;
-  const int y = window->eventstate->y;
+  const int x = window->eventstate->xy[0];
+  const int y = window->eventstate->xy[1];
 
   eyedropper_draw_cursor_text_ex(x, y, name);
 }
 
-void eyedropper_draw_cursor_text_region(const struct bContext *C,
-                                        const ARegion *region,
-                                        const char *name)
+void eyedropper_draw_cursor_text_region(const int x, const int y, const char *name)
 {
-  wmWindow *win = CTX_wm_window(C);
-  const int x = win->eventstate->x;
-  const int y = win->eventstate->y;
-
-  if ((name[0] == '\0') || (BLI_rcti_isect_pt(&region->winrct, x, y) == false)) {
+  if (name[0] == '\0') {
     return;
   }
 
-  const int mval[2] = {
-    x - region->winrct.xmin,
-    y - region->winrct.ymin,
-  };
-
-  eyedropper_draw_cursor_text_ex(mval[0], mval[1], name);
+  eyedropper_draw_cursor_text_ex(x, y, name);
 }
 
-/**
- * Utility to retrieve a button representing a RNA property that is currently under the cursor.
- *
- * This is to be used by any eyedroppers which fetch properties (e.g. UI_OT_eyedropper_driver).
- * Especially during modal operations (e.g. as with the eyedroppers), context cannot be relied
- * upon to provide this information, as it is not updated until the operator finishes.
- *
- * \return A button under the mouse which relates to some RNA Property, or NULL
- */
 uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *event)
 {
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
-  const ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->x, event->y);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->xy);
+  const ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->xy);
 
   uiBut *but = ui_but_find_mouse_over(region, event);
 
@@ -166,6 +155,26 @@ uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *ev
     return NULL;
   }
   return but;
+}
+
+void datadropper_win_area_find(
+    const bContext *C, const int mval[2], int r_mval[2], wmWindow **r_win, ScrArea **r_area)
+{
+  bScreen *screen = CTX_wm_screen(C);
+
+  *r_win = CTX_wm_window(C);
+  *r_area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mval);
+  if (*r_area == NULL) {
+    *r_win = WM_window_find_under_cursor(*r_win, mval, r_mval);
+    if (*r_win) {
+      screen = WM_window_get_active_screen(*r_win);
+      *r_area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, r_mval);
+    }
+  }
+  else if (mval != r_mval) {
+    r_mval[0] = mval[0];
+    r_mval[1] = mval[1];
+  }
 }
 
 /** \} */

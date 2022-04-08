@@ -11,15 +11,17 @@ import queue
 
 execution_queue = queue.Queue()
 
-# This function can savely be called in another thread.
+# This function can safely be called in another thread.
 # The function will be executed when the timer runs the next time.
 def run_in_main_thread(function):
     execution_queue.put(function)
+
 
 def execute_queued_functions():
     while not execution_queue.empty():
         function = execution_queue.get()
         function()
     return 1.0
+
 
 bpy.app.timers.register(execute_queued_functions)

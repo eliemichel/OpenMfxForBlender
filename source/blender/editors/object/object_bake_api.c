@@ -89,6 +89,7 @@ typedef struct BakeAPIRender {
   eScenePassType pass_type;
   int pass_filter;
   int margin;
+  eBakeMarginType margin_type;
 
   bool is_clear;
   bool is_selected_to_active;
@@ -158,7 +159,7 @@ static int bake_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 
 /**
  * for exec() when there is no render job
- * note: this wont check for the escape key being pressed, but doing so isn't thread-safe.
+ * NOTE: this won't check for the escape key being pressed, but doing so isn't thread-safe.
  */
 static int bake_break(void *UNUSED(rjv))
 {
@@ -184,8 +185,11 @@ static bool write_internal_bake_pixels(Image *image,
                                        const int width,
                                        const int height,
                                        const int margin,
+                                       const char margin_type,
                                        const bool is_clear,
-                                       const bool is_noncolor)
+                                       const bool is_noncolor,
+                                       Mesh const *mesh_eval,
+                                       char const *uv_layer)
 {
   ImBuf *ibuf;
   void *lock;
@@ -281,7 +285,7 @@ static bool write_internal_bake_pixels(Image *image,
 
   /* margins */
   if (margin > 0) {
-    RE_bake_margin(ibuf, mask_buffer, margin);
+    RE_bake_margin(ibuf, mask_buffer, margin, margin_type, mesh_eval, uv_layer);
   }
 
   ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
@@ -313,12 +317,10 @@ static void bake_targets_refresh(BakeTargets *targets)
     Image *ima = targets->images[i].image;
 
     if (ima) {
+      BKE_image_partial_update_mark_full_update(ima);
       LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
-        if (tile->ok == IMA_OK_LOADED) {
-          BKE_image_free_gputextures(ima);
-          DEG_id_tag_update(&ima->id, 0);
-          break;
-        }
+        BKE_image_free_gputextures(ima);
+        DEG_id_tag_update(&ima->id, 0);
       }
     }
   }
@@ -330,8 +332,11 @@ static bool write_external_bake_pixels(const char *filepath,
                                        const int width,
                                        const int height,
                                        const int margin,
+                                       const int margin_type,
                                        ImageFormatData *im_format,
-                                       const bool is_noncolor)
+                                       const bool is_noncolor,
+                                       Mesh const *mesh_eval,
+                                       char const *uv_layer)
 {
   ImBuf *ibuf = NULL;
   bool ok = false;
@@ -388,7 +393,7 @@ static bool write_external_bake_pixels(const char *filepath,
 
     mask_buffer = MEM_callocN(sizeof(char) * num_pixels, "Bake Mask");
     RE_bake_mask_fill(pixel_array, num_pixels, mask_buffer);
-    RE_bake_margin(ibuf, mask_buffer, margin);
+    RE_bake_margin(ibuf, mask_buffer, margin, margin_type, mesh_eval, uv_layer);
 
     if (mask_buffer) {
       MEM_freeN(mask_buffer);
@@ -412,11 +417,11 @@ static bool is_noncolor_pass(eScenePassType pass_type)
 {
   return ELEM(pass_type,
               SCE_PASS_Z,
+              SCE_PASS_POSITION,
               SCE_PASS_NORMAL,
               SCE_PASS_VECTOR,
               SCE_PASS_INDEXOB,
               SCE_PASS_UV,
-              SCE_PASS_RAYHITS,
               SCE_PASS_INDEXMA);
 }
 
@@ -555,19 +560,10 @@ static bool bake_pass_filter_check(eScenePassType pass_type,
           return true;
         }
 
-        if ((pass_filter & R_BAKE_PASS_FILTER_AO) != 0) {
-          BKE_report(
-              reports,
-              RPT_ERROR,
-              "Combined bake pass Ambient Occlusion contribution requires an enabled light pass "
-              "(bake the Ambient Occlusion pass type instead)");
-        }
-        else {
-          BKE_report(reports,
-                     RPT_ERROR,
-                     "Combined bake pass requires Emit, or a light pass with "
-                     "Direct or Indirect contributions enabled");
-        }
+        BKE_report(reports,
+                   RPT_ERROR,
+                   "Combined bake pass requires Emit, or a light pass with "
+                   "Direct or Indirect contributions enabled");
 
         return false;
       }
@@ -706,7 +702,7 @@ static bool bake_targets_init_image_textures(const BakeAPIRender *bkr,
     }
   }
 
-  /* Overallocate in case there is more materials than images. */
+  /* Over-allocate in case there is more materials than images. */
   targets->num_materials = num_materials;
   targets->images = MEM_callocN(sizeof(BakeImage) * targets->num_materials, "BakeTargets.images");
   targets->material_to_image = MEM_callocN(sizeof(int) * targets->num_materials,
@@ -779,7 +775,8 @@ static bool bake_targets_output_internal(const BakeAPIRender *bkr,
                                          BakeTargets *targets,
                                          Object *ob,
                                          BakePixel *pixel_array,
-                                         ReportList *reports)
+                                         ReportList *reports,
+                                         Mesh *mesh_eval)
 {
   bool all_ok = true;
 
@@ -792,8 +789,11 @@ static bool bake_targets_output_internal(const BakeAPIRender *bkr,
                                                bk_image->width,
                                                bk_image->height,
                                                bkr->margin,
+                                               bkr->margin_type,
                                                bkr->is_clear,
-                                               targets->is_noncolor);
+                                               targets->is_noncolor,
+                                               mesh_eval,
+                                               bkr->uv_layer);
 
     /* might be read by UI to set active image for display */
     bake_update_image(bkr->area, bk_image->image);
@@ -853,7 +853,7 @@ static bool bake_targets_output_external(const BakeAPIRender *bkr,
                                          BakeTargets *targets,
                                          Object *ob,
                                          Object *ob_eval,
-                                         Mesh *me,
+                                         Mesh *mesh_eval,
                                          BakePixel *pixel_array,
                                          ReportList *reports)
 {
@@ -887,8 +887,8 @@ static bool bake_targets_output_external(const BakeAPIRender *bkr,
         if (ob_eval->mat[i]) {
           BLI_path_suffix(name, FILE_MAX, ob_eval->mat[i]->id.name + 2, "_");
         }
-        else if (me->mat[i]) {
-          BLI_path_suffix(name, FILE_MAX, me->mat[i]->id.name + 2, "_");
+        else if (mesh_eval->mat[i]) {
+          BLI_path_suffix(name, FILE_MAX, mesh_eval->mat[i]->id.name + 2, "_");
         }
         else {
           /* if everything else fails, use the material index */
@@ -907,8 +907,11 @@ static bool bake_targets_output_external(const BakeAPIRender *bkr,
                                                bk_image->width,
                                                bk_image->height,
                                                bkr->margin,
+                                               bkr->margin_type,
                                                &bake->im_format,
-                                               targets->is_noncolor);
+                                               targets->is_noncolor,
+                                               mesh_eval,
+                                               bkr->uv_layer);
 
     if (!ok) {
       BKE_reportf(reports, RPT_ERROR, "Problem saving baked map in \"%s\"", name);
@@ -1052,19 +1055,18 @@ static void bake_targets_populate_pixels_vertex_colors(BakeTargets *targets,
        * materials and UVs. */
       pixel->seed = v;
 
-      /* Barycentric coordinates, nudged a bit to avoid precision issues that
-       * may happen when exactly at the vertex coordinate. */
+      /* Barycentric coordinates. */
       if (j == 0) {
-        pixel->uv[0] = 1.0f - FLT_EPSILON;
-        pixel->uv[1] = FLT_EPSILON / 2.0f;
+        pixel->uv[0] = 1.0f;
+        pixel->uv[1] = 0.0f;
       }
       else if (j == 1) {
-        pixel->uv[0] = FLT_EPSILON / 2.0f;
-        pixel->uv[1] = 1.0f - FLT_EPSILON;
+        pixel->uv[0] = 0.0f;
+        pixel->uv[1] = 1.0f;
       }
       else if (j == 2) {
-        pixel->uv[0] = FLT_EPSILON / 2.0f;
-        pixel->uv[1] = FLT_EPSILON / 2.0f;
+        pixel->uv[0] = 0.0f;
+        pixel->uv[1] = 0.0f;
       }
     }
   }
@@ -1209,7 +1211,7 @@ static bool bake_targets_output(const BakeAPIRender *bkr,
 {
   if (bkr->target == R_BAKE_TARGET_IMAGE_TEXTURES) {
     if (bkr->save_mode == R_BAKE_SAVE_INTERNAL) {
-      return bake_targets_output_internal(bkr, targets, ob, pixel_array, reports);
+      return bake_targets_output_internal(bkr, targets, ob, pixel_array, reports, me_eval);
     }
     if (bkr->save_mode == R_BAKE_SAVE_EXTERNAL) {
       return bake_targets_output_external(
@@ -1312,7 +1314,7 @@ static int bake(const BakeAPIRender *bkr,
       }
       else {
         ob_cage_eval = DEG_get_evaluated_object(depsgraph, ob_cage);
-        ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
+        ob_cage_eval->visibility_flag |= OB_HIDE_RENDER;
         ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
       }
     }
@@ -1374,7 +1376,7 @@ static int bake(const BakeAPIRender *bkr,
          * the cage is supposed to have interpolated normals
          * between the faces unless the geometry is physically
          * split. So we create a copy of the low poly mesh without
-         * the eventual edge split.*/
+         * the eventual edge split. */
 
         if (md->type == eModifierType_EdgeSplit) {
           BLI_remlink(&ob_low_eval->modifiers, md);
@@ -1412,7 +1414,7 @@ static int bake(const BakeAPIRender *bkr,
       /* initialize highpoly_data */
       highpoly[i].ob = ob_iter;
       highpoly[i].ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
-      highpoly[i].ob_eval->restrictflag &= ~OB_RESTRICT_RENDER;
+      highpoly[i].ob_eval->visibility_flag &= ~OB_HIDE_RENDER;
       highpoly[i].ob_eval->base_flag |= (BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
       highpoly[i].me = BKE_mesh_new_from_object(NULL, highpoly[i].ob_eval, false, false);
 
@@ -1428,10 +1430,10 @@ static int bake(const BakeAPIRender *bkr,
     BLI_assert(i == tot_highpoly);
 
     if (ob_cage != NULL) {
-      ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
+      ob_cage_eval->visibility_flag |= OB_HIDE_RENDER;
       ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
     }
-    ob_low_eval->restrictflag |= OB_RESTRICT_RENDER;
+    ob_low_eval->visibility_flag |= OB_HIDE_RENDER;
     ob_low_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
 
     /* populate the pixel arrays with the corresponding face data for each high poly object */
@@ -1474,7 +1476,7 @@ static int bake(const BakeAPIRender *bkr,
   }
   else {
     /* If low poly is not renderable it should have failed long ago. */
-    BLI_assert((ob_low_eval->restrictflag & OB_RESTRICT_RENDER) == 0);
+    BLI_assert((ob_low_eval->visibility_flag & OB_HIDE_RENDER) == 0);
 
     if (RE_bake_has_engine(re)) {
       ok = RE_bake_engine(re,
@@ -1541,22 +1543,22 @@ static int bake(const BakeAPIRender *bkr,
           if (md) {
             mode = md->mode;
             md->mode &= ~eModifierMode_Render;
-          }
 
-          /* Evaluate modifiers again. */
-          me_nores = BKE_mesh_new_from_object(NULL, ob_low_eval, false, false);
-          bake_targets_populate_pixels(bkr, &targets, ob_low, me_nores, pixel_array_low);
+            /* Evaluate modifiers again. */
+            me_nores = BKE_mesh_new_from_object(NULL, ob_low_eval, false, false);
+            bake_targets_populate_pixels(bkr, &targets, ob_low, me_nores, pixel_array_low);
+          }
 
           RE_bake_normal_world_to_tangent(pixel_array_low,
                                           targets.num_pixels,
                                           targets.num_channels,
                                           targets.result,
-                                          me_nores,
+                                          (me_nores) ? me_nores : me_low_eval,
                                           bkr->normal_swizzle,
                                           ob_low_eval->obmat);
-          BKE_id_free(NULL, &me_nores->id);
 
           if (md) {
+            BKE_id_free(NULL, &me_nores->id);
             md->mode = mode;
           }
         }
@@ -1637,6 +1639,7 @@ static void bake_init_api_data(wmOperator *op, bContext *C, BakeAPIRender *bkr)
   bkr->pass_type = RNA_enum_get(op->ptr, "type");
   bkr->pass_filter = RNA_enum_get(op->ptr, "pass_filter");
   bkr->margin = RNA_int_get(op->ptr, "margin");
+  bkr->margin_type = RNA_enum_get(op->ptr, "margin_type");
 
   bkr->save_mode = (eBakeSaveMode)RNA_enum_get(op->ptr, "save_mode");
   bkr->target = (eBakeTarget)RNA_enum_get(op->ptr, "target");
@@ -1830,6 +1833,11 @@ static void bake_set_props(wmOperator *op, Scene *scene)
     RNA_property_int_set(op->ptr, prop, bake->margin);
   }
 
+  prop = RNA_struct_find_property(op->ptr, "margin_type");
+  if (!RNA_property_is_set(op->ptr, prop)) {
+    RNA_property_enum_set(op->ptr, prop, bake->margin_type);
+  }
+
   prop = RNA_struct_find_property(op->ptr, "use_selected_to_active");
   if (!RNA_property_is_set(op->ptr, prop)) {
     RNA_property_boolean_set(op->ptr, prop, (bake->flag & R_BAKE_TO_ACTIVE) != 0);
@@ -1939,7 +1947,7 @@ static int bake_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
                        WM_JOB_EXCL_RENDER | WM_JOB_PRIORITY | WM_JOB_PROGRESS,
                        WM_JOB_TYPE_OBJECT_BAKE);
   WM_jobs_customdata_set(wm_job, bkr, bake_freejob);
-  /* TODO - only draw bake image, can we enforce this */
+  /* TODO: only draw bake image, can we enforce this. */
   WM_jobs_timer(
       wm_job, 0.5, (bkr->target == R_BAKE_TARGET_VERTEX_COLORS) ? NC_GEOM | ND_DATA : NC_IMAGE, 0);
   WM_jobs_callbacks(wm_job, bake_startjob, NULL, NULL, NULL);
@@ -2020,6 +2028,12 @@ void OBJECT_OT_bake(wmOperatorType *ot)
               "Extends the baked result as a post process filter",
               0,
               64);
+  RNA_def_enum(ot->srna,
+               "margin_type",
+               rna_enum_bake_margin_type_items,
+               R_BAKE_EXTEND,
+               "Margin Type",
+               "Which algorithm to use to generate the margin");
   RNA_def_boolean(ot->srna,
                   "use_selected_to_active",
                   false,

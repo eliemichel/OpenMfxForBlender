@@ -41,8 +41,9 @@
 
 static void metaball_batch_cache_clear(MetaBall *mb);
 
-/* ---------------------------------------------------------------------- */
-/* MetaBall GPUBatch Cache */
+/* -------------------------------------------------------------------- */
+/** \name MetaBall GPUBatch Cache
+ * \{ */
 
 typedef struct MetaBallBatchCache {
   GPUBatch *batch;
@@ -140,7 +141,7 @@ static void metaball_batch_cache_clear(MetaBall *mb)
   GPU_BATCH_DISCARD_SAFE(cache->edge_detection);
   GPU_VERTBUF_DISCARD_SAFE(cache->pos_nor_in_order);
   GPU_INDEXBUF_DISCARD_SAFE(cache->edges_adj_lines);
-  /* Note: shaded_triangles[0] is already freed by cache->batch */
+  /* NOTE: shaded_triangles[0] is already freed by `cache->batch`. */
   MEM_SAFE_FREE(cache->shaded_triangles);
   cache->mat_len = 0;
   cache->is_manifold = false;
@@ -174,6 +175,8 @@ static GPUIndexBuf *mball_batch_cache_get_edges_adj_lines(Object *ob, MetaBallBa
   }
   return cache->edges_adj_lines;
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Public Object/MetaBall API
@@ -303,3 +306,5 @@ int DRW_metaball_material_count_get(MetaBall *mb)
 {
   return max_ii(1, mb->totcol);
 }
+
+/** \} */

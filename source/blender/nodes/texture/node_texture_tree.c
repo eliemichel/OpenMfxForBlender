@@ -50,6 +50,8 @@
 
 #include "RE_texture.h"
 
+#include "UI_resources.h"
+
 static void texture_get_from_context(const bContext *C,
                                      bNodeTreeType *UNUSED(treetype),
                                      bNodeTree **r_ntree,
@@ -101,7 +103,7 @@ static void foreach_nodeclass(Scene *UNUSED(scene), void *calldata, bNodeClassCa
   func(calldata, NODE_CLASS_OP_COLOR, N_("Color"));
   func(calldata, NODE_CLASS_PATTERN, N_("Patterns"));
   func(calldata, NODE_CLASS_TEXTURE, N_("Textures"));
-  func(calldata, NODE_CLASS_CONVERTOR, N_("Convertor"));
+  func(calldata, NODE_CLASS_CONVERTER, N_("Converter"));
   func(calldata, NODE_CLASS_DISTORT, N_("Distort"));
   func(calldata, NODE_CLASS_GROUP, N_("Group"));
   func(calldata, NODE_CLASS_INTERFACE, N_("Interface"));
@@ -132,24 +134,16 @@ static void localize(bNodeTree *UNUSED(localtree), bNodeTree *UNUSED(ntree))
 }
 #endif
 
-static void local_sync(bNodeTree *localtree, bNodeTree *ntree)
-{
-  BKE_node_preview_sync_tree(ntree, localtree);
-}
-
-static void local_merge(Main *UNUSED(bmain), bNodeTree *localtree, bNodeTree *ntree)
-{
-  BKE_node_preview_merge_tree(ntree, localtree, true);
-}
-
 static void update(bNodeTree *ntree)
 {
   ntree_update_reroute_nodes(ntree);
+}
 
-  if (ntree->update & NTREE_UPDATE_NODES) {
-    /* clean up preview cache, in case nodes have been removed */
-    BKE_node_preview_remove_unused(ntree);
-  }
+static bool texture_node_tree_socket_type_valid(bNodeTreeType *UNUSED(ntreetype),
+                                                bNodeSocketType *socket_type)
+{
+  return nodeIsStaticSocketType(socket_type) &&
+         ELEM(socket_type->type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA);
 }
 
 bNodeTreeType *ntreeType_Texture;
@@ -162,19 +156,75 @@ void register_node_tree_type_tex(void)
   tt->type = NTREE_TEXTURE;
   strcpy(tt->idname, "TextureNodeTree");
   strcpy(tt->ui_name, N_("Texture Node Editor"));
-  tt->ui_icon = 0; /* defined in drawnode.c */
+  tt->ui_icon = ICON_NODE_TEXTURE; /* Defined in `drawnode.c`. */
   strcpy(tt->ui_description, N_("Texture nodes"));
 
   tt->foreach_nodeclass = foreach_nodeclass;
   tt->update = update;
   tt->localize = localize;
-  tt->local_sync = local_sync;
-  tt->local_merge = local_merge;
   tt->get_from_context = texture_get_from_context;
+  tt->valid_socket_type = texture_node_tree_socket_type_valid;
 
   tt->rna_ext.srna = &RNA_TextureNodeTree;
 
   ntreeTypeAdd(tt);
+}
+
+/**** Material/Texture trees ****/
+
+bNodeThreadStack *ntreeGetThreadStack(bNodeTreeExec *exec, int thread)
+{
+  ListBase *lb = &exec->threadstack[thread];
+  bNodeThreadStack *nts;
+
+  for (nts = (bNodeThreadStack *)lb->first; nts; nts = nts->next) {
+    if (!nts->used) {
+      nts->used = true;
+      break;
+    }
+  }
+
+  if (!nts) {
+    nts = MEM_callocN(sizeof(bNodeThreadStack), "bNodeThreadStack");
+    nts->stack = (bNodeStack *)MEM_dupallocN(exec->stack);
+    nts->used = true;
+    BLI_addtail(lb, nts);
+  }
+
+  return nts;
+}
+
+void ntreeReleaseThreadStack(bNodeThreadStack *nts)
+{
+  nts->used = false;
+}
+
+bool ntreeExecThreadNodes(bNodeTreeExec *exec, bNodeThreadStack *nts, void *callerdata, int thread)
+{
+  bNodeStack *nsin[MAX_SOCKET] = {NULL};  /* arbitrary... watch this */
+  bNodeStack *nsout[MAX_SOCKET] = {NULL}; /* arbitrary... watch this */
+  bNodeExec *nodeexec;
+  bNode *node;
+  int n;
+
+  /* nodes are presorted, so exec is in order of list */
+
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
+    node = nodeexec->node;
+    if (node->need_exec) {
+      node_get_stack(node, nts->stack, nsin, nsout);
+      /* Handle muted nodes...
+       * If the mute func is not set, assume the node should never be muted,
+       * and hence execute it!
+       */
+      if (node->typeinfo->exec_fn && !(node->flag & NODE_MUTED)) {
+        node->typeinfo->exec_fn(callerdata, thread, node, &nodeexec->data, nsin, nsout);
+      }
+    }
+  }
+
+  /* signal to that all went OK, for render */
+  return true;
 }
 
 bNodeTreeExec *ntreeTexBeginExecTree_internal(bNodeExecContext *context,

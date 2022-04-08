@@ -56,7 +56,7 @@ vec2 get_ao_noise(void)
 {
   vec2 noise = texelfetch_noise_tex(gl_FragCoord.xy).xy;
   /* Decorrelate noise from AA. */
-  /* TODO(fclem) we should use a more general approach for more random number dimentions. */
+  /* TODO(fclem) we should use a more general approach for more random number dimensions. */
   noise = fract(noise * 6.1803402007);
   return noise;
 }
@@ -283,7 +283,7 @@ void occlusion_eval(OcclusionData data,
     bent_normal = N;
   }
   else {
-    /* Note: using pow(visibility, 6.0) produces NaN (see T87369). */
+    /* NOTE: using pow(visibility, 6.0) produces NaN (see T87369). */
     float tmp = saturate(pow6(visibility));
     bent_normal = normalize(mix(bent_normal, N, tmp));
   }
@@ -337,8 +337,8 @@ float diffuse_occlusion(
  * radius1 : First cap’s radius (arc length in radians)
  * radius2 : Second caps’ radius (in radians)
  * dist : Distance between caps (radians between centers of caps)
- * Note: Result is divided by pi to save one multiply.
- **/
+ * NOTE: Result is divided by pi to save one multiply.
+ */
 float spherical_cap_intersection(float radius1, float radius2, float dist)
 {
   /* From "Ambient Aperture Lighting" by Chris Oat
@@ -399,7 +399,7 @@ float specular_occlusion(
 /* Use the right occlusion. */
 OcclusionData occlusion_load(vec3 vP, float custom_occlusion)
 {
-  /* Default to fully openned cone. */
+  /* Default to fully opened cone. */
   OcclusionData data = NO_OCCLUSION_DATA;
 
 #ifdef ENABLE_DEFERED_AO
@@ -407,7 +407,7 @@ OcclusionData occlusion_load(vec3 vP, float custom_occlusion)
     data = unpack_occlusion_data(texelFetch(horizonBuffer, ivec2(gl_FragCoord.xy), 0));
   }
 #else
-  /* For blended surfaces.  */
+  /* For blended surfaces. */
   data = occlusion_search(vP, maxzBuffer, aoDistance, 0.0, 8.0);
 #endif
 

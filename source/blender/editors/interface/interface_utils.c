@@ -29,6 +29,8 @@
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
+#include "ED_screen.h"
+
 #include "BLI_alloca.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -38,6 +40,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_context.h"
 #include "BKE_lib_id.h"
 #include "BKE_report.h"
 
@@ -48,6 +51,7 @@
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
 #include "UI_resources.h"
+#include "UI_view2d.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -350,12 +354,6 @@ uiBut *uiDefAutoButR(uiBlock *block,
   return but;
 }
 
-/**
- * \a check_prop callback filters functions to avoid drawing certain properties,
- * in cases where PROP_HIDDEN flag can't be used for a property.
- *
- * \param prop_activate_init: Property to activate on initial popup (#UI_BUT_ACTIVATE_ON_INIT).
- */
 eAutoPropButsReturn uiDefAutoButsRNA(uiLayout *layout,
                                      PointerRNA *ptr,
                                      bool (*check_prop)(PointerRNA *ptr,
@@ -531,7 +529,7 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
         BLI_STATIC_ASSERT(sizeof(name_buf) >= MAX_ID_FULL_NAME_UI,
                           "Name string buffer should be big enough to hold full UI ID name");
         name = name_buf;
-        has_sep_char = (id->lib != NULL);
+        has_sep_char = ID_IS_LINKED(id);
       }
     }
     else {
@@ -548,7 +546,7 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
       cis->name_prefix_offset = name_prefix_offset;
       cis->has_sep_char = has_sep_char;
       if (!skip_filter) {
-        BLI_string_search_add(search, name, cis);
+        BLI_string_search_add(search, name, cis, 0);
       }
       BLI_addtail(items_list, cis);
       if (name != name_buf) {
@@ -589,7 +587,6 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
   MEM_freeN(items_list);
 }
 
-/***************************** ID Utilities *******************************/
 int UI_icon_from_id(const ID *id)
 {
   if (id == NULL) {
@@ -614,7 +611,6 @@ int UI_icon_from_id(const ID *id)
   return (ptr.type) ? RNA_struct_ui_icon(ptr.type) : ICON_NONE;
 }
 
-/* see: report_type_str */
 int UI_icon_from_report_type(int type)
 {
   if (type & RPT_ERROR_ALL) {
@@ -686,10 +682,6 @@ int UI_text_colorid_from_report_type(int type)
 
 /********************************** Misc **************************************/
 
-/**
- * Returns the best "UI" precision for given floating value,
- * so that e.g. 10.000001 rather gets drawn as '10'...
- */
 int UI_calc_float_precision(int prec, double value)
 {
   static const double pow10_neg[UI_PRECISION_FLOAT_MAX + 1] = {
@@ -701,7 +693,7 @@ int UI_calc_float_precision(int prec, double value)
 
   /* Check on the number of decimal places need to display the number,
    * this is so 0.00001 is not displayed as 0.00,
-   * _but_, this is only for small values si 10.0001 will not get the same treatment.
+   * _but_, this is only for small values as 10.0001 will not get the same treatment.
    */
   value = fabs(value);
   if ((value < pow10_neg[prec]) && (value > (1.0 / max_pow))) {
@@ -774,6 +766,88 @@ bool UI_but_online_manual_id_from_active(const struct bContext *C, char *r_str, 
 }
 
 /* -------------------------------------------------------------------- */
+
+static rctf ui_but_rect_to_view(const uiBut *but, const ARegion *region, const View2D *v2d)
+{
+  rctf region_rect;
+  ui_block_to_region_rctf(region, but->block, &region_rect, &but->rect);
+
+  rctf view_rect;
+  UI_view2d_region_to_view_rctf(v2d, &region_rect, &view_rect);
+
+  return view_rect;
+}
+
+/**
+ * To get a margin (typically wanted), add the margin to \a rect directly.
+ *
+ * Based on #file_ensure_inside_viewbounds(), could probably share code.
+ *
+ * \return true if anything changed.
+ */
+static bool ui_view2d_cur_ensure_rect_in_view(View2D *v2d, const rctf *rect)
+{
+  const float rect_width = BLI_rctf_size_x(rect);
+  const float rect_height = BLI_rctf_size_y(rect);
+
+  rctf *cur = &v2d->cur;
+  const float cur_width = BLI_rctf_size_x(cur);
+  const float cur_height = BLI_rctf_size_y(cur);
+
+  bool changed = false;
+
+  /* Snap to bottom edge. Also use if rect is higher than view bounds (could be a parameter). */
+  if ((cur->ymin > rect->ymin) || (rect_height > cur_height)) {
+    cur->ymin = rect->ymin;
+    cur->ymax = cur->ymin + cur_height;
+    changed = true;
+  }
+  /* Snap to upper edge. */
+  else if (cur->ymax < rect->ymax) {
+    cur->ymax = rect->ymax;
+    cur->ymin = cur->ymax - cur_height;
+    changed = true;
+  }
+  /* Snap to left edge. Also use if rect is wider than view bounds. */
+  else if ((cur->xmin > rect->xmin) || (rect_width > cur_width)) {
+    cur->xmin = rect->xmin;
+    cur->xmax = cur->xmin + cur_width;
+    changed = true;
+  }
+  /* Snap to right edge. */
+  else if (cur->xmax < rect->xmax) {
+    cur->xmax = rect->xmax;
+    cur->xmin = cur->xmax - cur_width;
+    changed = true;
+  }
+  else {
+    BLI_assert(BLI_rctf_inside_rctf(cur, rect));
+  }
+
+  return changed;
+}
+
+void UI_but_ensure_in_view(const bContext *C, ARegion *region, const uiBut *but)
+{
+  View2D *v2d = &region->v2d;
+  /* Uninitialized view or region that doesn't use View2D. */
+  if ((v2d->flag & V2D_IS_INIT) == 0) {
+    return;
+  }
+
+  rctf rect = ui_but_rect_to_view(but, region, v2d);
+
+  const int margin = UI_UNIT_X * 0.5f;
+  BLI_rctf_pad(&rect, margin, margin);
+
+  const bool changed = ui_view2d_cur_ensure_rect_in_view(v2d, &rect);
+  if (changed) {
+    UI_view2d_curRect_changed(C, v2d);
+    ED_region_tag_redraw_no_rebuild(region);
+  }
+}
+
+/* -------------------------------------------------------------------- */
 /** \name Button Store
  *
  * Modal Button Store API.
@@ -796,9 +870,6 @@ struct uiButStoreElem {
   uiBut **but_p;
 };
 
-/**
- * Create a new button store, the caller must manage and run #UI_butstore_free
- */
 uiButStore *UI_butstore_create(uiBlock *block)
 {
   uiButStore *bs_handle = MEM_callocN(sizeof(uiButStore), __func__);
@@ -870,9 +941,6 @@ void UI_butstore_unregister(uiButStore *bs_handle, uiBut **but_p)
   BLI_assert(0);
 }
 
-/**
- * Update the pointer for a registered button.
- */
 bool UI_butstore_register_update(uiBlock *block, uiBut *but_dst, const uiBut *but_src)
 {
   bool found = false;
@@ -889,9 +957,6 @@ bool UI_butstore_register_update(uiBlock *block, uiBut *but_dst, const uiBut *bu
   return found;
 }
 
-/**
- * NULL all pointers, don't free since the owner needs to be able to inspect.
- */
 void UI_butstore_clear(uiBlock *block)
 {
   LISTBASE_FOREACH (uiButStore *, bs_handle, &block->butstore) {
@@ -902,9 +967,6 @@ void UI_butstore_clear(uiBlock *block)
   }
 }
 
-/**
- * Map freed buttons from the old block and update pointers.
- */
 void UI_butstore_update(uiBlock *block)
 {
   /* move this list to the new block */
@@ -932,7 +994,7 @@ void UI_butstore_update(uiBlock *block)
           uiBut *but_new = ui_but_find_new(block, *bs_elem->but_p);
 
           /* can be NULL if the buttons removed,
-           * note: we could allow passing in a callback when buttons are removed
+           * NOTE: we could allow passing in a callback when buttons are removed
            * so the caller can cleanup */
           *bs_elem->but_p = but_new;
         }

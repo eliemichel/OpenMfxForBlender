@@ -17,7 +17,7 @@
 # ***** END GPL LICENSE BLOCK *****
 
 ########################################################################
-# Copy all generated files to the proper strucure as blender prefers
+# Copy all generated files to the proper structure as blender prefers
 ########################################################################
 
 if(NOT DEFINED HARVEST_TARGET)
@@ -79,6 +79,8 @@ endfunction()
 harvest(alembic/include alembic/include "*.h")
 harvest(alembic/lib/libAlembic.a alembic/lib/libAlembic.a)
 harvest(alembic/bin alembic/bin "*")
+harvest(brotli/include brotli/include "*.h")
+harvest(brotli/lib brotli/lib "*.a")
 harvest(boost/include boost/include "*")
 harvest(boost/lib boost/lib "*.a")
 harvest(ffmpeg/include ffmpeg/include "*.h")
@@ -106,12 +108,13 @@ harvest(llvm/include llvm/include "*")
 harvest(llvm/bin llvm/bin "llvm-config")
 harvest(llvm/lib llvm/lib "libLLVM*.a")
 harvest(llvm/lib llvm/lib "libclang*.a")
+harvest(llvm/lib/clang llvm/lib/clang "*.h")
 if(APPLE)
   harvest(openmp/lib openmp/lib "*")
   harvest(openmp/include openmp/include "*.h")
-  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-    harvest(sse2neon sse2neon "*.h")
-  endif()
+endif()
+if(BLENDER_PLATFORM_ARM)
+  harvest(sse2neon sse2neon "*.h")
 endif()
 harvest(ogg/lib ffmpeg/lib "*.a")
 harvest(openal/include openal/include "*.h")
@@ -126,6 +129,8 @@ if(UNIX AND NOT APPLE)
 
   harvest(xml2/include xml2/include "*.h")
   harvest(xml2/lib xml2/lib "*.a")
+
+  harvest(wayland-protocols/share/wayland-protocols wayland-protocols/share/wayland-protocols/ "*.xml")
 else()
   harvest(blosc/lib openvdb/lib "*.a")
   harvest(xml2/lib opencollada/lib "*.a")
@@ -190,6 +195,8 @@ harvest(potrace/include potrace/include "*.h")
 harvest(potrace/lib potrace/lib "*.a")
 harvest(haru/include haru/include "*.h")
 harvest(haru/lib haru/lib "*.a")
+harvest(zstd/include zstd/include "*.h")
+harvest(zstd/lib zstd/lib "*.a")
 
 if(UNIX AND NOT APPLE)
   harvest(libglu/lib mesa/lib "*.so*")

@@ -23,6 +23,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avio.h>
+#include <libavutil/channel_layout.h>
 }
 
 AUD_NAMESPACE_BEGIN
@@ -75,6 +76,7 @@ void FFMPEGWriter::encode()
 	m_frame->nb_samples = m_input_samples;
 	m_frame->format = m_codecCtx->sample_fmt;
 	m_frame->channel_layout = m_codecCtx->channel_layout;
+	m_frame->channels = m_specs.channels;
 
 	if(avcodec_fill_audio_frame(m_frame, m_specs.channels, m_codecCtx->sample_fmt, reinterpret_cast<data_t*>(data), m_input_buffer.getSize(), 0) < 0)
 		AUD_THROW(FileException, "File couldn't be written, filling the audio frame failed with ffmpeg.");
@@ -170,66 +172,66 @@ FFMPEGWriter::FFMPEGWriter(std::string filename, DeviceSpecs specs, Container fo
 	if(avformat_alloc_output_context2(&m_formatCtx, nullptr, formats[format], filename.c_str()) < 0)
 		AUD_THROW(FileException, "File couldn't be written, format couldn't be found with ffmpeg.");
 
-	AVOutputFormat* outputFmt = m_formatCtx->oformat;
+	const AVOutputFormat* outputFmt = m_formatCtx->oformat;
 
 	if(!outputFmt) {
 		avformat_free_context(m_formatCtx);
 		AUD_THROW(FileException, "File couldn't be written, output format couldn't be found with ffmpeg.");
 	}
 
-	outputFmt->audio_codec = AV_CODEC_ID_NONE;
+	AVCodecID audio_codec = AV_CODEC_ID_NONE;
 
 	switch(codec)
 	{
 	case CODEC_AAC:
-		outputFmt->audio_codec = AV_CODEC_ID_AAC;
+		audio_codec = AV_CODEC_ID_AAC;
 		break;
 	case CODEC_AC3:
-		outputFmt->audio_codec = AV_CODEC_ID_AC3;
+		audio_codec = AV_CODEC_ID_AC3;
 		break;
 	case CODEC_FLAC:
-		outputFmt->audio_codec = AV_CODEC_ID_FLAC;
+		audio_codec = AV_CODEC_ID_FLAC;
 		break;
 	case CODEC_MP2:
-		outputFmt->audio_codec = AV_CODEC_ID_MP2;
+		audio_codec = AV_CODEC_ID_MP2;
 		break;
 	case CODEC_MP3:
-		outputFmt->audio_codec = AV_CODEC_ID_MP3;
+		audio_codec = AV_CODEC_ID_MP3;
 		break;
 	case CODEC_OPUS:
-		outputFmt->audio_codec = AV_CODEC_ID_OPUS;
+		audio_codec = AV_CODEC_ID_OPUS;
 		break;
 	case CODEC_PCM:
 		switch(specs.format)
 		{
 		case FORMAT_U8:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_U8;
+			audio_codec = AV_CODEC_ID_PCM_U8;
 			break;
 		case FORMAT_S16:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_S16LE;
+			audio_codec = AV_CODEC_ID_PCM_S16LE;
 			break;
 		case FORMAT_S24:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_S24LE;
+			audio_codec = AV_CODEC_ID_PCM_S24LE;
 			break;
 		case FORMAT_S32:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_S32LE;
+			audio_codec = AV_CODEC_ID_PCM_S32LE;
 			break;
 		case FORMAT_FLOAT32:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_F32LE;
+			audio_codec = AV_CODEC_ID_PCM_F32LE;
 			break;
 		case FORMAT_FLOAT64:
-			outputFmt->audio_codec = AV_CODEC_ID_PCM_F64LE;
+			audio_codec = AV_CODEC_ID_PCM_F64LE;
 			break;
 		default:
-			outputFmt->audio_codec = AV_CODEC_ID_NONE;
+			audio_codec = AV_CODEC_ID_NONE;
 			break;
 		}
 		break;
 	case CODEC_VORBIS:
-		outputFmt->audio_codec = AV_CODEC_ID_VORBIS;
+		audio_codec = AV_CODEC_ID_VORBIS;
 		break;
 	default:
-		outputFmt->audio_codec = AV_CODEC_ID_NONE;
+		audio_codec = AV_CODEC_ID_NONE;
 		break;
 	}
 
@@ -267,10 +269,10 @@ FFMPEGWriter::FFMPEGWriter(std::string filename, DeviceSpecs specs, Container fo
 
 	try
 	{
-		if(outputFmt->audio_codec == AV_CODEC_ID_NONE)
+		if(audio_codec == AV_CODEC_ID_NONE)
 			AUD_THROW(FileException, "File couldn't be written, audio codec not found with ffmpeg.");
 
-		AVCodec* codec = avcodec_find_encoder(outputFmt->audio_codec);
+		const AVCodec* codec = avcodec_find_encoder(audio_codec);
 		if(!codec)
 			AUD_THROW(FileException, "File couldn't be written, audio encoder couldn't be found with ffmpeg.");
 

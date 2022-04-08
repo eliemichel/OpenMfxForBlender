@@ -52,89 +52,90 @@ static bool match_renderer(StringRef renderer, const Vector<std::string> &items)
 void GLBackend::platform_init()
 {
   BLI_assert(!GPG.initialized);
-  GPG.initialized = true;
-
-#ifdef _WIN32
-  GPG.os = GPU_OS_WIN;
-#elif defined(__APPLE__)
-  GPG.os = GPU_OS_MAC;
-#else
-  GPG.os = GPU_OS_UNIX;
-#endif
 
   const char *vendor = (const char *)glGetString(GL_VENDOR);
   const char *renderer = (const char *)glGetString(GL_RENDERER);
   const char *version = (const char *)glGetString(GL_VERSION);
+  eGPUDeviceType device = GPU_DEVICE_ANY;
+  eGPUOSType os = GPU_OS_ANY;
+  eGPUDriverType driver = GPU_DRIVER_ANY;
+  eGPUSupportLevel support_level = GPU_SUPPORT_LEVEL_SUPPORTED;
+
+#ifdef _WIN32
+  os = GPU_OS_WIN;
+#elif defined(__APPLE__)
+  os = GPU_OS_MAC;
+#else
+  os = GPU_OS_UNIX;
+#endif
 
   if (strstr(vendor, "ATI") || strstr(vendor, "AMD")) {
-    GPG.device = GPU_DEVICE_ATI;
-    GPG.driver = GPU_DRIVER_OFFICIAL;
+    device = GPU_DEVICE_ATI;
+    driver = GPU_DRIVER_OFFICIAL;
   }
   else if (strstr(vendor, "NVIDIA")) {
-    GPG.device = GPU_DEVICE_NVIDIA;
-    GPG.driver = GPU_DRIVER_OFFICIAL;
+    device = GPU_DEVICE_NVIDIA;
+    driver = GPU_DRIVER_OFFICIAL;
   }
   else if (strstr(vendor, "Intel") ||
            /* src/mesa/drivers/dri/intel/intel_context.c */
            strstr(renderer, "Mesa DRI Intel") || strstr(renderer, "Mesa DRI Mobile Intel")) {
-    GPG.device = GPU_DEVICE_INTEL;
-    GPG.driver = GPU_DRIVER_OFFICIAL;
+    device = GPU_DEVICE_INTEL;
+    driver = GPU_DRIVER_OFFICIAL;
 
     if (strstr(renderer, "UHD Graphics") ||
         /* Not UHD but affected by the same bugs. */
         strstr(renderer, "HD Graphics 530") || strstr(renderer, "Kaby Lake GT2") ||
         strstr(renderer, "Whiskey Lake")) {
-      GPG.device |= GPU_DEVICE_INTEL_UHD;
+      device |= GPU_DEVICE_INTEL_UHD;
     }
   }
-  else if ((strstr(renderer, "Mesa DRI R")) ||
+  else if (strstr(renderer, "Mesa DRI R") ||
            (strstr(renderer, "Radeon") && strstr(vendor, "X.Org")) ||
            (strstr(renderer, "AMD") && strstr(vendor, "X.Org")) ||
            (strstr(renderer, "Gallium ") && strstr(renderer, " on ATI ")) ||
            (strstr(renderer, "Gallium ") && strstr(renderer, " on AMD "))) {
-    GPG.device = GPU_DEVICE_ATI;
-    GPG.driver = GPU_DRIVER_OPENSOURCE;
+    device = GPU_DEVICE_ATI;
+    driver = GPU_DRIVER_OPENSOURCE;
   }
   else if (strstr(renderer, "Nouveau") || strstr(vendor, "nouveau")) {
-    GPG.device = GPU_DEVICE_NVIDIA;
-    GPG.driver = GPU_DRIVER_OPENSOURCE;
+    device = GPU_DEVICE_NVIDIA;
+    driver = GPU_DRIVER_OPENSOURCE;
   }
   else if (strstr(vendor, "Mesa")) {
-    GPG.device = GPU_DEVICE_SOFTWARE;
-    GPG.driver = GPU_DRIVER_SOFTWARE;
+    device = GPU_DEVICE_SOFTWARE;
+    driver = GPU_DRIVER_SOFTWARE;
   }
   else if (strstr(vendor, "Microsoft")) {
-    GPG.device = GPU_DEVICE_SOFTWARE;
-    GPG.driver = GPU_DRIVER_SOFTWARE;
+    device = GPU_DEVICE_SOFTWARE;
+    driver = GPU_DRIVER_SOFTWARE;
   }
   else if (strstr(vendor, "Apple")) {
     /* Apple Silicon. */
-    GPG.device = GPU_DEVICE_APPLE;
-    GPG.driver = GPU_DRIVER_OFFICIAL;
+    device = GPU_DEVICE_APPLE;
+    driver = GPU_DRIVER_OFFICIAL;
   }
   else if (strstr(renderer, "Apple Software Renderer")) {
-    GPG.device = GPU_DEVICE_SOFTWARE;
-    GPG.driver = GPU_DRIVER_SOFTWARE;
+    device = GPU_DEVICE_SOFTWARE;
+    driver = GPU_DRIVER_SOFTWARE;
   }
   else if (strstr(renderer, "llvmpipe") || strstr(renderer, "softpipe")) {
-    GPG.device = GPU_DEVICE_SOFTWARE;
-    GPG.driver = GPU_DRIVER_SOFTWARE;
+    device = GPU_DEVICE_SOFTWARE;
+    driver = GPU_DRIVER_SOFTWARE;
   }
   else {
     printf("Warning: Could not find a matching GPU name. Things may not behave as expected.\n");
     printf("Detected OpenGL configuration:\n");
     printf("Vendor: %s\n", vendor);
     printf("Renderer: %s\n", renderer);
-    GPG.device = GPU_DEVICE_ANY;
-    GPG.driver = GPU_DRIVER_ANY;
   }
 
   /* Detect support level */
   if (!GLEW_VERSION_3_3) {
-    GPG.support_level = GPU_SUPPORT_LEVEL_UNSUPPORTED;
+    support_level = GPU_SUPPORT_LEVEL_UNSUPPORTED;
   }
   else {
-    if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_ANY)) {
+    if ((device & GPU_DEVICE_INTEL) && (os & GPU_OS_WIN)) {
       /* Old Intel drivers with known bugs that cause material properties to crash.
        * Version Build 10.18.14.5067 is the latest available and appears to be working
        * ok with our workarounds, so excluded from this list. */
@@ -143,19 +144,19 @@ void GLBackend::platform_init()
           strstr(version, "Build 9.18") || strstr(version, "Build 10.18.10.3") ||
           strstr(version, "Build 10.18.10.4") || strstr(version, "Build 10.18.10.5") ||
           strstr(version, "Build 10.18.14.4")) {
-        GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
+        support_level = GPU_SUPPORT_LEVEL_LIMITED;
       }
     }
-    if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_ANY)) {
+    if ((device & GPU_DEVICE_ATI) && (os & GPU_OS_UNIX)) {
       /* Platform seems to work when SB backend is disabled. This can be done
        * by adding the environment variable `R600_DEBUG=nosb`. */
       if (strstr(renderer, "AMD CEDAR")) {
-        GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
+        support_level = GPU_SUPPORT_LEVEL_LIMITED;
       }
     }
   }
-  GPG.create_key(GPG.support_level, vendor, renderer, version);
-  GPG.create_gpu_name(vendor, renderer, version);
+
+  GPG.init(device, os, driver, support_level, vendor, renderer, version);
 }
 
 void GLBackend::platform_exit()
@@ -215,6 +216,11 @@ static bool detect_mip_render_workaround()
   return enable_workaround;
 }
 
+static const char *gl_extension_get(int i)
+{
+  return (char *)glGetStringi(GL_EXTENSIONS, i);
+}
+
 static void detect_workarounds()
 {
   const char *vendor = (const char *)glGetString(GL_VENDOR);
@@ -234,12 +240,14 @@ static void detect_workarounds()
     GLContext::unused_fb_slot_workaround = true;
     /* Turn off extensions. */
     GCaps.shader_image_load_store_support = false;
+    GCaps.shader_storage_buffer_objects_support = false;
     GLContext::base_instance_support = false;
     GLContext::clear_texture_support = false;
     GLContext::copy_image_support = false;
     GLContext::debug_layer_support = false;
     GLContext::direct_state_access_support = false;
     GLContext::fixed_restart_index_support = false;
+    GLContext::geometry_shader_invocations = false;
     GLContext::multi_bind_support = false;
     GLContext::multi_draw_indirect_support = false;
     GLContext::shader_draw_parameters_support = false;
@@ -275,9 +283,15 @@ static void detect_workarounds()
     GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
+  /* Compute shaders have some issues with those versions (see T94936). */
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_OFFICIAL) &&
+      (strstr(version, "4.5.14831") || strstr(version, "4.5.14760"))) {
+    GCaps.compute_shader_support = false;
+  }
   /* We have issues with this specific renderer. (see T74024) */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
-      strstr(renderer, "AMD VERDE")) {
+      (strstr(renderer, "AMD VERDE") || strstr(renderer, "AMD KAVERI") ||
+       strstr(renderer, "AMD TAHITI"))) {
     GLContext::unused_fb_slot_workaround = true;
     GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
@@ -359,8 +373,8 @@ static void detect_workarounds()
       (strstr(version, "Build 20.19.15.4285"))) {
     GCaps.use_main_context_workaround = true;
   }
-  /* See T70187: merging vertices fail. This has been tested from 18.2.2 till 19.3.0~dev of the
-   * Mesa driver */
+  /* See T70187: merging vertices fail. This has been tested from `18.2.2` till `19.3.0~dev`
+   * of the Mesa driver */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
       (strstr(version, "Mesa 18.") || strstr(version, "Mesa 19.0") ||
        strstr(version, "Mesa 19.1") || strstr(version, "Mesa 19.2"))) {
@@ -405,19 +419,36 @@ static void detect_workarounds()
   if (GLContext::debug_layer_support == false) {
     GLContext::debug_layer_workaround = true;
   }
+
+  /* Broken glGenerateMipmap on macOS 10.15.7 security update. */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_MAC, GPU_DRIVER_ANY) &&
+      strstr(renderer, "HD Graphics 4000")) {
+    GLContext::generate_mipmap_workaround = true;
+  }
+
+  /* Buggy interface query functions cause crashes when handling SSBOs (T93680) */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_ANY, GPU_DRIVER_ANY) &&
+      (strstr(renderer, "HD Graphics 4400") || strstr(renderer, "HD Graphics 4600"))) {
+    GCaps.shader_storage_buffer_objects_support = false;
+  }
 }  // namespace blender::gpu
 
 /** Internal capabilities. */
+
 GLint GLContext::max_cubemap_size = 0;
 GLint GLContext::max_texture_3d_size = 0;
 GLint GLContext::max_ubo_binds = 0;
 GLint GLContext::max_ubo_size = 0;
+
 /** Extensions. */
+
 bool GLContext::base_instance_support = false;
 bool GLContext::clear_texture_support = false;
 bool GLContext::copy_image_support = false;
 bool GLContext::debug_layer_support = false;
 bool GLContext::direct_state_access_support = false;
+bool GLContext::explicit_location_support = false;
+bool GLContext::geometry_shader_invocations = false;
 bool GLContext::fixed_restart_index_support = false;
 bool GLContext::multi_bind_support = false;
 bool GLContext::multi_draw_indirect_support = false;
@@ -426,9 +457,12 @@ bool GLContext::texture_cube_map_array_support = false;
 bool GLContext::texture_filter_anisotropic_support = false;
 bool GLContext::texture_gather_support = false;
 bool GLContext::vertex_attrib_binding_support = false;
+
 /** Workarounds. */
+
 bool GLContext::debug_layer_workaround = false;
 bool GLContext::unused_fb_slot_workaround = false;
+bool GLContext::generate_mipmap_workaround = false;
 float GLContext::derivative_signs[2] = {1.0f, 1.0f};
 
 void GLBackend::capabilities_init()
@@ -441,8 +475,28 @@ void GLBackend::capabilities_init()
   glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &GCaps.max_textures_vert);
   glGetIntegerv(GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS, &GCaps.max_textures_geom);
   glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &GCaps.max_textures);
+  glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &GCaps.max_uniforms_vert);
+  glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &GCaps.max_uniforms_frag);
+  glGetIntegerv(GL_MAX_ELEMENTS_INDICES, &GCaps.max_batch_indices);
+  glGetIntegerv(GL_MAX_ELEMENTS_VERTICES, &GCaps.max_batch_vertices);
+  glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &GCaps.max_vertex_attribs);
+  glGetIntegerv(GL_MAX_VARYING_FLOATS, &GCaps.max_varying_floats);
+
+  glGetIntegerv(GL_NUM_EXTENSIONS, &GCaps.extensions_len);
+  GCaps.extension_get = gl_extension_get;
+
   GCaps.mem_stats_support = GLEW_NVX_gpu_memory_info || GLEW_ATI_meminfo;
   GCaps.shader_image_load_store_support = GLEW_ARB_shader_image_load_store;
+  GCaps.compute_shader_support = GLEW_ARB_compute_shader && GLEW_VERSION_4_3;
+  if (GCaps.compute_shader_support) {
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &GCaps.max_work_group_count[0]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &GCaps.max_work_group_count[1]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &GCaps.max_work_group_count[2]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &GCaps.max_work_group_size[0]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &GCaps.max_work_group_size[1]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &GCaps.max_work_group_size[2]);
+  }
+  GCaps.shader_storage_buffer_objects_support = GLEW_ARB_shader_storage_buffer_object;
   /* GL specific capabilities. */
   glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &GLContext::max_texture_3d_size);
   glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &GLContext::max_cubemap_size);
@@ -453,6 +507,8 @@ void GLBackend::capabilities_init()
   GLContext::copy_image_support = GLEW_ARB_copy_image;
   GLContext::debug_layer_support = GLEW_VERSION_4_3 || GLEW_KHR_debug || GLEW_ARB_debug_output;
   GLContext::direct_state_access_support = GLEW_ARB_direct_state_access;
+  GLContext::explicit_location_support = GLEW_VERSION_4_3;
+  GLContext::geometry_shader_invocations = GLEW_ARB_gpu_shader5;
   GLContext::fixed_restart_index_support = GLEW_ARB_ES3_compatibility;
   GLContext::multi_bind_support = GLEW_ARB_multi_bind;
   GLContext::multi_draw_indirect_support = GLEW_ARB_multi_draw_indirect;

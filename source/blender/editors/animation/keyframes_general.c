@@ -63,11 +63,6 @@
 
 /* **************************************************** */
 
-/**
- * Only delete the nominated keyframe from provided F-Curve.
- * Not recommended to be used many times successively. For that
- * there is #delete_fcurve_keys().
- */
 void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
 {
   /* sanity check */
@@ -92,10 +87,7 @@ void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
   fcu->totvert--;
 
   if (fcu->totvert == 0) {
-    if (fcu->bezt) {
-      MEM_freeN(fcu->bezt);
-    }
-    fcu->bezt = NULL;
+    MEM_SAFE_FREE(fcu->bezt);
   }
 
   /* recalc handles - only if it won't cause problems */
@@ -104,7 +96,6 @@ void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
   }
 }
 
-/* Delete selected keyframes in given F-Curve */
 bool delete_fcurve_keys(FCurve *fcu)
 {
   bool changed = false;
@@ -136,17 +127,13 @@ bool delete_fcurve_keys(FCurve *fcu)
 
 void clear_fcurve_keys(FCurve *fcu)
 {
-  if (fcu->bezt) {
-    MEM_freeN(fcu->bezt);
-  }
-  fcu->bezt = NULL;
+  MEM_SAFE_FREE(fcu->bezt);
 
   fcu->totvert = 0;
 }
 
 /* ---------------- */
 
-/* duplicate selected keyframes for the given F-Curve */
 void duplicate_fcurve_keys(FCurve *fcu)
 {
   /* this can only work when there is an F-Curve, and also when there are some BezTriples */
@@ -182,10 +169,6 @@ void duplicate_fcurve_keys(FCurve *fcu)
 /* **************************************************** */
 /* Various Tools */
 
-/**
- * Basic F-Curve 'cleanup' function that removes 'double points' and unnecessary keyframes on
- * linear-segments only optionally clears up curve if one keyframe with default value remains.
- */
 void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, bool cleardefault)
 {
   FCurve *fcu = (FCurve *)ale->key_data;
@@ -193,7 +176,7 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
   BezTriple *lastb;
   int totCount, i;
 
-  /* check if any points  */
+  /* Check if any points. */
   if ((fcu == NULL) || (fcu->bezt == NULL) || (fcu->totvert == 0) ||
       (!cleardefault && fcu->totvert == 1)) {
     return;
@@ -324,6 +307,107 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
   }
 }
 
+/**
+ * Find the first segment of consecutive selected curve points, starting from \a start_index.
+ * Keys that have BEZT_FLAG_IGNORE_TAG set are treated as unselected.
+ * \param r_segment_start_idx: returns the start index of the segment.
+ * \param r_segment_len: returns the number of curve points in the segment.
+ * \return whether such a segment was found or not.
+ */
+static bool find_fcurve_segment(FCurve *fcu,
+                                const int start_index,
+                                int *r_segment_start_idx,
+                                int *r_segment_len)
+{
+  *r_segment_start_idx = 0;
+  *r_segment_len = 0;
+
+  bool in_segment = false;
+
+  for (int i = start_index; i < fcu->totvert; i++) {
+    const bool point_is_selected = fcu->bezt[i].f2 & SELECT;
+    const bool point_is_ignored = fcu->bezt[i].f2 & BEZT_FLAG_IGNORE_TAG;
+
+    if (point_is_selected && !point_is_ignored) {
+      if (!in_segment) {
+        *r_segment_start_idx = i;
+        in_segment = true;
+      }
+      (*r_segment_len)++;
+    }
+    else if (in_segment) {
+      /* If the curve point is not selected then we have reached the end of the selected curve
+       * segment. */
+      return true; /* Segment found. */
+    }
+  }
+
+  /* If the last curve point was in the segment, `r_segment_len` and `r_segment_start_idx`
+   * are already updated and true is returned. */
+  return in_segment;
+}
+
+ListBase find_fcurve_segments(FCurve *fcu)
+{
+  ListBase segments = {NULL, NULL};
+  int segment_start_idx = 0;
+  int segment_len = 0;
+  int current_index = 0;
+
+  while (find_fcurve_segment(fcu, current_index, &segment_start_idx, &segment_len)) {
+    FCurveSegment *segment;
+    segment = MEM_callocN(sizeof(*segment), "FCurveSegment");
+    segment->start_index = segment_start_idx;
+    segment->length = segment_len;
+    BLI_addtail(&segments, segment);
+    current_index = segment_start_idx + segment_len;
+  }
+  return segments;
+}
+
+static BezTriple fcurve_segment_start_get(FCurve *fcu, int index)
+{
+  BezTriple start_bezt = index - 1 >= 0 ? fcu->bezt[index - 1] : fcu->bezt[index];
+  return start_bezt;
+}
+
+static BezTriple fcurve_segment_end_get(FCurve *fcu, int index)
+{
+  BezTriple end_bezt = index < fcu->totvert ? fcu->bezt[index] : fcu->bezt[index - 1];
+  return end_bezt;
+}
+
+/* ---------------- */
+
+void blend_to_neighbor_fcurve_segment(FCurve *fcu, FCurveSegment *segment, const float factor)
+{
+  const float blend_factor = fabs(factor * 2 - 1);
+  BezTriple target_bezt;
+  /* Find which key to blend towards. */
+  if (factor < 0.5f) {
+    target_bezt = fcurve_segment_start_get(fcu, segment->start_index);
+  }
+  else {
+    target_bezt = fcurve_segment_end_get(fcu, segment->start_index + segment->length);
+  }
+  /* Blend each key individually. */
+  for (int i = segment->start_index; i < segment->start_index + segment->length; i++) {
+    fcu->bezt[i].vec[1][1] = interpf(target_bezt.vec[1][1], fcu->bezt[i].vec[1][1], blend_factor);
+  }
+}
+
+/* ---------------- */
+
+void breakdown_fcurve_segment(FCurve *fcu, FCurveSegment *segment, const float factor)
+{
+  BezTriple left_bezt = fcurve_segment_start_get(fcu, segment->start_index);
+  BezTriple right_bezt = fcurve_segment_end_get(fcu, segment->start_index + segment->length);
+
+  for (int i = segment->start_index; i < segment->start_index + segment->length; i++) {
+    fcu->bezt[i].vec[1][1] = interpf(right_bezt.vec[1][1], left_bezt.vec[1][1], factor);
+  }
+}
+
 /* ---------------- */
 
 /* Check if the keyframe interpolation type is supported */
@@ -397,65 +481,34 @@ static void decimate_fcurve_segment(FCurve *fcu,
                                 target_fcurve_verts);
 }
 
-/**
- * F-Curve 'decimate' function that removes a certain ratio of curve
- * points that will affect the curves overall shape the least.
- * If you want to remove based on a error margin, set remove_ratio to 1 and
- * simply specify the desired error_sq_max. Otherwise, set the error margin to
- * FLT_MAX.
- */
 bool decimate_fcurve(bAnimListElem *ale, float remove_ratio, float error_sq_max)
 {
   FCurve *fcu = (FCurve *)ale->key_data;
-
-  /* Check if the curve actually has any points  */
+  /* Check if the curve actually has any points. */
   if (fcu == NULL || fcu->bezt == NULL || fcu->totvert == 0) {
     return true;
   }
 
   BezTriple *old_bezts = fcu->bezt;
 
-  /* Only decimate the individual selected curve segments. */
-  int bezt_segment_start_idx = 0;
-  int bezt_segment_len = 0;
-
-  bool selected;
   bool can_decimate_all_selected = true;
-  bool in_segment = false;
 
   for (int i = 0; i < fcu->totvert; i++) {
-    selected = fcu->bezt[i].f2 & SELECT;
+    /* Ignore keyframes that are not supported. */
+    if (!prepare_for_decimate(fcu, i)) {
+      can_decimate_all_selected = false;
+      fcu->bezt[i].f2 |= BEZT_FLAG_IGNORE_TAG;
+    }
     /* Make sure that the temp flag is unset as we use it to determine what to remove. */
     fcu->bezt[i].f2 &= ~BEZT_FLAG_TEMP_TAG;
-
-    if (selected && !prepare_for_decimate(fcu, i)) {
-      /* This keyframe is not supported, treat them as if they were unselected. */
-      selected = false;
-      can_decimate_all_selected = false;
-    }
-
-    if (selected) {
-      if (!in_segment) {
-        bezt_segment_start_idx = i;
-        in_segment = true;
-      }
-      bezt_segment_len++;
-    }
-    else if (in_segment) {
-      /* If the curve point is not selected then we have reached the end of the selected curve
-       * segment. */
-      decimate_fcurve_segment(
-          fcu, bezt_segment_start_idx, bezt_segment_len, remove_ratio, error_sq_max);
-      in_segment = false;
-      bezt_segment_len = 0;
-    }
   }
 
-  /* Did the segment run to the end of the curve? */
-  if (in_segment) {
+  ListBase segments = find_fcurve_segments(fcu);
+  LISTBASE_FOREACH (FCurveSegment *, segment, &segments) {
     decimate_fcurve_segment(
-        fcu, bezt_segment_start_idx, bezt_segment_len, remove_ratio, error_sq_max);
+        fcu, segment->start_index, segment->length, remove_ratio, error_sq_max);
   }
+  BLI_freelistN(&segments);
 
   uint old_totvert = fcu->totvert;
   fcu->bezt = NULL;
@@ -463,6 +516,7 @@ bool decimate_fcurve(bAnimListElem *ale, float remove_ratio, float error_sq_max)
 
   for (int i = 0; i < old_totvert; i++) {
     BezTriple *bezt = (old_bezts + i);
+    bezt->f2 &= ~BEZT_FLAG_IGNORE_TAG;
     if ((bezt->f2 & BEZT_FLAG_TEMP_TAG) == 0) {
       insert_bezt_fcurve(fcu, bezt, 0);
     }
@@ -483,8 +537,6 @@ typedef struct tSmooth_Bezt {
   float y1, y2, y3;    /* averaged before/new/after y-values */
 } tSmooth_Bezt;
 
-/* Use a weighted moving-means method to reduce intensity of fluctuations */
-/* TODO: introduce scaling factor for weighting falloff */
 void smooth_fcurve(FCurve *fcu)
 {
   int totSel = 0;
@@ -588,7 +640,6 @@ typedef struct TempFrameValCache {
   float frame, val;
 } TempFrameValCache;
 
-/* Evaluates the curves between each selected keyframe on each frame, and keys the value  */
 void sample_fcurve(FCurve *fcu)
 {
   BezTriple *bezt, *start = NULL, *end = NULL;
@@ -600,7 +651,7 @@ void sample_fcurve(FCurve *fcu)
     return;
   }
 
-  /* find selected keyframes... once pair has been found, add keyframes  */
+  /* Find selected keyframes... once pair has been found, add keyframes. */
   for (i = 0, bezt = fcu->bezt; i < fcu->totvert; i++, bezt++) {
     /* check if selected, and which end this is */
     if (BEZT_ISSEL_ANY(bezt)) {
@@ -693,11 +744,10 @@ typedef struct tAnimCopybufItem {
   int totvert;     /* number of keyframes stored for this channel */
   BezTriple *bezt; /* keyframes in buffer */
 
-  short id_type; /* Result of GS(id->name)*/
+  short id_type; /* Result of `GS(id->name)`. */
   bool is_bone;  /* special flag for armature bones */
 } tAnimCopybufItem;
 
-/* This function frees any MEM_calloc'ed copy/paste buffer data */
 void ANIM_fcurves_copybuf_free(void)
 {
   tAnimCopybufItem *aci, *acn;
@@ -728,7 +778,6 @@ void ANIM_fcurves_copybuf_free(void)
 
 /* ------------------- */
 
-/* This function adds data to the keyframes copy/paste buffer, freeing existing data first */
 short copy_animedit_keys(bAnimContext *ac, ListBase *anim_data)
 {
   bAnimListElem *ale;
@@ -767,11 +816,10 @@ short copy_animedit_keys(bAnimContext *ac, ListBase *anim_data)
     if ((aci->id_type == ID_OB) && (((Object *)aci->id)->type == OB_ARMATURE) && aci->rna_path) {
       Object *ob = (Object *)aci->id;
 
-      char *bone_name = BLI_str_quoted_substrN(aci->rna_path, "pose.bones[");
-      if (bone_name) {
-        bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
-        MEM_freeN(bone_name);
-
+      bPoseChannel *pchan;
+      char bone_name[sizeof(pchan->name)];
+      if (BLI_str_quoted_substr(aci->rna_path, "pose.bones[", bone_name, sizeof(bone_name))) {
+        pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
         if (pchan) {
           aci->is_bone = true;
         }
@@ -830,31 +878,35 @@ short copy_animedit_keys(bAnimContext *ac, ListBase *anim_data)
   return 0;
 }
 
-static void flip_names(tAnimCopybufItem *aci, char **name)
+static void flip_names(tAnimCopybufItem *aci, char **r_name)
 {
   if (aci->is_bone) {
-    char *str_start;
-    if ((str_start = strstr(aci->rna_path, "pose.bones["))) {
-      /* ninja coding, try to change the name */
+    int ofs_start;
+    int ofs_end;
+
+    if (BLI_str_quoted_substr_range(aci->rna_path, "pose.bones[", &ofs_start, &ofs_end)) {
+      char *str_start = aci->rna_path + ofs_start;
+      const char *str_end = aci->rna_path + ofs_end;
+
+      /* Swap out the name.
+       * Note that there is no need to un-escape the string to flip it. */
       char bname_new[MAX_VGROUP_NAME];
-      char *str_iter, *str_end;
+      char *str_iter;
       int length, prefix_l, postfix_l;
 
-      str_start += 12;
       prefix_l = str_start - aci->rna_path;
-
-      str_end = strchr(str_start, '\"');
 
       length = str_end - str_start;
       postfix_l = strlen(str_end);
 
-      /* more ninja stuff, temporary substitute with NULL terminator */
+      /* Temporary substitute with NULL terminator. */
+      BLI_assert(str_start[length] == '\"');
       str_start[length] = 0;
       BLI_string_flip_side_name(bname_new, str_start, false, sizeof(bname_new));
       str_start[length] = '\"';
 
-      str_iter = *name = MEM_mallocN(sizeof(char) * (prefix_l + postfix_l + length + 1),
-                                     "flipped_path");
+      str_iter = *r_name = MEM_mallocN(sizeof(char) * (prefix_l + postfix_l + length + 1),
+                                       "flipped_path");
 
       BLI_strncpy(str_iter, aci->rna_path, prefix_l + 1);
       str_iter += prefix_l;
@@ -913,7 +965,7 @@ static tAnimCopybufItem *pastebuf_match_path_property(Main *bmain,
     if (aci->rna_path && fcu->rna_path) {
       /* find the property of the fcurve and compare against the end of the tAnimCopybufItem
        * more involved since it needs to do path lookups.
-       * This is not 100% reliable since the user could be editing the curves on a path that wont
+       * This is not 100% reliable since the user could be editing the curves on a path that won't
        * resolve, or a bone could be renamed after copying for eg. but in normal copy & paste
        * this should work out ok.
        */
@@ -932,7 +984,7 @@ static tAnimCopybufItem *pastebuf_match_path_property(Main *bmain,
           int len_id = strlen(identifier);
           int len_path = strlen(fcu->rna_path);
           if (len_id <= len_path) {
-            /* note, paths which end with "] will fail with this test - Animated ID Props */
+            /* NOTE: paths which end with "] will fail with this test - Animated ID Props. */
             if (STREQ(identifier, fcu->rna_path + (len_path - len_id))) {
               if ((from_single) || (aci->array_index == fcu->array_index)) {
                 break;
@@ -1084,8 +1136,6 @@ static void paste_animedit_keys_fcurve(
   calchandles_fcurve(fcu);
 }
 
-/* ------------------- */
-
 const EnumPropertyItem rna_enum_keyframe_paste_offset_items[] = {
     {KEYFRAME_PASTE_OFFSET_CFRA_START,
      "START",
@@ -1118,11 +1168,6 @@ const EnumPropertyItem rna_enum_keyframe_paste_merge_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-/**
- * This function pastes data from the keyframes copy/paste buffer
- *
- * \return Status code is whether the method FAILED to do anything
- */
 short paste_animedit_keys(bAnimContext *ac,
                           ListBase *anim_data,
                           const eKeyPasteOffset offset_mode,

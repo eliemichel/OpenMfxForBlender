@@ -50,14 +50,6 @@ if NOT "%1" == "" (
 		goto ERR
 	) else if "%1" == "x64" (
 		set BUILD_ARCH=x64
-	) else if "%1" == "2017" (
-		set BUILD_VS_YEAR=2017
-	) else if "%1" == "2017pre" (
-		set BUILD_VS_YEAR=2017
-		set VSWHERE_ARGS=-prerelease
-	) else if "%1" == "2017b" (
-		set BUILD_VS_YEAR=2017
-		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
 	) else if "%1" == "2019" (
 		set BUILD_VS_YEAR=2019
 	) else if "%1" == "2019pre" (
@@ -65,6 +57,14 @@ if NOT "%1" == "" (
 		set VSWHERE_ARGS=-prerelease
 	) else if "%1" == "2019b" (
 		set BUILD_VS_YEAR=2019
+		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
+	) else if "%1" == "2022" (
+		set BUILD_VS_YEAR=2022
+	) else if "%1" == "2022pre" (
+		set BUILD_VS_YEAR=2022
+		set VSWHERE_ARGS=-prerelease
+	) else if "%1" == "2022b" (
+		set BUILD_VS_YEAR=2022
 		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
 	) else if "%1" == "packagename" (
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -DCPACK_OVERRIDE_PACKAGENAME="%2"
@@ -98,6 +98,18 @@ if NOT "%1" == "" (
 	) else if "%1" == "format" (
 		set FORMAT=1
 		set FORMAT_ARGS=%2 %3 %4 %5 %6 %7 %8 %9
+		goto EOF
+	) else if "%1" == "icons" (
+		set ICONS=1
+		goto EOF
+	) else if "%1" == "icons_geom" (
+		set ICONS_GEOM=1
+		goto EOF
+	) else if "%1" == "doc_py" (
+		set DOC_PY=1
+		goto EOF
+	) else if "%1" == "svnfix" (
+		set SVN_FIX=1
 		goto EOF
 	) else (
 		echo Command "%1" unknown, aborting!

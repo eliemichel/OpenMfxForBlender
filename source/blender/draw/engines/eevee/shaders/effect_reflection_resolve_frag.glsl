@@ -40,9 +40,9 @@ vec4 ssr_get_scene_color_and_mask(vec3 hit_vP, int planar_index, float mip)
   }
   else {
     /* Find hit position in previous frame. */
-    /* TODO Combine matrices. */
+    /* TODO: Combine matrices. */
     vec3 hit_P = transform_point(ViewMatrixInverse, hit_vP);
-    /* TODO real reprojection with motion vectors, etc... */
+    /* TODO: real reprojection with motion vectors, etc... */
     uv = project_point(pastViewProjectionMatrix, hit_P).xy * 0.5 + 0.5;
   }
 
@@ -134,7 +134,7 @@ void raytrace_resolve(ClosureInputGlossy cl_in,
     vec3 V, P, N;
     if (planar_index != -1) {
       PlanarData pd = planars_data[planar_index];
-      /* Evaluate everything in refected space. */
+      /* Evaluate everything in reflected space. */
       P = line_plane_intersect(cl_common.P, cl_common.V, pd.pl_plane_eq);
       V = reflect(cl_common.V, pd.pl_normal);
       N = reflect(cl_in.N, pd.pl_normal);

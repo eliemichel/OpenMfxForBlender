@@ -83,10 +83,6 @@ bool screen_geom_edge_is_horizontal(ScrEdge *se)
   return (se->v1->vec.y == se->v2->vec.y);
 }
 
-/**
- * \param bounds_rect: Either window or screen bounds.
- * Used to exclude edges along window/screen edges.
- */
 ScrEdge *screen_geom_area_map_find_active_scredge(const ScrAreaMap *area_map,
                                                   const rcti *bounds_rect,
                                                   const int mx,
@@ -124,12 +120,15 @@ ScrEdge *screen_geom_area_map_find_active_scredge(const ScrAreaMap *area_map,
   return NULL;
 }
 
-/* need win size to make sure not to include edges along screen edge */
 ScrEdge *screen_geom_find_active_scredge(const wmWindow *win,
                                          const bScreen *screen,
                                          const int mx,
                                          const int my)
 {
+  if (U.app_flag & USER_APP_LOCK_EDGE_RESIZE) {
+    return NULL;
+  }
+
   /* Use layout size (screen excluding global areas) for screen-layout area edges */
   rcti screen_rect;
   WM_window_screen_rect_calc(win, &screen_rect);
@@ -245,13 +244,6 @@ static bool screen_geom_vertices_scale_pass(const wmWindow *win,
   return needs_another_pass;
 }
 
-/**
- * \brief Main screen-layout calculation function.
- *
- * * Scale areas nicely on window size and DPI changes.
- * * Ensure areas have a minimum height.
- * * Correctly set global areas to their fixed height.
- */
 void screen_geom_vertices_scale(const wmWindow *win, bScreen *screen)
 {
   rcti window_rect, screen_rect;
@@ -299,12 +291,9 @@ void screen_geom_vertices_scale(const wmWindow *win, bScreen *screen)
   }
 }
 
-/**
- * \return 0 if no split is possible, otherwise the screen-coordinate at which to split.
- */
 short screen_geom_find_area_split_point(const ScrArea *area,
                                         const rcti *window_rect,
-                                        char dir,
+                                        const eScreenAxis dir_axis,
                                         float fac)
 {
   const int cur_area_width = screen_geom_area_width(area);
@@ -313,17 +302,21 @@ short screen_geom_find_area_split_point(const ScrArea *area,
   const short area_min_y = ED_area_headersize();
 
   /* area big enough? */
-  if ((dir == 'v') && (cur_area_width <= 2 * area_min_x)) {
-    return 0;
+  if (dir_axis == SCREEN_AXIS_V) {
+    if (cur_area_width <= 2 * area_min_x) {
+      return 0;
+    }
   }
-  if ((dir == 'h') && (cur_area_height <= 2 * area_min_y)) {
-    return 0;
+  else if (dir_axis == SCREEN_AXIS_H) {
+    if (cur_area_height <= 2 * area_min_y) {
+      return 0;
+    }
   }
 
   /* to be sure */
   CLAMP(fac, 0.0f, 1.0f);
 
-  if (dir == 'h') {
+  if (dir_axis == SCREEN_AXIS_H) {
     short y = area->v1->vec.y + round_fl_to_short(fac * cur_area_height);
 
     int area_min = area_min_y;
@@ -366,20 +359,17 @@ short screen_geom_find_area_split_point(const ScrArea *area,
   return x;
 }
 
-/**
- * Select all edges that are directly or indirectly connected to \a edge.
- */
 void screen_geom_select_connected_edge(const wmWindow *win, ScrEdge *edge)
 {
   bScreen *screen = WM_window_get_active_screen(win);
 
-  /* 'dir' is the direction of EDGE */
-  char dir;
+  /* 'dir_axis' is the direction of EDGE */
+  eScreenAxis dir_axis;
   if (edge->v1->vec.x == edge->v2->vec.x) {
-    dir = 'v';
+    dir_axis = SCREEN_AXIS_V;
   }
   else {
-    dir = 'h';
+    dir_axis = SCREEN_AXIS_H;
   }
 
   ED_screen_verts_iter(win, screen, sv)
@@ -396,13 +386,13 @@ void screen_geom_select_connected_edge(const wmWindow *win, ScrEdge *edge)
     oneselected = false;
     LISTBASE_FOREACH (ScrEdge *, se, &screen->edgebase) {
       if (se->v1->flag + se->v2->flag == 1) {
-        if (dir == 'h') {
+        if (dir_axis == SCREEN_AXIS_H) {
           if (se->v1->vec.y == se->v2->vec.y) {
             se->v1->flag = se->v2->flag = 1;
             oneselected = true;
           }
         }
-        if (dir == 'v') {
+        else if (dir_axis == SCREEN_AXIS_V) {
           if (se->v1->vec.x == se->v2->vec.x) {
             se->v1->flag = se->v2->flag = 1;
             oneselected = true;

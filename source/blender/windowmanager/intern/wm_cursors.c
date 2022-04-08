@@ -124,14 +124,14 @@ static void window_set_custom_cursor(
     wmWindow *win, const uchar mask[16][2], const uchar bitmap[16][2], int hotx, int hoty)
 {
   GHOST_SetCustomCursorShape(
-      win->ghostwin, (GHOST_TUns8 *)bitmap, (GHOST_TUns8 *)mask, 16, 16, hotx, hoty, true);
+      win->ghostwin, (uint8_t *)bitmap, (uint8_t *)mask, 16, 16, hotx, hoty, true);
 }
 
 static void window_set_custom_cursor_ex(wmWindow *win, BCursor *cursor)
 {
   GHOST_SetCustomCursorShape(win->ghostwin,
-                             (GHOST_TUns8 *)cursor->bitmap,
-                             (GHOST_TUns8 *)cursor->mask,
+                             (uint8_t *)cursor->bitmap,
+                             (uint8_t *)cursor->mask,
                              16,
                              16,
                              cursor->hotx,
@@ -163,7 +163,7 @@ void WM_cursor_set(wmWindow *win, int curs)
   win->cursor = curs;
 
   if (curs < 0 || curs >= WM_CURSOR_NUM) {
-    BLI_assert(!"Invalid cursor number");
+    BLI_assert_msg(0, "Invalid cursor number");
     return;
   }
 
@@ -222,7 +222,6 @@ void WM_cursor_modal_restore(wmWindow *win)
   win->lastcursor = 0;
 }
 
-/* to allow usage all over, we do entire WM */
 void WM_cursor_wait(bool val)
 {
   if (!G.background) {
@@ -240,9 +239,6 @@ void WM_cursor_wait(bool val)
   }
 }
 
-/**
- * \param bounds: can be NULL
- */
 void WM_cursor_grab_enable(wmWindow *win, int wrap, bool hide, int bounds[4])
 {
   /* Only grab cursor when not running debug.
@@ -264,7 +260,7 @@ void WM_cursor_grab_enable(wmWindow *win, int wrap, bool hide, int bounds[4])
     if (wrap == WM_CURSOR_WRAP_X) {
       mode_axis = GHOST_kAxisX;
     }
-    if (wrap == WM_CURSOR_WRAP_Y) {
+    else if (wrap == WM_CURSOR_WRAP_Y) {
       mode_axis = GHOST_kGrabAxisY;
     }
   }
@@ -301,15 +297,16 @@ void WM_cursor_grab_disable(wmWindow *win, const int mouse_ungrab_xy[2])
 
 static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
-  /* note: don't use wmEvent coords because of continuous grab T36409. */
+  /* NOTE: don't use wmEvent coords because of continuous grab T36409. */
   int cx, cy;
   wm_cursor_position_get(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
 }
 
-/* give it a modal keymap one day? */
 bool wm_cursor_arrow_move(wmWindow *win, const wmEvent *event)
 {
+  /* TODO: give it a modal keymap? Hard coded for now */
+
   if (win && event->val == KM_PRESS) {
     /* Must move at least this much to avoid rounding in WM_cursor_warp. */
     float fac = GHOST_GetNativePixelSize(win->ghostwin);
@@ -334,7 +331,6 @@ bool wm_cursor_arrow_move(wmWindow *win, const wmEvent *event)
   return 0;
 }
 
-/* after this you can call restore too */
 void WM_cursor_time(wmWindow *win, int nr)
 {
   /* 10 8x8 digits */
@@ -1144,6 +1140,32 @@ void wm_init_cursor_data(void)
   };
 
   BlenderCursor[WM_CURSOR_ZOOM_OUT] = &ZoomOutCursor;
+  END_CURSOR_BLOCK;
+
+  /********************** Area Pick Cursor ***********************/
+  BEGIN_CURSOR_BLOCK;
+
+  static char pick_area_bitmap[] = {
+      0x00, 0x00, 0x10, 0x00, 0x10, 0x00, 0x10, 0x00, 0xfe, 0x00, 0x10,
+      0x00, 0x10, 0x00, 0x10, 0x00, 0x00, 0xbf, 0x00, 0x81, 0x00, 0x81,
+      0x00, 0x81, 0x00, 0x81, 0x00, 0x81, 0x00, 0x80, 0x00, 0xff,
+  };
+
+  static char pick_area_mask[] = {
+      0x38, 0x00, 0x38, 0x00, 0x38, 0x00, 0xff, 0x01, 0xff, 0x01, 0xff,
+      0x01, 0x38, 0x00, 0xb8, 0x7f, 0xb8, 0xff, 0x80, 0xc1, 0x80, 0xc1,
+      0x80, 0xc1, 0x80, 0xc1, 0x80, 0xc1, 0x80, 0xff, 0x00, 0xff,
+  };
+
+  static BCursor PickAreaCursor = {
+      pick_area_bitmap,
+      pick_area_mask,
+      4,
+      4,
+      false,
+  };
+
+  BlenderCursor[WM_CURSOR_PICK_AREA] = &PickAreaCursor;
   END_CURSOR_BLOCK;
 
   /********************** Put the cursors in the array ***********************/

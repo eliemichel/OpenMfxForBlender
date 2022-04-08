@@ -168,7 +168,7 @@ ViewLayer *DEG_get_evaluated_view_layer(const Depsgraph *graph)
   const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   Scene *scene_cow = DEG_get_evaluated_scene(graph);
   if (scene_cow == nullptr) {
-    return nullptr; /* Happens with new, not-yet-built/evaluated graphes. */
+    return nullptr; /* Happens with new, not-yet-built/evaluated graphs. */
   }
   /* Do name-based lookup. */
   /* TODO(sergey): Can this be optimized? */
@@ -200,7 +200,6 @@ ID *DEG_get_evaluated_id(const Depsgraph *depsgraph, ID *id)
   return id_node->id_cow;
 }
 
-/* Get evaluated version of data pointed to by RNA pointer */
 void DEG_get_evaluated_rna_pointer(const Depsgraph *depsgraph,
                                    PointerRNA *ptr,
                                    PointerRNA *r_ptr_eval)

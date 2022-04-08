@@ -24,7 +24,7 @@ out vec4 FragColor;
  */
 vec3 clip_to_aabb(vec3 color, vec3 minimum, vec3 maximum, vec3 average)
 {
-  /* note: only clips towards aabb center (but fast!) */
+  /* NOTE: only clips towards aabb center (but fast!) */
   vec3 center = 0.5 * (maximum + minimum);
   vec3 extents = 0.5 * (maximum - minimum);
   vec3 dist = color - center;
@@ -85,7 +85,7 @@ void main()
   color_history.rgb = clip_to_aabb(color_history.rgb, min_col.rgb, max_col.rgb, avg_col.rgb);
 
   /* Luminance weighting. */
-  /* TODO correct luminance */
+  /* TODO: correct luminance. */
   float lum0 = dot(color.rgb, vec3(0.333));
   float lum1 = dot(color_history.rgb, vec3(0.333));
   float diff = abs(lum0 - lum1) / max(lum0, max(lum1, 0.2));

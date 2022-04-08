@@ -17,67 +17,66 @@
  */
 
 #include "COM_CropOperation.h"
-#include "BLI_math.h"
 
 namespace blender::compositor {
 
 CropBaseOperation::CropBaseOperation()
 {
-  this->addInputSocket(DataType::Color, ResizeMode::None);
-  this->addOutputSocket(DataType::Color);
-  this->m_inputOperation = nullptr;
-  this->m_settings = nullptr;
+  this->add_input_socket(DataType::Color, ResizeMode::Align);
+  this->add_output_socket(DataType::Color);
+  input_operation_ = nullptr;
+  settings_ = nullptr;
 }
 
-void CropBaseOperation::updateArea()
+void CropBaseOperation::update_area()
 {
-  SocketReader *inputReference = this->getInputSocketReader(0);
-  float width = inputReference->getWidth();
-  float height = inputReference->getHeight();
-  NodeTwoXYs local_settings = *this->m_settings;
+  SocketReader *input_reference = this->get_input_socket_reader(0);
+  float width = input_reference->get_width();
+  float height = input_reference->get_height();
+  NodeTwoXYs local_settings = *settings_;
 
   if (width > 0.0f && height > 0.0f) {
-    if (this->m_relative) {
+    if (relative_) {
       local_settings.x1 = width * local_settings.fac_x1;
       local_settings.x2 = width * local_settings.fac_x2;
       local_settings.y1 = height * local_settings.fac_y1;
       local_settings.y2 = height * local_settings.fac_y2;
     }
-    if (width <= local_settings.x1 + 1) {
-      local_settings.x1 = width - 1;
+    if (width < local_settings.x1) {
+      local_settings.x1 = width;
     }
-    if (height <= local_settings.y1 + 1) {
-      local_settings.y1 = height - 1;
+    if (height < local_settings.y1) {
+      local_settings.y1 = height;
     }
-    if (width <= local_settings.x2 + 1) {
-      local_settings.x2 = width - 1;
+    if (width < local_settings.x2) {
+      local_settings.x2 = width;
     }
-    if (height <= local_settings.y2 + 1) {
-      local_settings.y2 = height - 1;
+    if (height < local_settings.y2) {
+      local_settings.y2 = height;
     }
 
-    this->m_xmax = MAX2(local_settings.x1, local_settings.x2) + 1;
-    this->m_xmin = MIN2(local_settings.x1, local_settings.x2);
-    this->m_ymax = MAX2(local_settings.y1, local_settings.y2) + 1;
-    this->m_ymin = MIN2(local_settings.y1, local_settings.y2);
+    xmax_ = MAX2(local_settings.x1, local_settings.x2);
+    xmin_ = MIN2(local_settings.x1, local_settings.x2);
+    ymax_ = MAX2(local_settings.y1, local_settings.y2);
+    ymin_ = MIN2(local_settings.y1, local_settings.y2);
   }
   else {
-    this->m_xmax = 0;
-    this->m_xmin = 0;
-    this->m_ymax = 0;
-    this->m_ymin = 0;
+    xmax_ = 0;
+    xmin_ = 0;
+    ymax_ = 0;
+    ymin_ = 0;
   }
 }
 
-void CropBaseOperation::initExecution()
+void CropBaseOperation::init_execution()
 {
-  this->m_inputOperation = this->getInputSocketReader(0);
-  updateArea();
+  input_operation_ = this->get_input_socket_reader(0);
+  update_area();
 }
 
-void CropBaseOperation::deinitExecution()
+void CropBaseOperation::deinit_execution()
 {
-  this->m_inputOperation = nullptr;
+  input_operation_ = nullptr;
 }
 
 CropOperation::CropOperation() : CropBaseOperation()
@@ -85,13 +84,27 @@ CropOperation::CropOperation() : CropBaseOperation()
   /* pass */
 }
 
-void CropOperation::executePixelSampled(float output[4], float x, float y, PixelSampler sampler)
+void CropOperation::execute_pixel_sampled(float output[4], float x, float y, PixelSampler sampler)
 {
-  if ((x < this->m_xmax && x >= this->m_xmin) && (y < this->m_ymax && y >= this->m_ymin)) {
-    this->m_inputOperation->readSampled(output, x, y, sampler);
+  if ((x < xmax_ && x >= xmin_) && (y < ymax_ && y >= ymin_)) {
+    input_operation_->read_sampled(output, x, y, sampler);
   }
   else {
     zero_v4(output);
+  }
+}
+
+void CropOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                 const rcti &area,
+                                                 Span<MemoryBuffer *> inputs)
+{
+  for (BuffersIterator<float> it = output->iterate_with(inputs, area); !it.is_end(); ++it) {
+    if ((it.x < xmax_ && it.x >= xmin_) && (it.y < ymax_ && it.y >= ymin_)) {
+      copy_v4_v4(it.out, it.in(0));
+    }
+    else {
+      zero_v4(it.out);
+    }
   }
 }
 
@@ -100,39 +113,67 @@ CropImageOperation::CropImageOperation() : CropBaseOperation()
   /* pass */
 }
 
-bool CropImageOperation::determineDependingAreaOfInterest(rcti *input,
-                                                          ReadBufferOperation *readOperation,
-                                                          rcti *output)
+bool CropImageOperation::determine_depending_area_of_interest(rcti *input,
+                                                              ReadBufferOperation *read_operation,
+                                                              rcti *output)
 {
-  rcti newInput;
+  rcti new_input;
 
-  newInput.xmax = input->xmax + this->m_xmin;
-  newInput.xmin = input->xmin + this->m_xmin;
-  newInput.ymax = input->ymax + this->m_ymin;
-  newInput.ymin = input->ymin + this->m_ymin;
+  new_input.xmax = input->xmax + xmin_;
+  new_input.xmin = input->xmin + xmin_;
+  new_input.ymax = input->ymax + ymin_;
+  new_input.ymin = input->ymin + ymin_;
 
-  return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
+  return NodeOperation::determine_depending_area_of_interest(&new_input, read_operation, output);
 }
 
-void CropImageOperation::determineResolution(unsigned int resolution[2],
-                                             unsigned int preferredResolution[2])
+void CropImageOperation::get_area_of_interest(const int input_idx,
+                                              const rcti &output_area,
+                                              rcti &r_input_area)
 {
-  NodeOperation::determineResolution(resolution, preferredResolution);
-  updateArea();
-  resolution[0] = this->m_xmax - this->m_xmin;
-  resolution[1] = this->m_ymax - this->m_ymin;
+  BLI_assert(input_idx == 0);
+  UNUSED_VARS_NDEBUG(input_idx);
+  r_input_area.xmax = output_area.xmax + xmin_;
+  r_input_area.xmin = output_area.xmin + xmin_;
+  r_input_area.ymax = output_area.ymax + ymin_;
+  r_input_area.ymin = output_area.ymin + ymin_;
 }
 
-void CropImageOperation::executePixelSampled(float output[4],
-                                             float x,
-                                             float y,
-                                             PixelSampler sampler)
+void CropImageOperation::determine_canvas(const rcti &preferred_area, rcti &r_area)
 {
-  if (x >= 0 && x < getWidth() && y >= 0 && y < getHeight()) {
-    this->m_inputOperation->readSampled(output, (x + this->m_xmin), (y + this->m_ymin), sampler);
+  NodeOperation::determine_canvas(preferred_area, r_area);
+  update_area();
+  r_area.xmax = r_area.xmin + (xmax_ - xmin_);
+  r_area.ymax = r_area.ymin + (ymax_ - ymin_);
+}
+
+void CropImageOperation::execute_pixel_sampled(float output[4],
+                                               float x,
+                                               float y,
+                                               PixelSampler sampler)
+{
+  if (x >= 0 && x < get_width() && y >= 0 && y < get_height()) {
+    input_operation_->read_sampled(output, (x + xmin_), (y + ymin_), sampler);
   }
   else {
     zero_v4(output);
+  }
+}
+
+void CropImageOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                      const rcti &area,
+                                                      Span<MemoryBuffer *> inputs)
+{
+  const MemoryBuffer *input = inputs[0];
+  const int width = get_width();
+  const int height = get_height();
+  for (BuffersIterator<float> it = output->iterate_with({}, area); !it.is_end(); ++it) {
+    if (it.x >= 0 && it.x < width && it.y >= 0 && it.y < height) {
+      input->read_elem_checked(it.x + xmin_, it.y + ymin_, it.out);
+    }
+    else {
+      zero_v4(it.out);
+    }
   }
 }
 

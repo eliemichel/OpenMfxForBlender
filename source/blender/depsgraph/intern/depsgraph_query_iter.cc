@@ -51,9 +51,9 @@
 #  include "intern/eval/deg_eval_copy_on_write.h"
 #endif
 
-// If defined, all working data will be set to an invalid state, helping
-// to catch issues when areas accessing data which is considered to be no
-// longer available.
+/* If defined, all working data will be set to an invalid state, helping
+ * to catch issues when areas accessing data which is considered to be no
+ * longer available. */
 #undef INVALIDATE_WORK_DATA
 
 #ifndef NDEBUG
@@ -76,27 +76,48 @@ void deg_invalidate_iterator_work_data(DEGObjectIterData *data)
 #endif
 }
 
-void verify_id_properties_freed(DEGObjectIterData *data)
+void ensure_id_properties_freed(const Object *dupli_object, Object *temp_dupli_object)
 {
-  if (data->dupli_object_current == nullptr) {
-    // We didn't enter duplication yet, so we can't have any dangling
-    // pointers.
-    return;
-  }
-  const Object *dupli_object = data->dupli_object_current->ob;
-  Object *temp_dupli_object = &data->temp_dupli_object;
   if (temp_dupli_object->id.properties == nullptr) {
-    // No ID properties in temp data-block -- no leak is possible.
+    /* No ID properties in temp data-block -- no leak is possible. */
     return;
   }
   if (temp_dupli_object->id.properties == dupli_object->id.properties) {
-    // Temp copy of object did not modify ID properties.
+    /* Temp copy of object did not modify ID properties. */
     return;
   }
-  // Free memory which is owned by temporary storage which is about to
-  // get overwritten.
+  /* Free memory which is owned by temporary storage which is about to get overwritten. */
   IDP_FreeProperty(temp_dupli_object->id.properties);
   temp_dupli_object->id.properties = nullptr;
+}
+
+void ensure_boundbox_freed(const Object *dupli_object, Object *temp_dupli_object)
+{
+  if (temp_dupli_object->runtime.bb == nullptr) {
+    /* No Bounding Box in temp data-block -- no leak is possible. */
+    return;
+  }
+  if (temp_dupli_object->runtime.bb == dupli_object->runtime.bb) {
+    /* Temp copy of object did not modify Bounding Box. */
+    return;
+  }
+  /* Free memory which is owned by temporary storage which is about to get overwritten. */
+  MEM_freeN(temp_dupli_object->runtime.bb);
+  temp_dupli_object->runtime.bb = nullptr;
+}
+
+void free_owned_memory(DEGObjectIterData *data)
+{
+  if (data->dupli_object_current == nullptr) {
+    /* We didn't enter duplication yet, so we can't have any dangling pointers. */
+    return;
+  }
+
+  const Object *dupli_object = data->dupli_object_current->ob;
+  Object *temp_dupli_object = &data->temp_dupli_object;
+
+  ensure_id_properties_freed(dupli_object, temp_dupli_object);
+  ensure_boundbox_freed(dupli_object, temp_dupli_object);
 }
 
 bool deg_object_hide_original(eEvaluationMode eval_mode, Object *ob, DupliObject *dob)
@@ -119,107 +140,6 @@ bool deg_object_hide_original(eEvaluationMode eval_mode, Object *ob, DupliObject
     }
   }
 
-  return false;
-}
-
-void deg_iterator_components_init(DEGObjectIterData *data, Object *object)
-{
-  data->geometry_component_owner = object;
-  data->geometry_component_id = 0;
-}
-
-/* Returns false when iterator is exhausted. */
-bool deg_iterator_components_step(BLI_Iterator *iter)
-{
-  DEGObjectIterData *data = (DEGObjectIterData *)iter->data;
-  if (data->geometry_component_owner == nullptr) {
-    return false;
-  }
-
-  if (data->geometry_component_owner->runtime.geometry_set_eval == nullptr) {
-    /* Return the object itself, if it does not have a geometry set yet. */
-    iter->current = data->geometry_component_owner;
-    data->geometry_component_owner = nullptr;
-    return true;
-  }
-
-  GeometrySet *geometry_set = data->geometry_component_owner->runtime.geometry_set_eval;
-  if (geometry_set == nullptr) {
-    data->geometry_component_owner = nullptr;
-    return false;
-  }
-
-  /* The mesh component. */
-  if (data->geometry_component_id == 0) {
-    data->geometry_component_id++;
-
-    /* Don't use a temporary object for this component, when the owner is a mesh object. */
-    if (data->geometry_component_owner->type == OB_MESH) {
-      iter->current = data->geometry_component_owner;
-      return true;
-    }
-
-    const Mesh *mesh = geometry_set->get_mesh_for_read();
-    if (mesh != nullptr) {
-      Object *temp_object = &data->temp_geometry_component_object;
-      *temp_object = *data->geometry_component_owner;
-      temp_object->type = OB_MESH;
-      temp_object->data = (void *)mesh;
-      temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
-      iter->current = temp_object;
-      return true;
-    }
-  }
-
-  /* The pointcloud component. */
-  if (data->geometry_component_id == 1) {
-    data->geometry_component_id++;
-
-    /* Don't use a temporary object for this component, when the owner is a point cloud object. */
-    if (data->geometry_component_owner->type == OB_POINTCLOUD) {
-      iter->current = data->geometry_component_owner;
-      return true;
-    }
-
-    const PointCloud *pointcloud = geometry_set->get_pointcloud_for_read();
-    if (pointcloud != nullptr) {
-      Object *temp_object = &data->temp_geometry_component_object;
-      *temp_object = *data->geometry_component_owner;
-      temp_object->type = OB_POINTCLOUD;
-      temp_object->data = (void *)pointcloud;
-      temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
-      iter->current = temp_object;
-      return true;
-    }
-  }
-
-  /* The volume component. */
-  if (data->geometry_component_id == 2) {
-    data->geometry_component_id++;
-
-    /* Don't use a temporary object for this component, when the owner is a volume object. */
-    if (data->geometry_component_owner->type == OB_VOLUME) {
-      iter->current = data->geometry_component_owner;
-      return true;
-    }
-
-    const VolumeComponent *component = geometry_set->get_component_for_read<VolumeComponent>();
-    if (component != nullptr) {
-      const Volume *volume = component->get_for_read();
-
-      if (volume != nullptr) {
-        Object *temp_object = &data->temp_geometry_component_object;
-        *temp_object = *data->geometry_component_owner;
-        temp_object->type = OB_VOLUME;
-        temp_object->data = (void *)volume;
-        temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
-        iter->current = temp_object;
-        return true;
-      }
-    }
-  }
-
-  data->geometry_component_owner = nullptr;
   return false;
 }
 
@@ -256,7 +176,7 @@ bool deg_iterator_duplis_step(DEGObjectIterData *data)
       continue;
     }
 
-    verify_id_properties_freed(data);
+    free_owned_memory(data);
 
     data->dupli_object_current = dob;
 
@@ -271,6 +191,11 @@ bool deg_iterator_duplis_step(DEGObjectIterData *data)
     temp_dupli_object->dt = MIN2(temp_dupli_object->dt, dupli_parent->dt);
     copy_v4_v4(temp_dupli_object->color, dupli_parent->color);
     temp_dupli_object->runtime.select_id = dupli_parent->runtime.select_id;
+    if (dob->ob->data != dob->ob_data) {
+      /* Do not modify the original boundbox. */
+      temp_dupli_object->runtime.bb = nullptr;
+      BKE_object_replace_data_on_shallow_copy(temp_dupli_object, dob->ob_data);
+    }
 
     /* Duplicated elements shouldn't care whether their original collection is visible or not. */
     temp_dupli_object->base_flag |= BASE_VISIBLE_DEPSGRAPH;
@@ -287,12 +212,12 @@ bool deg_iterator_duplis_step(DEGObjectIterData *data)
 
     copy_m4_m4(data->temp_dupli_object.obmat, dob->mat);
     invert_m4_m4(data->temp_dupli_object.imat, data->temp_dupli_object.obmat);
-    deg_iterator_components_init(data, &data->temp_dupli_object);
+    data->next_object = &data->temp_dupli_object;
     BLI_assert(deg::deg_validate_copy_on_write_datablock(&data->temp_dupli_object.id));
     return true;
   }
 
-  verify_id_properties_freed(data);
+  free_owned_memory(data);
   free_object_duplilist(data->dupli_list);
   data->dupli_parent = nullptr;
   data->dupli_list = nullptr;
@@ -356,7 +281,7 @@ bool deg_iterator_objects_step(DEGObjectIterData *data)
     }
 
     if (ob_visibility & (OB_VISIBLE_SELF | OB_VISIBLE_PARTICLES)) {
-      deg_iterator_components_init(data, object);
+      data->next_object = object;
     }
     data->id_node_index++;
     return true;
@@ -379,6 +304,7 @@ void DEG_iterator_objects_begin(BLI_Iterator *iter, DEGObjectIterData *data)
     return;
   }
 
+  data->next_object = nullptr;
   data->dupli_parent = nullptr;
   data->dupli_list = nullptr;
   data->dupli_object_next = nullptr;
@@ -387,8 +313,6 @@ void DEG_iterator_objects_begin(BLI_Iterator *iter, DEGObjectIterData *data)
   data->id_node_index = 0;
   data->num_id_nodes = num_id_nodes;
   data->eval_mode = DEG_get_mode(depsgraph);
-  data->geometry_component_id = 0;
-  data->geometry_component_owner = nullptr;
   deg_invalidate_iterator_work_data(data);
 
   DEG_iterator_objects_next(iter);
@@ -398,7 +322,9 @@ void DEG_iterator_objects_next(BLI_Iterator *iter)
 {
   DEGObjectIterData *data = (DEGObjectIterData *)iter->data;
   while (true) {
-    if (deg_iterator_components_step(iter)) {
+    if (data->next_object != nullptr) {
+      iter->current = data->next_object;
+      data->next_object = nullptr;
       return;
     }
     if (deg_iterator_duplis_step(data)) {
@@ -433,10 +359,13 @@ static void DEG_iterator_ids_step(BLI_Iterator *iter, deg::IDNode *id_node, bool
     return;
   }
   if (only_updated && !(id_cow->recalc & ID_RECALC_ALL)) {
-    bNodeTree *ntree = ntreeFromID(id_cow);
-
     /* Node-tree is considered part of the data-block. */
-    if (!(ntree && (ntree->id.recalc & ID_RECALC_ALL))) {
+    bNodeTree *ntree = ntreeFromID(id_cow);
+    if (ntree == nullptr) {
+      iter->skip = true;
+      return;
+    }
+    if ((ntree->id.recalc & ID_RECALC_NTREE_OUTPUT) == 0) {
       iter->skip = true;
       return;
     }

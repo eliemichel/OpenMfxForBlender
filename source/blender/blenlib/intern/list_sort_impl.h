@@ -34,7 +34,7 @@
  * - `SORT_IMPL_LINKTYPE`:
  *   Struct type for sorting.
  * - `SORT_IMPL_LINKTYPE_DATA`:
- *   Data pointer or leave undefined to pass the link its self.
+ *   Data pointer or leave undefined to pass the link itself.
  * - `SORT_IMPL_FUNC`:
  *   Function name of the sort function.
  *
@@ -202,7 +202,7 @@ BLI_INLINE list_node *sweep_up(struct SortInfo *si, list_node *list, unsigned in
 }
 
 /**
- * The 'ranks' array essentially captures the recursion stack of a mergesort.
+ * The 'ranks' array essentially captures the recursion stack of a merge-sort.
  * The merge tree is built in a bottom-up manner.  The control loop for
  * updating the 'ranks' array is analogous to incrementing a binary integer,
  * and the `O(n)` time for counting `upto` n translates to `O(n)` merges when

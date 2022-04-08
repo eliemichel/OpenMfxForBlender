@@ -121,7 +121,7 @@ static bool parse_int_relative(const char *str,
     *r_err_msg = msg;
     return false;
   }
-  if ((errno == ERANGE) || ((value < INT_MIN || value > INT_MAX))) {
+  if ((errno == ERANGE) || ((value < INT_MIN) || (value > INT_MAX))) {
     static const char *msg = "exceeds range";
     *r_err_msg = msg;
     return false;
@@ -225,7 +225,7 @@ static bool parse_int_strict_range(const char *str,
     *r_err_msg = msg;
     return false;
   }
-  if ((errno == ERANGE) || ((value < min || value > max))) {
+  if ((errno == ERANGE) || ((value < min) || (value > max))) {
     static const char *msg = "exceeds range";
     *r_err_msg = msg;
     return false;
@@ -674,6 +674,9 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
   printf("  $BLENDER_USER_DATAFILES   Directory for user data files (icons, translations, ..).\n");
   printf("  $BLENDER_SYSTEM_DATAFILES Directory for system wide data files.\n");
   printf("  $BLENDER_SYSTEM_PYTHON    Directory for system Python libraries.\n");
+#  ifdef WITH_OCIO
+  printf("  $OCIO                     Path to override the OpenColorIO config file.\n");
+#  endif
 #  ifdef WIN32
   printf("  $TEMP                     Store temporary files here.\n");
 #  else
@@ -967,9 +970,6 @@ static const char arg_handle_debug_mode_generic_set_doc_xr_time[] =
 static const char arg_handle_debug_mode_generic_set_doc_jobs[] =
     "\n\t"
     "Enable time profiling for background jobs.";
-static const char arg_handle_debug_mode_generic_set_doc_gpu[] =
-    "\n\t"
-    "Enable GPU debug context and information for OpenGL 4.3+.";
 static const char arg_handle_debug_mode_generic_set_doc_depsgraph[] =
     "\n\t"
     "Enable all debug messages from dependency graph.";
@@ -991,6 +991,9 @@ static const char arg_handle_debug_mode_generic_set_doc_depsgraph_no_threads[] =
 static const char arg_handle_debug_mode_generic_set_doc_depsgraph_pretty[] =
     "\n\t"
     "Enable colors for dependency graph debug messages.";
+static const char arg_handle_debug_mode_generic_set_doc_depsgraph_uuid[] =
+    "\n\t"
+    "Verify validness of session-wide identifiers assigned to ID datablocks.";
 static const char arg_handle_debug_mode_generic_set_doc_gpu_force_workarounds[] =
     "\n\t"
     "Enable workarounds for typical GPU issues and disable all GPU extensions.";
@@ -1088,6 +1091,20 @@ static int arg_handle_debug_value_set(int argc, const char **argv, void *UNUSED(
     return 1;
   }
   printf("\nError: you must specify debug value to set.\n");
+  return 0;
+}
+
+static const char arg_handle_debug_gpu_set_doc[] =
+    "\n"
+    "\tEnable GPU debug context and information for OpenGL 4.3+.";
+static int arg_handle_debug_gpu_set(int UNUSED(argc),
+                                    const char **UNUSED(argv),
+                                    void *UNUSED(data))
+{
+  /* Also enable logging because that how gl errors are reported. */
+  const char *gpu_filter = "gpu.*";
+  CLG_type_filter_include(gpu_filter, strlen(gpu_filter));
+  G.debug |= G_DEBUG_GPU;
   return 0;
 }
 
@@ -1195,15 +1212,17 @@ static const char arg_handle_playback_mode_doc[] =
     "\t\tZero disables (clamping to a fixed number of frames instead).";
 static int arg_handle_playback_mode(int argc, const char **argv, void *UNUSED(data))
 {
-  /* not if -b was given first */
+  /* Ignore the animation player if `-b` was given first. */
   if (G.background == 0) {
 #  ifdef WITH_FFMPEG
     /* Setup FFmpeg with current debug flags. */
     IMB_ffmpeg_init();
 #  endif
 
-    WM_main_playanim(argc, argv); /* not the same argc and argv as before */
-    exit(0);                      /* 2.4x didn't do this */
+    /* This function knows to skip this argument ('-a'). */
+    WM_main_playanim(argc, argv);
+
+    exit(0);
   }
 
   return -2;
@@ -1312,6 +1331,7 @@ static int arg_handle_register_extension(int UNUSED(argc), const char **UNUSED(a
     G.background = 1;
   }
   BLI_windows_register_blend_extension(G.background);
+  TerminateProcess(GetCurrentProcess(), 0);
 #  else
   (void)data; /* unused */
 #  endif
@@ -1911,7 +1931,7 @@ static int arg_handle_python_use_system_env_set(int UNUSED(argc),
 
 static const char arg_handle_addons_set_doc[] =
     "<addon(s)>\n"
-    "\tComma separated list of add-ons (no spaces).";
+    "\tComma separated list (no spaces) of add-ons to enable in addition to any default add-ons.";
 static int arg_handle_addons_set(int argc, const char **argv, void *data)
 {
   /* workaround for scripts not getting a bpy.context.scene, causes internal errors elsewhere */
@@ -1948,13 +1968,15 @@ static int arg_handle_load_file(int UNUSED(argc), const char **argv, void *data)
   /* Make the path absolute because its needed for relative linked blends to be found */
   char filename[FILE_MAX];
 
-  /* note, we could skip these, but so far we always tried to load these files */
+  /* NOTE: we could skip these, but so far we always tried to load these files. */
   if (argv[0][0] == '-') {
     fprintf(stderr, "unknown argument, loading as file: %s\n", argv[0]);
   }
 
   BLI_strncpy(filename, argv[0], sizeof(filename));
+  BLI_path_slash_native(filename);
   BLI_path_abs_from_cwd(filename, sizeof(filename));
+  BLI_path_normalize(NULL, filename);
 
   /* load the file */
   BKE_reports_init(&reports, RPT_PRINT);
@@ -1983,9 +2005,7 @@ static int arg_handle_load_file(int UNUSED(argc), const char **argv, void *data)
     if (BLO_has_bfile_extension(filename)) {
       /* Just pretend a file was loaded, so the user can press Save and it'll
        * save at the filename from the CLI. */
-      BLI_strncpy(G_MAIN->name, filename, FILE_MAX);
-      G.relbase_valid = true;
-      G.save_over = true;
+      STRNCPY(G_MAIN->filepath, filename);
       printf("... opened default scene instead; saving will write to: %s\n", filename);
     }
     else {
@@ -1996,8 +2016,6 @@ static int arg_handle_load_file(int UNUSED(argc), const char **argv, void *data)
       WM_exit(C);
     }
   }
-
-  G.file_loaded = 1;
 
   return 0;
 }
@@ -2148,8 +2166,8 @@ void main_args_setup(bContext *C, bArgs *ba)
                "--debug-jobs",
                CB_EX(arg_handle_debug_mode_generic_set, jobs),
                (void *)G_DEBUG_JOBS);
-  BLI_args_add(
-      ba, NULL, "--debug-gpu", CB_EX(arg_handle_debug_mode_generic_set, gpu), (void *)G_DEBUG_GPU);
+  BLI_args_add(ba, NULL, "--debug-gpu", CB(arg_handle_debug_gpu_set), NULL);
+
   BLI_args_add(ba,
                NULL,
                "--debug-depsgraph",
@@ -2189,7 +2207,7 @@ void main_args_setup(bContext *C, bArgs *ba)
   BLI_args_add(ba,
                NULL,
                "--debug-depsgraph-uuid",
-               CB_EX(arg_handle_debug_mode_generic_set, depsgraph_build),
+               CB_EX(arg_handle_debug_mode_generic_set, depsgraph_uuid),
                (void *)G_DEBUG_DEPSGRAPH_UUID);
   BLI_args_add(ba,
                NULL,

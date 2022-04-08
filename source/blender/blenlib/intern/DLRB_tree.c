@@ -29,14 +29,12 @@
 /* *********************************************** */
 /* Tree API */
 
-/* Create a new tree, and initialize as necessary */
 DLRBT_Tree *BLI_dlrbTree_new(void)
 {
   /* just allocate for now */
   return MEM_callocN(sizeof(DLRBT_Tree), "DLRBT_Tree");
 }
 
-/* Just zero out the pointers used */
 void BLI_dlrbTree_init(DLRBT_Tree *tree)
 {
   if (tree == NULL) {
@@ -62,7 +60,6 @@ static void recursive_tree_free_nodes(DLRBT_Node *node)
   MEM_freeN(node);
 }
 
-/* Free the given tree's data but not the tree itself */
 void BLI_dlrbTree_free(DLRBT_Tree *tree)
 {
   if (tree == NULL) {
@@ -109,7 +106,6 @@ static void linkedlist_sync_add_node(DLRBT_Tree *tree, DLRBT_Node *node)
   linkedlist_sync_add_node(tree, node->right);
 }
 
-/* Make sure the tree's Double-Linked list representation is valid */
 void BLI_dlrbTree_linkedlist_sync(DLRBT_Tree *tree)
 {
   /* sanity checks */
@@ -127,8 +123,9 @@ void BLI_dlrbTree_linkedlist_sync(DLRBT_Tree *tree)
 /* *********************************************** */
 /* Tree Search Utilities */
 
-/* Find the node which matches or is the closest to the requested node */
-DLRBT_Node *BLI_dlrbTree_search(DLRBT_Tree *tree, DLRBT_Comparator_FP cmp_cb, void *search_data)
+DLRBT_Node *BLI_dlrbTree_search(const DLRBT_Tree *tree,
+                                DLRBT_Comparator_FP cmp_cb,
+                                void *search_data)
 {
   DLRBT_Node *node = (tree) ? tree->root : NULL;
   short found = 0;
@@ -173,8 +170,7 @@ DLRBT_Node *BLI_dlrbTree_search(DLRBT_Tree *tree, DLRBT_Comparator_FP cmp_cb, vo
   return node;
 }
 
-/* Find the node which exactly matches the required data */
-DLRBT_Node *BLI_dlrbTree_search_exact(DLRBT_Tree *tree,
+DLRBT_Node *BLI_dlrbTree_search_exact(const DLRBT_Tree *tree,
                                       DLRBT_Comparator_FP cmp_cb,
                                       void *search_data)
 {
@@ -221,8 +217,7 @@ DLRBT_Node *BLI_dlrbTree_search_exact(DLRBT_Tree *tree,
   return (found == 1) ? (node) : (NULL);
 }
 
-/* Find the node which occurs immediately before the best matching node */
-DLRBT_Node *BLI_dlrbTree_search_prev(DLRBT_Tree *tree,
+DLRBT_Node *BLI_dlrbTree_search_prev(const DLRBT_Tree *tree,
                                      DLRBT_Comparator_FP cmp_cb,
                                      void *search_data)
 {
@@ -252,8 +247,7 @@ DLRBT_Node *BLI_dlrbTree_search_prev(DLRBT_Tree *tree,
   return NULL;
 }
 
-/* Find the node which occurs immediately after the best matching node */
-DLRBT_Node *BLI_dlrbTree_search_next(DLRBT_Tree *tree,
+DLRBT_Node *BLI_dlrbTree_search_next(const DLRBT_Tree *tree,
                                      DLRBT_Comparator_FP cmp_cb,
                                      void *search_data)
 {
@@ -283,7 +277,6 @@ DLRBT_Node *BLI_dlrbTree_search_next(DLRBT_Tree *tree,
   return NULL;
 }
 
-/* Check whether there is a node matching the requested node */
 short BLI_dlrbTree_contains(DLRBT_Tree *tree, DLRBT_Comparator_FP cmp_cb, void *search_data)
 {
   /* check if an exact search throws up anything... */
@@ -414,7 +407,7 @@ static void rotate_right(DLRBT_Tree *tree, DLRBT_Node *root)
 }
 
 /* *********************************************** */
-/* Post-Insertion Balancing  */
+/* Post-Insertion Balancing */
 
 /* forward defines for insertion checks */
 static void insert_check_1(DLRBT_Tree *tree, DLRBT_Node *node);
@@ -472,7 +465,7 @@ static void insert_check_2(DLRBT_Tree *tree, DLRBT_Node *node)
   }
 }
 
-/* W. 4+5) Perform rotation on sub-tree containing the 'new' node, then do any  */
+/* W. 4+5) Perform rotation on sub-tree containing the 'new' node, then do any. */
 static void insert_check_3(DLRBT_Tree *tree, DLRBT_Node *node)
 {
   DLRBT_Node *gp = get_grandparent(node);
@@ -520,9 +513,6 @@ static void insert_check_3(DLRBT_Tree *tree, DLRBT_Node *node)
 
 /* ----- */
 
-/* Balance the tree after the given element has been added to it
- * (using custom code, in the Binary Tree way).
- */
 void BLI_dlrbTree_insert(DLRBT_Tree *tree, DLRBT_Node *node)
 {
   /* sanity checks */
@@ -539,9 +529,6 @@ void BLI_dlrbTree_insert(DLRBT_Tree *tree, DLRBT_Node *node)
 
 /* ----- */
 
-/* Add the given data to the tree, and return the node added */
-/* NOTE: for duplicates, the update_cb is called (if available),
- * and the existing node is returned */
 DLRBT_Node *BLI_dlrbTree_add(DLRBT_Tree *tree,
                              DLRBT_Comparator_FP cmp_cb,
                              DLRBT_NAlloc_FP new_cb,

@@ -31,6 +31,7 @@
 #include "DNA_sound_types.h"
 
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_main.h"
 #include "BKE_scene.h"
@@ -51,23 +52,27 @@ static bool sequencer_refresh_sound_length_recursive(Main *bmain, Scene *scene, 
   for (seq = seqbase->first; seq; seq = seq->next) {
     if (seq->type == SEQ_TYPE_META) {
       if (sequencer_refresh_sound_length_recursive(bmain, scene, &seq->seqbase)) {
-        SEQ_time_update_sequence(scene, seq);
+        SEQ_time_update_sequence(scene, seqbase, seq);
         changed = true;
       }
     }
     else if (seq->type == SEQ_TYPE_SOUND_RAM && seq->sound) {
-      const float length = BKE_sound_get_length(bmain, seq->sound);
+      SoundInfo info;
+      if (!BKE_sound_info_get(bmain, seq->sound, &info)) {
+        continue;
+      }
+
       int old = seq->len;
       float fac;
 
-      seq->len = (int)ceil((double)length * FPS);
+      seq->len = MAX2(1, round((info.length - seq->sound->offset_time) * FPS));
       fac = (float)seq->len / (float)old;
       old = seq->startofs;
       seq->startofs *= fac;
       seq->endofs *= fac;
       seq->start += (old - seq->startofs); /* So that visual/"real" start frame does not change! */
 
-      SEQ_time_update_sequence(scene, seq);
+      SEQ_time_update_sequence(scene, seqbase, seq);
       changed = true;
     }
   }
@@ -111,12 +116,8 @@ void SEQ_sound_update_bounds(Scene *scene, Sequence *seq)
       /* We have to take into account start frame of the sequence's scene! */
       int startofs = seq->startofs + seq->anim_startofs + seq->scene->r.sfra;
 
-      BKE_sound_move_scene_sound(scene,
-                                 seq->scene_sound,
-                                 seq->startdisp,
-                                 seq->enddisp,
-                                 startofs,
-                                 seq->sound->offset_time);
+      BKE_sound_move_scene_sound(
+          scene, seq->scene_sound, seq->startdisp, seq->enddisp, startofs, 0.0);
     }
   }
   else {

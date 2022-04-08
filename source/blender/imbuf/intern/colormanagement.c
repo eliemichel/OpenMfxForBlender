@@ -342,7 +342,7 @@ static ImBuf *colormanage_cache_get_ibuf(ImBuf *ibuf,
 
   *cache_handle = NULL;
 
-  cache_ibuf = IMB_moviecache_get(moviecache, key);
+  cache_ibuf = IMB_moviecache_get(moviecache, key, NULL);
 
   *cache_handle = cache_ibuf;
 
@@ -759,11 +759,7 @@ static bool colormanage_use_look(const char *look, const char *view_name)
 
 void colormanage_cache_free(ImBuf *ibuf)
 {
-  if (ibuf->display_buffer_flags) {
-    MEM_freeN(ibuf->display_buffer_flags);
-
-    ibuf->display_buffer_flags = NULL;
-  }
+  MEM_SAFE_FREE(ibuf->display_buffer_flags);
 
   if (ibuf->colormanage_cache) {
     ColormanageCacheData *cache_data = colormanage_cachedata_get(ibuf);
@@ -1189,6 +1185,14 @@ static void colormanage_check_colorspace_settings(
   (void)what;
 }
 
+static bool seq_callback(Sequence *seq, void *UNUSED(user_data))
+{
+  if (seq->strip) {
+    colormanage_check_colorspace_settings(&seq->strip->colorspace_settings, "sequencer strip");
+  }
+  return true;
+}
+
 void IMB_colormanagement_check_file_config(Main *bmain)
 {
   Scene *scene;
@@ -1221,13 +1225,9 @@ void IMB_colormanagement_check_file_config(Main *bmain)
     }
 
     /* check sequencer strip input color space settings */
-    Sequence *seq;
-    SEQ_ALL_BEGIN (scene->ed, seq) {
-      if (seq->strip) {
-        colormanage_check_colorspace_settings(&seq->strip->colorspace_settings, "sequencer strip");
-      }
+    if (scene->ed != NULL) {
+      SEQ_for_each_callback(&scene->ed->seqbase, seq_callback, NULL);
     }
-    SEQ_ALL_END;
   }
 
   /* ** check input color space settings ** */
@@ -1409,7 +1409,7 @@ bool IMB_colormanagement_space_name_is_data(const char *name)
   return (colorspace && colorspace->is_data);
 }
 
-const float *IMB_colormangement_get_xyz_to_rgb()
+const float *IMB_colormanagement_get_xyz_to_rgb()
 {
   return &imbuf_xyz_to_rgb[0][0];
 }
@@ -1542,7 +1542,7 @@ static void display_buffer_apply_get_linear_buffer(DisplayBufferThread *handle,
         rgba_uchar_to_float(fp, cp);
       }
       else {
-        BLI_assert(!"Buffers of 3 or 4 channels are only supported here");
+        BLI_assert_msg(0, "Buffers of 3 or 4 channels are only supported here");
       }
     }
 
@@ -1968,7 +1968,6 @@ static void colormanagement_transform_ex(unsigned char *byte_buffer,
   IMB_colormanagement_processor_free(cm_processor);
 }
 
-/* convert the whole buffer from specified by name color space to another */
 void IMB_colormanagement_transform(float *buffer,
                                    int width,
                                    int height,
@@ -1981,9 +1980,6 @@ void IMB_colormanagement_transform(float *buffer,
       NULL, buffer, width, height, channels, from_colorspace, to_colorspace, predivide, false);
 }
 
-/* convert the whole buffer from specified by name color space to another
- * will do threaded conversion
- */
 void IMB_colormanagement_transform_threaded(float *buffer,
                                             int width,
                                             int height,
@@ -1996,7 +1992,6 @@ void IMB_colormanagement_transform_threaded(float *buffer,
       NULL, buffer, width, height, channels, from_colorspace, to_colorspace, predivide, true);
 }
 
-/* Similar to functions above, but operates on byte buffer. */
 void IMB_colormanagement_transform_byte(unsigned char *buffer,
                                         int width,
                                         int height,
@@ -2018,7 +2013,6 @@ void IMB_colormanagement_transform_byte_threaded(unsigned char *buffer,
       buffer, NULL, width, height, channels, from_colorspace, to_colorspace, false, true);
 }
 
-/* Similar to above, but gets float buffer from display one. */
 void IMB_colormanagement_transform_from_byte(float *float_buffer,
                                              unsigned char *byte_buffer,
                                              int width,
@@ -2098,9 +2092,6 @@ void IMB_colormanagement_transform_v4(float pixel[4],
   IMB_colormanagement_processor_free(cm_processor);
 }
 
-/* convert pixel from specified by descriptor color space to scene linear
- * used by performance-critical areas such as renderer and baker
- */
 void IMB_colormanagement_colorspace_to_scene_linear_v3(float pixel[3], ColorSpace *colorspace)
 {
   OCIO_ConstCPUProcessorRcPtr *processor;
@@ -2118,7 +2109,6 @@ void IMB_colormanagement_colorspace_to_scene_linear_v3(float pixel[3], ColorSpac
   }
 }
 
-/* same as above, but converts colors in opposite direction */
 void IMB_colormanagement_scene_linear_to_colorspace_v3(float pixel[3], ColorSpace *colorspace)
 {
   OCIO_ConstCPUProcessorRcPtr *processor;
@@ -2315,14 +2305,6 @@ void IMB_colormanagement_imbuf_to_float_texture(float *out_buffer,
   }
 }
 
-/* Conversion between color picking role. Typically we would expect such a
- * requirements:
- * - It is approximately perceptually linear, so that the HSV numbers and
- *   the HSV cube/circle have an intuitive distribution.
- * - It has the same gamut as the scene linear color space.
- * - Color picking values 0..1 map to scene linear values in the 0..1 range,
- *   so that picked albedo values are energy conserving.
- */
 void IMB_colormanagement_scene_linear_to_color_picking_v3(float pixel[3])
 {
   if (!global_color_picking_state.cpu_processor_to && !global_color_picking_state.failed) {
@@ -2377,8 +2359,6 @@ void IMB_colormanagement_color_picking_to_scene_linear_v3(float pixel[3])
   }
 }
 
-/* Conversion between sRGB, for rare cases like hex color or copy/pasting
- * between UI theme and scene linear colors. */
 void IMB_colormanagement_scene_linear_to_srgb_v3(float pixel[3])
 {
   mul_m3_v3(imbuf_rgb_to_xyz, pixel);
@@ -2393,10 +2373,6 @@ void IMB_colormanagement_srgb_to_scene_linear_v3(float pixel[3])
   mul_m3_v3(imbuf_xyz_to_rgb, pixel);
 }
 
-/* convert pixel from scene linear to display space using default view
- * used by performance-critical areas such as color-related widgets where we want to reduce
- * amount of per-widget allocations
- */
 void IMB_colormanagement_scene_linear_to_display_v3(float pixel[3], ColorManagedDisplay *display)
 {
   OCIO_ConstCPUProcessorRcPtr *processor = display_from_scene_linear_processor(display);
@@ -2406,7 +2382,6 @@ void IMB_colormanagement_scene_linear_to_display_v3(float pixel[3], ColorManaged
   }
 }
 
-/* same as above, but converts color in opposite direction */
 void IMB_colormanagement_display_to_scene_linear_v3(float pixel[3], ColorManagedDisplay *display)
 {
   OCIO_ConstCPUProcessorRcPtr *processor = display_to_scene_linear_processor(display);
@@ -2468,17 +2443,6 @@ void IMB_colormanagement_imbuf_make_display_space(
   colormanagement_imbuf_make_display_space(ibuf, view_settings, display_settings, false);
 }
 
-/* prepare image buffer to be saved on disk, applying color management if needed
- * color management would be applied if image is saving as render result and if
- * file format is not expecting float buffer to be in linear space (currently
- * JPEG2000 and TIFF are such formats -- they're storing image as float but
- * file itself stores applied color space).
- *
- * Both byte and float buffers would contain applied color space, and result's
- * float_colorspace would be set to display color space. This should be checked
- * in image format write callback and if float_colorspace is not NULL, no color
- * space transformation should be applied on this buffer.
- */
 ImBuf *IMB_colormanagement_imbuf_for_write(ImBuf *ibuf,
                                            bool save_as_render,
                                            bool allocate_result,
@@ -2640,7 +2604,6 @@ void IMB_colormanagement_buffer_make_display_space(
 /** \name Public Display Buffers Interfaces
  * \{ */
 
-/* acquire display buffer for given image buffer using specified view and display settings */
 unsigned char *IMB_display_buffer_acquire(ImBuf *ibuf,
                                           const ColorManagedViewSettings *view_settings,
                                           const ColorManagedDisplaySettings *display_settings,
@@ -2738,7 +2701,6 @@ unsigned char *IMB_display_buffer_acquire(ImBuf *ibuf,
   return display_buffer;
 }
 
-/* same as IMB_display_buffer_acquire but gets view and display settings from context */
 unsigned char *IMB_display_buffer_acquire_ctx(const bContext *C, ImBuf *ibuf, void **cache_handle)
 {
   ColorManagedViewSettings *view_settings;
@@ -2899,7 +2861,6 @@ const char *IMB_colormanagement_display_get_default_name(void)
   return display->name;
 }
 
-/* used by performance-critical pixel processing areas, such as color widgets */
 ColorManagedDisplay *IMB_colormanagement_display_get_named(const char *name)
 {
   return colormanage_display_get_named(name);
@@ -3437,7 +3398,7 @@ static void partial_buffer_update_rect(ImBuf *ibuf,
             pixel[0] = linear_buffer[linear_index];
           }
           else {
-            BLI_assert(!"Unsupported number of channels in partial buffer update");
+            BLI_assert_msg(0, "Unsupported number of channels in partial buffer update");
           }
         }
         else if (byte_buffer) {
@@ -3539,12 +3500,11 @@ typedef struct PartialThreadData {
   int xmin, ymin, xmax;
 } PartialThreadData;
 
-static void partial_buffer_update_rect_thread_do(void *data_v,
-                                                 int start_scanline,
-                                                 int num_scanlines)
+static void partial_buffer_update_rect_thread_do(void *data_v, int scanline)
 {
   PartialThreadData *data = (PartialThreadData *)data_v;
-  int ymin = data->ymin + start_scanline;
+  int ymin = data->ymin + scanline;
+  const int num_scanlines = 1;
   partial_buffer_update_rect(data->ibuf,
                              data->display_buffer,
                              data->linear_buffer,
@@ -4028,19 +3988,6 @@ bool IMB_colormanagement_support_glsl_draw(const ColorManagedViewSettings *UNUSE
   return OCIO_supportGPUShader();
 }
 
-/**
- * Configures GLSL shader for conversion from specified to
- * display color space
- *
- * Will create appropriate OCIO processor and setup GLSL shader,
- * so further 2D texture usage will use this conversion.
- *
- * When there's no need to apply transform on 2D textures, use
- * IMB_colormanagement_finish_glsl_draw().
- *
- * This is low-level function, use ED_draw_imbuf_ctx if you
- * only need to display given image buffer
- */
 bool IMB_colormanagement_setup_glsl_draw_from_space(
     const ColorManagedViewSettings *view_settings,
     const ColorManagedDisplaySettings *display_settings,
@@ -4098,7 +4045,6 @@ bool IMB_colormanagement_setup_glsl_draw_from_space(
   return global_gpu_state.gpu_shader_bound;
 }
 
-/* Configures GLSL shader for conversion from scene linear to display space */
 bool IMB_colormanagement_setup_glsl_draw(const ColorManagedViewSettings *view_settings,
                                          const ColorManagedDisplaySettings *display_settings,
                                          float dither,
@@ -4108,10 +4054,6 @@ bool IMB_colormanagement_setup_glsl_draw(const ColorManagedViewSettings *view_se
       view_settings, display_settings, NULL, dither, predivide, false);
 }
 
-/**
- * Same as setup_glsl_draw_from_space,
- * but color management settings are guessing from a given context.
- */
 bool IMB_colormanagement_setup_glsl_draw_from_space_ctx(const bContext *C,
                                                         struct ColorSpace *from_colorspace,
                                                         float dither,
@@ -4126,13 +4068,11 @@ bool IMB_colormanagement_setup_glsl_draw_from_space_ctx(const bContext *C,
       view_settings, display_settings, from_colorspace, dither, predivide, false);
 }
 
-/* Same as setup_glsl_draw, but color management settings are guessing from a given context */
 bool IMB_colormanagement_setup_glsl_draw_ctx(const bContext *C, float dither, bool predivide)
 {
   return IMB_colormanagement_setup_glsl_draw_from_space_ctx(C, NULL, dither, predivide);
 }
 
-/* Finish GLSL-based display space conversion */
 void IMB_colormanagement_finish_glsl_draw(void)
 {
   if (global_gpu_state.gpu_shader_bound) {

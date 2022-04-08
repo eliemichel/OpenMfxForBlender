@@ -41,11 +41,6 @@
 /** \name Draw Line
  * \{ */
 
-/**
- * Plot a line from \a p1 to \a p2 (inclusive).
- *
- * \note For clipped line drawing, see: http://stackoverflow.com/a/40902741/432509
- */
 void BLI_bitmap_draw_2d_line_v2v2i(const int p1[2],
                                    const int p2[2],
                                    bool (*callback)(int, int, void *),
@@ -223,9 +218,6 @@ static void draw_tri_flat_min(const int p[2],
   }
 }
 
-/**
- * \note Unclipped (clipped version can be added if needed).
- */
 void BLI_bitmap_draw_2d_tri_v2i(
     /* all 2d */
     const int p1[2],
@@ -338,18 +330,6 @@ static int draw_poly_v2i_n__span_y_sort(const void *a_p, const void *b_p, void *
   return 0;
 }
 
-/**
- * Draws a filled polygon with support for self intersections.
- *
- * \param callback: Takes the x, y coords and x-span (\a x_end is not inclusive),
- * note that \a x_end will always be greater than \a x, so we can use:
- *
- * \code{.c}
- * do {
- *     func(x, y);
- * } while (++x != x_end);
- * \endcode
- */
 void BLI_bitmap_draw_2d_poly_v2i_n(const int xmin,
                                    const int ymin,
                                    const int xmax,
@@ -496,7 +476,7 @@ void BLI_bitmap_draw_2d_poly_v2i_n(const int xmin,
 
     /* Scan for new x-nodes */
     while ((span_y_index < span_y_len) && (verts[span_y[span_y_index][0]][1] == pixel_y)) {
-      /* note, node_x these are just added at the end,
+      /* NOTE: node_x these are just added at the end,
        * not ideal but sorting once will resolve. */
 
       /* x is initialized for the next pixel_y */

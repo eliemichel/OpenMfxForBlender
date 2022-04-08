@@ -545,7 +545,7 @@ static float (*mask_spline_feather_differentiated_points_with_resolution__even(
       float u = (float)j / resol, weight;
       float co[2], n[2];
 
-      /* TODO - these calls all calculate similar things
+      /* TODO: these calls all calculate similar things
        * could be unified for some speed */
       BKE_mask_point_segment_co(spline, point_prev, u, co);
       BKE_mask_point_normal(spline, point_prev, u, n);
@@ -691,7 +691,7 @@ static float (*mask_spline_feather_differentiated_points_with_resolution__double
         float weight_uw, weight_scalar;
         float co[2];
 
-        /* TODO - these calls all calculate similar things
+        /* TODO: these calls all calculate similar things
          * could be unified for some speed */
         BKE_mask_point_segment_co(spline, point_prev, u, co);
 
@@ -720,10 +720,6 @@ static float (*mask_spline_feather_differentiated_points_with_resolution__double
   return feather;
 }
 
-/**
- * values align with #BKE_mask_spline_differentiate_with_resolution
- * when \a resol arguments match.
- */
 float (*BKE_mask_spline_feather_differentiated_points_with_resolution(
     MaskSpline *spline,
     const unsigned int resol,
@@ -788,7 +784,6 @@ float (*BKE_mask_spline_feather_points(MaskSpline *spline, int *r_tot_feather_po
   return feather;
 }
 
-/* *** mask point functions which involve evaluation *** */
 float *BKE_mask_point_segment_feather_diff(MaskSpline *spline,
                                            MaskSplinePoint *point,
                                            int width,

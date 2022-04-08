@@ -53,7 +53,7 @@ const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state)
     case DEG_ID_LINKED_DIRECTLY:
       return "DIRECTLY";
   }
-  BLI_assert(!"Unhandled linked state, should never happen.");
+  BLI_assert_msg(0, "Unhandled linked state, should never happen.");
   return "UNKNOWN";
 }
 
@@ -73,7 +73,6 @@ uint64_t IDNode::ComponentIDKey::hash() const
                                     BLI_ghashutil_strhash_p(name));
 }
 
-/* Initialize 'id' node - from pointer data given. */
 void IDNode::init(const ID *id, const char *UNUSED(subdata))
 {
   BLI_assert(id != nullptr);

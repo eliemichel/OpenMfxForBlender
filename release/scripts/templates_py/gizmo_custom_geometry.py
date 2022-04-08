@@ -1,4 +1,4 @@
-# Example of a custom widget that defines it's own geometry.
+# Example of a custom widget that defines its own geometry.
 #
 # Usage: Select a light in the 3D view and drag the arrow at it's rear
 # to change it's energy value.
@@ -63,7 +63,7 @@ custom_shape_verts = (
 
 
 class MyCustomShapeWidget(Gizmo):
-    bl_idname = "VIEW3D_GT_auto_facemap"
+    bl_idname = "VIEW3D_GT_custom_shape_widget"
     bl_target_properties = (
         {"id": "offset", "type": 'FLOAT', "array_length": 1},
     )

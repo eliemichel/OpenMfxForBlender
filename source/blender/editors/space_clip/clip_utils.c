@@ -398,7 +398,6 @@ void clip_delete_plane_track(bContext *C, MovieClip *clip, MovieTrackingPlaneTra
   DEG_id_tag_update(&clip->id, 0);
 }
 
-/* Calculate space clip offset to be centered at the given point.  */
 void clip_view_offset_for_center_to_point(
     SpaceClip *sc, const float x, const float y, float *r_offset_x, float *r_offset_y)
 {
@@ -492,7 +491,7 @@ static bool mask_has_selection(const bContext *C)
   }
 
   LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
-    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+    if (mask_layer->visibility_flag & (MASK_HIDE_VIEW | MASK_HIDE_SELECT)) {
       continue;
     }
     LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
@@ -608,8 +607,6 @@ bool clip_view_calculate_view_selection(
   return true;
 }
 
-/* Returns truth if lock-to-selection is enabled and possible.
- * Locking to selection is not possible if there is no selection. */
 bool clip_view_has_locked_selection(const bContext *C)
 {
   SpaceClip *space_clip = CTX_wm_space_clip(C);

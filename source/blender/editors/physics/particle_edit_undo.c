@@ -128,10 +128,7 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
   if (edit->points) {
     MEM_freeN(edit->points);
   }
-  if (edit->mirror_cache) {
-    MEM_freeN(edit->mirror_cache);
-    edit->mirror_cache = NULL;
-  }
+  MEM_SAFE_FREE(edit->mirror_cache);
 
   edit->points = MEM_dupallocN(undo->points);
   edit->totpoint = undo->totpoint;
@@ -301,7 +298,6 @@ static void particle_undosys_foreach_ID_ref(UndoStep *us_p,
   foreach_ID_ref_fn(user_data, ((UndoRefID *)&us->object_ref));
 }
 
-/* Export for ED_undo_sys. */
 void ED_particle_undosys_type(UndoType *ut)
 {
   ut->name = "Edit Particle";

@@ -53,7 +53,9 @@
 #include "DEG_depsgraph_debug.h"
 #include "DEG_depsgraph_query.h"
 
+#include "SEQ_iterator.h"
 #include "SEQ_prefetch.h"
+#include "SEQ_relations.h"
 #include "SEQ_render.h"
 #include "SEQ_sequencer.h"
 
@@ -91,7 +93,7 @@ typedef struct PrefetchJob {
   bool stop;
 } PrefetchJob;
 
-static bool seq_prefetch_is_playing(Main *bmain)
+static bool seq_prefetch_is_playing(const Main *bmain)
 {
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
     if (screen->animtimer) {
@@ -101,7 +103,7 @@ static bool seq_prefetch_is_playing(Main *bmain)
   return false;
 }
 
-static bool seq_prefetch_is_scrubbing(Main *bmain)
+static bool seq_prefetch_is_scrubbing(const Main *bmain)
 {
 
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
@@ -160,14 +162,12 @@ static Sequence *sequencer_prefetch_get_original_sequence(Sequence *seq, ListBas
   return NULL;
 }
 
-/* for cache context swapping */
 Sequence *seq_prefetch_get_original_sequence(Sequence *seq, Scene *scene)
 {
   Editing *ed = scene->ed;
   return sequencer_prefetch_get_original_sequence(seq, &ed->seqbase);
 }
 
-/* for cache context swapping */
 SeqRenderData *seq_prefetch_get_original_context(const SeqRenderData *context)
 {
   PrefetchJob *pfjob = seq_prefetch_job_get(context->scene);
@@ -260,15 +260,12 @@ static void seq_prefetch_update_area(PrefetchJob *pfjob)
 
 void SEQ_prefetch_stop_all(void)
 {
-  /*TODO(Richard): Use wm_jobs for prefetch, or pass main. */
+  /* TODO(Richard): Use wm_jobs for prefetch, or pass main. */
   for (Scene *scene = G.main->scenes.first; scene; scene = scene->id.next) {
     SEQ_prefetch_stop(scene);
   }
 }
 
-/* Use also to update scene and context changes
- * This function should almost always be called by cache invalidation, not directly.
- */
 void SEQ_prefetch_stop(Scene *scene)
 {
   PrefetchJob *pfjob;
@@ -331,6 +328,20 @@ static void seq_prefetch_update_scene(Scene *scene)
   seq_prefetch_init_depsgraph(pfjob);
 }
 
+static void seq_prefetch_update_active_seqbase(PrefetchJob *pfjob)
+{
+  MetaStack *ms_orig = SEQ_meta_stack_active_get(SEQ_editing_get(pfjob->scene));
+  Editing *ed_eval = SEQ_editing_get(pfjob->scene_eval);
+
+  if (ms_orig != NULL) {
+    Sequence *meta_eval = seq_prefetch_get_original_sequence(ms_orig->parseq, pfjob->scene_eval);
+    SEQ_seqbase_active_set(ed_eval, &meta_eval->seqbase);
+  }
+  else {
+    SEQ_seqbase_active_set(ed_eval, &ed_eval->seqbase);
+  }
+}
+
 static void seq_prefetch_resume(Scene *scene)
 {
   PrefetchJob *pfjob = seq_prefetch_job_get(scene);
@@ -359,67 +370,93 @@ void seq_prefetch_free(Scene *scene)
   scene->ed->prefetch_job = NULL;
 }
 
-/* Skip frame if we need to render 3D scene strip. Rendering 3D scene requires main lock or setting
- * up render job that doesn't have API to do openGL renders which can be used for sequencer. */
-static bool seq_prefetch_do_skip_frame(PrefetchJob *pfjob, ListBase *seqbase)
+static bool seq_prefetch_seq_has_disk_cache(PrefetchJob *pfjob,
+                                            Sequence *seq,
+                                            bool can_have_final_image)
+{
+  SeqRenderData *ctx = &pfjob->context_cpy;
+  float cfra = seq_prefetch_cfra(pfjob);
+
+  ImBuf *ibuf = seq_cache_get(ctx, seq, cfra, SEQ_CACHE_STORE_PREPROCESSED);
+  if (ibuf != NULL) {
+    IMB_freeImBuf(ibuf);
+    return true;
+  }
+
+  ibuf = seq_cache_get(ctx, seq, cfra, SEQ_CACHE_STORE_RAW);
+  if (ibuf != NULL) {
+    IMB_freeImBuf(ibuf);
+    return true;
+  }
+
+  if (!can_have_final_image) {
+    return false;
+  }
+
+  ibuf = seq_cache_get(ctx, seq, cfra, SEQ_CACHE_STORE_FINAL_OUT);
+  if (ibuf != NULL) {
+    IMB_freeImBuf(ibuf);
+    return true;
+  }
+
+  return false;
+}
+
+static bool seq_prefetch_scene_strip_is_rendered(PrefetchJob *pfjob,
+                                                 ListBase *seqbase,
+                                                 SeqCollection *scene_strips,
+                                                 bool is_recursive_check)
 {
   float cfra = seq_prefetch_cfra(pfjob);
   Sequence *seq_arr[MAXSEQ + 1];
   int count = seq_get_shown_sequences(seqbase, cfra, 0, seq_arr);
-  SeqRenderData *ctx = &pfjob->context_cpy;
-  ImBuf *ibuf = NULL;
 
-  /* Disable prefetching 3D scene strips, but check for disk cache. */
+  /* Iterate over rendered strips. */
   for (int i = 0; i < count; i++) {
-    if (seq_arr[i]->type == SEQ_TYPE_META &&
-        seq_prefetch_do_skip_frame(pfjob, &seq_arr[i]->seqbase)) {
+    Sequence *seq = seq_arr[i];
+    if (seq->type == SEQ_TYPE_META &&
+        seq_prefetch_scene_strip_is_rendered(pfjob, &seq->seqbase, scene_strips, true)) {
       return true;
     }
 
-    if (seq_arr[i]->type == SEQ_TYPE_SCENE && (seq_arr[i]->flag & SEQ_SCENE_STRIPS) == 0) {
-      int cached_types = 0;
-
-      ibuf = seq_cache_get(ctx, seq_arr[i], cfra, SEQ_CACHE_STORE_FINAL_OUT);
-      if (ibuf != NULL) {
-        cached_types |= SEQ_CACHE_STORE_FINAL_OUT;
-        IMB_freeImBuf(ibuf);
-        ibuf = NULL;
-      }
-
-      ibuf = seq_cache_get(ctx, seq_arr[i], cfra, SEQ_CACHE_STORE_COMPOSITE);
-      if (ibuf != NULL) {
-        cached_types |= SEQ_CACHE_STORE_COMPOSITE;
-        IMB_freeImBuf(ibuf);
-        ibuf = NULL;
-      }
-
-      ibuf = seq_cache_get(ctx, seq_arr[i], cfra, SEQ_CACHE_STORE_PREPROCESSED);
-      if (ibuf != NULL) {
-        cached_types |= SEQ_CACHE_STORE_PREPROCESSED;
-        IMB_freeImBuf(ibuf);
-        ibuf = NULL;
-      }
-
-      ibuf = seq_cache_get(ctx, seq_arr[i], cfra, SEQ_CACHE_STORE_RAW);
-      if (ibuf != NULL) {
-        cached_types |= SEQ_CACHE_STORE_RAW;
-        IMB_freeImBuf(ibuf);
-        ibuf = NULL;
-      }
-
-      if ((cached_types & (SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_PREPROCESSED)) != 0) {
-        continue;
-      }
-
-      /* It is only safe to use these cache types if strip is last in stack. */
-      if (i == count - 1 && (cached_types & SEQ_CACHE_STORE_FINAL_OUT) != 0) {
-        continue;
-      }
-
+    /* Disable prefetching 3D scene strips, but check for disk cache. */
+    if (seq->type == SEQ_TYPE_SCENE && (seq->flag & SEQ_SCENE_STRIPS) == 0 &&
+        !seq_prefetch_seq_has_disk_cache(pfjob, seq, !is_recursive_check)) {
       return true;
+    }
+
+    /* Check if strip is effect of scene strip or uses it as modifier. This is recursive check. */
+    Sequence *seq_scene;
+    SEQ_ITERATOR_FOREACH (seq_scene, scene_strips) {
+      if (SEQ_relations_render_loop_check(seq, seq_scene)) {
+        return true;
+      }
     }
   }
+  return false;
+}
 
+static SeqCollection *query_scene_strips(ListBase *seqbase)
+{
+  SeqCollection *collection = SEQ_query_all_strips_recursive(seqbase);
+  LISTBASE_FOREACH (Sequence *, seq, seqbase) {
+    if (seq->type != SEQ_TYPE_SCENE || (seq->flag & SEQ_SCENE_STRIPS) != 0) {
+      SEQ_collection_remove_strip(seq, collection);
+    }
+  }
+  return collection;
+}
+
+/* Prefetch must avoid rendering scene strips, because rendering in background locks UI and can
+ * make it unresponsive for long time periods. */
+static bool seq_prefetch_must_skip_frame(PrefetchJob *pfjob, ListBase *seqbase)
+{
+  SeqCollection *scene_strips = query_scene_strips(seqbase);
+  if (seq_prefetch_scene_strip_is_rendered(pfjob, seqbase, scene_strips, false)) {
+    SEQ_collection_free(scene_strips);
+    return true;
+  }
+  SEQ_collection_free(scene_strips);
   return false;
 }
 
@@ -463,8 +500,8 @@ static void *seq_prefetch_frames(void *job)
      */
     pfjob->scene_eval->ed->prefetch_job = pfjob;
 
-    ListBase *seqbase = SEQ_active_seqbase_get(SEQ_editing_get(pfjob->scene, false));
-    if (seq_prefetch_do_skip_frame(pfjob, seqbase)) {
+    ListBase *seqbase = SEQ_active_seqbase_get(SEQ_editing_get(pfjob->scene_eval));
+    if (seq_prefetch_must_skip_frame(pfjob, seqbase)) {
       pfjob->num_frames_prefetched++;
       continue;
     }
@@ -526,6 +563,7 @@ static PrefetchJob *seq_prefetch_start_ex(const SeqRenderData *context, float cf
 
   seq_prefetch_update_scene(context->scene);
   seq_prefetch_update_context(context);
+  seq_prefetch_update_active_seqbase(pfjob);
 
   BLI_threadpool_remove(&pfjob->threads, pfjob);
   BLI_threadpool_insert(&pfjob->threads, pfjob);
@@ -533,7 +571,6 @@ static PrefetchJob *seq_prefetch_start_ex(const SeqRenderData *context, float cf
   return pfjob;
 }
 
-/* Start or resume prefetching*/
 void seq_prefetch_start(const SeqRenderData *context, float timeline_frame)
 {
   Scene *scene = context->scene;

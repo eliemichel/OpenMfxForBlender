@@ -29,6 +29,10 @@
 /* interface */
 #include "mikktspace.h"
 
+/* -------------------------------------------------------------------- */
+/** \name Internal Types
+ * \{ */
+
 typedef struct {
   const DispList *dl;
   float (*tangent)[4]; /* destination */
@@ -171,7 +175,7 @@ static void dlsurf_ts_GetTextureCoordinate(const SMikkTSpaceContext *pContext,
 
   int idx = face_to_vert_index(dlt, face_num, vert_index);
 
-  /* Note: For some reason the shading U and V are swapped compared to the
+  /* NOTE: For some reason the shading U and V are swapped compared to the
    * one described in the surface format. */
   r_uv[0] = (idx / dlt->dl->nr) / (float)(dlt->v_len);
   r_uv[1] = (idx % dlt->dl->nr) / (float)(dlt->u_len);

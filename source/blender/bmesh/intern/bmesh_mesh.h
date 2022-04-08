@@ -24,76 +24,95 @@
 
 struct BMAllocTemplate;
 struct BMLoopNorEditDataArray;
+struct BMPartialUpdate;
 struct MLoopNorSpaceArray;
 
 void BM_mesh_elem_toolflags_ensure(BMesh *bm);
 void BM_mesh_elem_toolflags_clear(BMesh *bm);
 
 struct BMeshCreateParams {
-  uint use_toolflags : 1;
+  bool use_toolflags : true;
 };
 
+/**
+ * \brief BMesh Make Mesh
+ *
+ * Allocates a new BMesh structure.
+ *
+ * \return The New bmesh
+ *
+ * \note ob is needed by multires
+ */
 BMesh *BM_mesh_create(const struct BMAllocTemplate *allocsize,
                       const struct BMeshCreateParams *params);
 
+/**
+ * \brief BMesh Free Mesh
+ *
+ * Frees a BMesh data and its structure.
+ */
 void BM_mesh_free(BMesh *bm);
+/**
+ * \brief BMesh Free Mesh Data
+ *
+ * Frees a BMesh structure.
+ *
+ * \note frees mesh, but not actual BMesh struct
+ */
 void BM_mesh_data_free(BMesh *bm);
+/**
+ * \brief BMesh Clear Mesh
+ *
+ * Clear all data in bm
+ */
 void BM_mesh_clear(BMesh *bm);
 
-void BM_mesh_normals_update(BMesh *bm);
-void BM_verts_calc_normal_vcos(BMesh *bm,
-                               const float (*fnos)[3],
-                               const float (*vcos)[3],
-                               float (*vnos)[3]);
-void BM_loops_calc_normal_vcos(BMesh *bm,
-                               const float (*vcos)[3],
-                               const float (*vnos)[3],
-                               const float (*fnos)[3],
-                               const bool use_split_normals,
-                               const float split_angle,
-                               float (*r_lnos)[3],
-                               struct MLoopNorSpaceArray *r_lnors_spacearr,
-                               short (*clnors_data)[2],
-                               const int cd_loop_clnors_offset,
-                               const bool do_rebuild);
+/**
+ * \brief BMesh Begin Edit
+ *
+ * Functions for setting up a mesh for editing and cleaning up after
+ * the editing operations are done. These are called by the tools/operator
+ * API for each time a tool is executed.
+ */
+void bmesh_edit_begin(BMesh *bm, BMOpTypeFlag type_flag);
+/**
+ * \brief BMesh End Edit
+ */
+void bmesh_edit_end(BMesh *bm, BMOpTypeFlag type_flag);
 
-bool BM_loop_check_cyclic_smooth_fan(BMLoop *l_curr);
-void BM_lnorspacearr_store(BMesh *bm, float (*r_lnors)[3]);
-void BM_lnorspace_invalidate(BMesh *bm, const bool do_invalidate_all);
-void BM_lnorspace_rebuild(BMesh *bm, bool preserve_clnor);
-void BM_lnorspace_update(BMesh *bm);
-void BM_normals_loops_edges_tag(BMesh *bm, const bool do_edges);
-#ifndef NDEBUG
-void BM_lnorspace_err(BMesh *bm);
-#endif
-
-/* Loop Generics */
-struct BMLoopNorEditDataArray *BM_loop_normal_editdata_array_init(BMesh *bm,
-                                                                  const bool do_all_loops_of_vert);
-void BM_loop_normal_editdata_array_free(struct BMLoopNorEditDataArray *lnors_ed_arr);
-
-bool BM_custom_loop_normals_to_vector_layer(struct BMesh *bm);
-void BM_custom_loop_normals_from_vector_layer(struct BMesh *bm, bool add_sharp_edges);
-
-void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
-
-void bmesh_edit_begin(BMesh *bm, const BMOpTypeFlag type_flag);
-void bmesh_edit_end(BMesh *bm, const BMOpTypeFlag type_flag);
-
-void BM_mesh_elem_index_ensure_ex(BMesh *bm, const char htype, int elem_offset[4]);
-void BM_mesh_elem_index_ensure(BMesh *bm, const char htype);
+void BM_mesh_elem_index_ensure_ex(BMesh *bm, char htype, int elem_offset[4]);
+void BM_mesh_elem_index_ensure(BMesh *bm, char htype);
+/**
+ * Array checking/setting macros.
+ *
+ * Currently vert/edge/loop/face index data is being abused, in a few areas of the code.
+ *
+ * To avoid correcting them afterwards, set 'bm->elem_index_dirty' however its possible
+ * this flag is set incorrectly which could crash blender.
+ *
+ * Functions that calls this function may depend on dirty indices on being set.
+ *
+ * This is read-only, so it can be used for assertions that don't impact behavior.
+ */
 void BM_mesh_elem_index_validate(
     BMesh *bm, const char *location, const char *func, const char *msg_a, const char *msg_b);
 
-void BM_mesh_toolflags_set(BMesh *bm, bool use_toolflags);
-
 #ifndef NDEBUG
+/**
+ * \see #BM_mesh_elem_index_validate the same rationale applies to this function.
+ */
 bool BM_mesh_elem_table_check(BMesh *bm);
 #endif
 
-void BM_mesh_elem_table_ensure(BMesh *bm, const char htype);
-void BM_mesh_elem_table_init(BMesh *bm, const char htype);
-void BM_mesh_elem_table_free(BMesh *bm, const char htype);
+/**
+ * Re-allocates mesh data with/without toolflags.
+ */
+void BM_mesh_toolflags_set(BMesh *bm, bool use_toolflags);
+
+void BM_mesh_elem_table_ensure(BMesh *bm, char htype);
+/* use BM_mesh_elem_table_ensure where possible to avoid full rebuild */
+void BM_mesh_elem_table_init(BMesh *bm, char htype);
+void BM_mesh_elem_table_free(BMesh *bm, char htype);
 
 BLI_INLINE BMVert *BM_vert_at_index(BMesh *bm, const int index)
 {
@@ -114,21 +133,49 @@ BLI_INLINE BMFace *BM_face_at_index(BMesh *bm, const int index)
   return bm->ftable[index];
 }
 
-BMVert *BM_vert_at_index_find(BMesh *bm, const int index);
-BMEdge *BM_edge_at_index_find(BMesh *bm, const int index);
-BMFace *BM_face_at_index_find(BMesh *bm, const int index);
-BMLoop *BM_loop_at_index_find(BMesh *bm, const int index);
+BMVert *BM_vert_at_index_find(BMesh *bm, int index);
+BMEdge *BM_edge_at_index_find(BMesh *bm, int index);
+BMFace *BM_face_at_index_find(BMesh *bm, int index);
+BMLoop *BM_loop_at_index_find(BMesh *bm, int index);
 
-BMVert *BM_vert_at_index_find_or_table(BMesh *bm, const int index);
-BMEdge *BM_edge_at_index_find_or_table(BMesh *bm, const int index);
-BMFace *BM_face_at_index_find_or_table(BMesh *bm, const int index);
+/**
+ * Use lookup table when available, else use slower find functions.
+ *
+ * \note Try to use #BM_mesh_elem_table_ensure instead.
+ */
+BMVert *BM_vert_at_index_find_or_table(BMesh *bm, int index);
+BMEdge *BM_edge_at_index_find_or_table(BMesh *bm, int index);
+BMFace *BM_face_at_index_find_or_table(BMesh *bm, int index);
 
 // XXX
 
-int BM_mesh_elem_count(BMesh *bm, const char htype);
+/**
+ * Return the amount of element of type 'type' in a given bmesh.
+ */
+int BM_mesh_elem_count(BMesh *bm, char htype);
 
+/**
+ * Remaps the vertices, edges and/or faces of the bmesh as indicated by vert/edge/face_idx arrays
+ * (xxx_idx[org_index] = new_index).
+ *
+ * A NULL array means no changes.
+ *
+ * \note
+ * - Does not mess with indices, just sets elem_index_dirty flag.
+ * - For verts/edges/faces only (as loops must remain "ordered" and "aligned"
+ *   on a per-face basis...).
+ *
+ * \warning Be careful if you keep pointers to affected BM elements,
+ * or arrays, when using this func!
+ */
 void BM_mesh_remap(BMesh *bm, const uint *vert_idx, const uint *edge_idx, const uint *face_idx);
 
+/**
+ * Use new memory pools for this mesh.
+ *
+ * \note needed for re-sizing elements (adding/removing tool flags)
+ * but could also be used for packing fragmented bmeshes.
+ */
 void BM_mesh_rebuild(BMesh *bm,
                      const struct BMeshCreateParams *params,
                      struct BLI_mempool *vpool,
@@ -140,6 +187,7 @@ typedef struct BMAllocTemplate {
   int totvert, totedge, totloop, totface;
 } BMAllocTemplate;
 
+/* used as an extern, defined in bmesh.h */
 extern const BMAllocTemplate bm_mesh_allocsize_default;
 extern const BMAllocTemplate bm_mesh_chunksize_default;
 

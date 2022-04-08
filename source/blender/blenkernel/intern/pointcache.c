@@ -266,7 +266,8 @@ static void ptcache_softbody_error(const ID *UNUSED(owner_id),
   /* ignored for now */
 }
 
-/* Particle functions */
+/* Particle functions. */
+
 void BKE_ptcache_make_particle_key(ParticleKey *key, int index, void **data, float time)
 {
   PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, index, key->co);
@@ -830,31 +831,23 @@ static void ptcache_rigidbody_interpolate(int index,
     RigidBodyOb *rbo = ob->rigidbody_object;
 
     if (rbo->type == RBO_TYPE_ACTIVE) {
-      ParticleKey keys[4];
-      ParticleKey result;
-      float dfra;
-
-      memset(keys, 0, sizeof(keys));
-
-      copy_v3_v3(keys[1].co, rbo->pos);
-      copy_qt_qt(keys[1].rot, rbo->orn);
+      /* It may be possible to improve results by taking into account velocity
+       * for interpolation using psys_interpolate_particle, however this is
+       * not currently cached. */
+      float pos[3], orn[4];
 
       if (old_data) {
-        memcpy(keys[2].co, data, sizeof(float[3]));
-        memcpy(keys[2].rot, data + 3, sizeof(float[4]));
+        memcpy(pos, data, sizeof(float[3]));
+        memcpy(orn, data + 3, sizeof(float[4]));
       }
       else {
-        BKE_ptcache_make_particle_key(&keys[2], 0, data, cfra2);
+        PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, index, pos);
+        PTCACHE_DATA_TO(data, BPHYS_DATA_ROTATION, index, orn);
       }
 
-      dfra = cfra2 - cfra1;
-
-      /* note: keys[0] and keys[3] unused for type < 1 (crappy) */
-      psys_interpolate_particle(-1, keys, (cfra - cfra1) / dfra, &result, true);
-      interp_qt_qtqt(result.rot, keys[1].rot, keys[2].rot, (cfra - cfra1) / dfra);
-
-      copy_v3_v3(rbo->pos, result.co);
-      copy_qt_qt(rbo->orn, result.rot);
+      const float t = (cfra - cfra1) / (cfra2 - cfra1);
+      interp_v3_v3v3(rbo->pos, rbo->pos, pos, t);
+      interp_qt_qtqt(rbo->orn, rbo->orn, orn, t);
     }
   }
 }
@@ -873,6 +866,7 @@ static void ptcache_rigidbody_error(const struct ID *UNUSED(owner_id),
 }
 
 /* Creating ID's */
+
 void BKE_ptcache_id_from_softbody(PTCacheID *pid, Object *ob, SoftBody *sb)
 {
   memset(pid, 0, sizeof(PTCacheID));
@@ -1008,9 +1002,6 @@ void BKE_ptcache_id_from_cloth(PTCacheID *pid, Object *ob, ClothModifierData *cl
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
 
-/* The fluid modifier does not actually use this anymore, but some parts of Blender expect that it
- * still has a point cache currently. For example, the fluid modifier uses
- * #DEG_add_collision_relations, which internally creates relations with the point cache. */
 void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct FluidModifierData *fmd)
 {
   FluidDomainSettings *fds = fmd->domain;
@@ -1104,10 +1095,6 @@ void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, Object *ob, RigidBodyWorld *r
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
 
-/**
- * \param ob: Optional, may be NULL.
- * \param scene: Optional may be NULL.
- */
 PTCacheID BKE_ptcache_id_find(Object *ob, Scene *scene, PointCache *cache)
 {
   PTCacheID result = {0};
@@ -1327,10 +1314,11 @@ static int ptcache_frame_from_filename(const char *filename, const char *ext)
 
 static int ptcache_path(PTCacheID *pid, char *filename)
 {
+  const char *blendfile_path = BKE_main_blendfile_path_from_global();
   Library *lib = (pid->owner_id) ? pid->owner_id->lib : NULL;
   const char *blendfilename = (lib && (pid->cache->flag & PTCACHE_IGNORE_LIBPATH) == 0) ?
                                   lib->filepath_abs :
-                                  BKE_main_blendfile_path_from_global();
+                                  blendfile_path;
   size_t i;
 
   if (pid->cache->flag & PTCACHE_EXTERNAL) {
@@ -1342,7 +1330,7 @@ static int ptcache_path(PTCacheID *pid, char *filename)
 
     return BLI_path_slash_ensure(filename); /* new strlen() */
   }
-  if (G.relbase_valid || lib) {
+  if ((blendfile_path[0] != '\0') || lib) {
     char file[MAX_PTCACHE_PATH]; /* we don't want the dir, only the file */
 
     BLI_split_file_part(blendfilename, file, sizeof(file));
@@ -1427,8 +1415,11 @@ static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_p
   filename[0] = '\0';
   newname = filename;
 
-  if (!G.relbase_valid && (pid->cache->flag & PTCACHE_EXTERNAL) == 0) {
-    return 0; /* save blend file before using disk pointcache */
+  if ((pid->cache->flag & PTCACHE_EXTERNAL) == 0) {
+    const char *blendfile_path = BKE_main_blendfile_path_from_global();
+    if (blendfile_path[0] == '\0') {
+      return 0; /* save blend file before using disk pointcache */
+    }
   }
 
   /* start with temp dir */
@@ -1474,8 +1465,11 @@ static PTCacheFile *ptcache_file_open(PTCacheID *pid, int mode, int cfra)
     return NULL;
   }
 #endif
-  if (!G.relbase_valid && (pid->cache->flag & PTCACHE_EXTERNAL) == 0) {
-    return NULL; /* save blend file before using disk pointcache */
+  if ((pid->cache->flag & PTCACHE_EXTERNAL) == 0) {
+    const char *blendfile_path = BKE_main_blendfile_path_from_global();
+    if (blendfile_path[0] == '\0') {
+      return NULL; /* save blend file before using disk pointcache */
+    }
   }
 
   ptcache_filename(pid, filename, cfra, 1, 1);
@@ -1713,7 +1707,8 @@ static int ptcache_file_header_begin_write(PTCacheFile *pf)
   return 1;
 }
 
-/* Data pointer handling */
+/* Data pointer handling. */
+
 int BKE_ptcache_data_size(int data_type)
 {
   return ptcache_data_size[data_type];
@@ -1734,7 +1729,6 @@ static void ptcache_file_pointers_init(PTCacheFile *pf)
   pf->cur[BPHYS_DATA_BOIDS] = (data_types & (1 << BPHYS_DATA_BOIDS)) ? &pf->data.boids : NULL;
 }
 
-/* Check to see if point number "index" is in pm, uses binary search for index data. */
 int BKE_ptcache_mem_index_find(PTCacheMem *pm, unsigned int index)
 {
   if (pm->totpoint > 0 && pm->data[BPHYS_DATA_INDEX]) {
@@ -1805,7 +1799,7 @@ int BKE_ptcache_mem_pointers_seek(int point_index, PTCacheMem *pm, void *cur[BPH
   }
 
   for (i = 0; i < BPHYS_TOT_DATA; i++) {
-    cur[i] = data_types & (1 << i) ? (char *)pm->data[i] + index * ptcache_data_size[i] : NULL;
+    cur[i] = (data_types & (1 << i)) ? (char *)pm->data[i] + index * ptcache_data_size[i] : NULL;
   }
 
   return 1;
@@ -1837,7 +1831,7 @@ static void ptcache_data_copy(void *from[], void *to[])
 {
   int i;
   for (i = 0; i < BPHYS_TOT_DATA; i++) {
-    /* note, durian file 03.4b_comp crashes if to[i] is not tested
+    /* NOTE: durian file 03.4b_comp crashes if to[i] is not tested
      * its NULL, not sure if this should be fixed elsewhere but for now its needed */
     if (from[i] && to[i]) {
       memcpy(to[i], from[i], ptcache_data_size[i]);
@@ -2288,7 +2282,6 @@ static int ptcache_interpolate(PTCacheID *pid, float cfra, int cfra1, int cfra2)
   return 1;
 }
 /* reads cache from disk or memory */
-/* possible to get old or interpolated result */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 {
   int cfrai = (int)floor(cfra), cfra1 = 0, cfra2 = 0;
@@ -2549,7 +2542,6 @@ static int ptcache_write_needed(PTCacheID *pid, int cfra, int *overwrite)
 
   return 0;
 }
-/* writes cache to disk or memory */
 int BKE_ptcache_write(PTCacheID *pid, unsigned int cfra)
 {
   PointCache *cache = pid->cache;
@@ -2600,7 +2592,8 @@ int BKE_ptcache_write(PTCacheID *pid, unsigned int cfra)
  * mode - PTCACHE_CLEAR_ALL,
  */
 
-/* Clears & resets */
+/* Clears & resets. */
+
 void BKE_ptcache_id_clear(PTCacheID *pid, int mode, unsigned int cfra)
 {
   unsigned int len; /* store the length of the string */
@@ -2632,8 +2625,6 @@ void BKE_ptcache_id_clear(PTCacheID *pid, int mode, unsigned int cfra)
   }
 #endif
 
-  /*if (!G.relbase_valid) return; */ /* save blend file before using pointcache */
-
   /* clear all files in the temp dir with the prefix of the ID and the ".bphys" suffix */
   switch (mode) {
     case PTCACHE_CLEAR_ALL:
@@ -2659,8 +2650,8 @@ void BKE_ptcache_id_clear(PTCacheID *pid, int mode, unsigned int cfra)
         ptcache_filename_ext_append(pid, ext, 0, false, 0);
 
         while ((de = readdir(dir)) != NULL) {
-          if (strstr(de->d_name, ext)) {               /* do we have the right extension?*/
-            if (STREQLEN(filename, de->d_name, len)) { /* do we have the right prefix */
+          if (strstr(de->d_name, ext)) {               /* Do we have the right extension? */
+            if (STREQLEN(filename, de->d_name, len)) { /* Do we have the right prefix. */
               if (mode == PTCACHE_CLEAR_ALL) {
                 pid->cache->last_exact = MIN2(pid->cache->startframe, 0);
                 BLI_join_dirfile(path_full, sizeof(path_full), path, de->d_name);
@@ -2695,7 +2686,7 @@ void BKE_ptcache_id_clear(PTCacheID *pid, int mode, unsigned int cfra)
         PTCacheMem *link = NULL;
 
         if (mode == PTCACHE_CLEAR_ALL) {
-          /*we want startframe if the cache starts before zero*/
+          /* We want startframe if the cache starts before zero. */
           pid->cache->last_exact = MIN2(pid->cache->startframe, 0);
           for (; pm; pm = pm->next) {
             ptcache_mem_clear(pm);
@@ -2753,18 +2744,18 @@ void BKE_ptcache_id_clear(PTCacheID *pid, int mode, unsigned int cfra)
   pid->cache->flag |= PTCACHE_FLAG_INFO_DIRTY;
 }
 
-int BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
+bool BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 {
   if (!pid->cache) {
-    return 0;
+    return false;
   }
 
   if (cfra < pid->cache->startframe || cfra > pid->cache->endframe) {
-    return 0;
+    return false;
   }
 
   if (pid->cache->cached_frames && pid->cache->cached_frames[cfra - pid->cache->startframe] == 0) {
-    return 0;
+    return false;
   }
 
   if (pid->cache->flag & PTCACHE_DISK_CACHE) {
@@ -2779,10 +2770,10 @@ int BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 
   for (; pm; pm = pm->next) {
     if (pm->frame == cfra) {
-      return 1;
+      return true;
     }
   }
-  return 0;
+  return false;
 }
 void BKE_ptcache_id_time(
     PTCacheID *pid, Scene *scene, float cfra, int *startframe, int *endframe, float *timescale)
@@ -2807,8 +2798,8 @@ void BKE_ptcache_id_time(
   cache = pid->cache;
 
   if (timescale) {
-    time = BKE_scene_frame_get(scene);
-    nexttime = BKE_scene_frame_to_ctime(scene, CFRA + 1.0f);
+    time = BKE_scene_ctime_get(scene);
+    nexttime = BKE_scene_frame_to_ctime(scene, scene->r.cfra + 1);
 
     *timescale = MAX2(nexttime - time, 0.0f);
   }
@@ -2856,8 +2847,8 @@ void BKE_ptcache_id_time(
       ptcache_filename_ext_append(pid, ext, 0, false, 0);
 
       while ((de = readdir(dir)) != NULL) {
-        if (strstr(de->d_name, ext)) {               /* do we have the right extension?*/
-          if (STREQLEN(filename, de->d_name, len)) { /* do we have the right prefix */
+        if (strstr(de->d_name, ext)) {               /* Do we have the right extension? */
+          if (STREQLEN(filename, de->d_name, len)) { /* Do we have the right prefix. */
             /* read the number of the file */
             const int frame = ptcache_frame_from_filename(de->d_name, ext);
 
@@ -3014,50 +3005,6 @@ int BKE_ptcache_object_reset(Scene *scene, Object *ob, int mode)
   return reset;
 }
 
-/* Use this when quitting blender, with unsaved files */
-void BKE_ptcache_remove(void)
-{
-  char path[MAX_PTCACHE_PATH];
-  char path_full[MAX_PTCACHE_PATH];
-  int rmdir = 1;
-
-  ptcache_path(NULL, path);
-
-  if (BLI_exists(path)) {
-    /* The pointcache dir exists? - remove all pointcache */
-
-    DIR *dir;
-    struct dirent *de;
-
-    dir = opendir(path);
-    if (dir == NULL) {
-      return;
-    }
-
-    while ((de = readdir(dir)) != NULL) {
-      if (FILENAME_IS_CURRPAR(de->d_name)) {
-        /* do nothing */
-      }
-      else if (strstr(de->d_name, PTCACHE_EXT)) { /* do we have the right extension?*/
-        BLI_join_dirfile(path_full, sizeof(path_full), path, de->d_name);
-        BLI_delete(path_full, false, false);
-      }
-      else {
-        rmdir = 0; /* unknown file, don't remove the dir */
-      }
-    }
-
-    closedir(dir);
-  }
-  else {
-    rmdir = 0; /* path doesn't exist  */
-  }
-
-  if (rmdir) {
-    BLI_delete(path, true, false);
-  }
-}
-
 /* Point Cache handling */
 
 PointCache *BKE_ptcache_add(ListBase *ptcaches)
@@ -3150,7 +3097,6 @@ static PointCache *ptcache_copy(PointCache *cache, const bool copy_data)
   return ncache;
 }
 
-/* returns first point cache */
 PointCache *BKE_ptcache_copy_list(ListBase *ptcaches_new,
                                   const ListBase *ptcaches_old,
                                   const int flag)
@@ -3170,6 +3116,7 @@ PointCache *BKE_ptcache_copy_list(ListBase *ptcaches_new,
  * every user action changing stuff, and then it runs a complete bake??? (ton) */
 
 /* Baking */
+
 void BKE_ptcache_quick_cache_all(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
   PTCacheBaker baker;
@@ -3202,7 +3149,6 @@ static void ptcache_dt_to_str(char *str, double dtime)
   }
 }
 
-/* if bake is not given run simulations to current frame */
 void BKE_ptcache_bake(PTCacheBaker *baker)
 {
   Scene *scene = baker->scene;
@@ -3369,7 +3315,7 @@ void BKE_ptcache_bake(PTCacheBaker *baker)
     }
 
     /* NOTE: breaking baking should leave calculated frames in cache, not clear it */
-    if ((cancel || G.is_break)) {
+    if (cancel || G.is_break) {
       break;
     }
 
@@ -3439,7 +3385,9 @@ void BKE_ptcache_bake(PTCacheBaker *baker)
 
   /* TODO: call redraw all windows somehow */
 }
+
 /* Helpers */
+
 void BKE_ptcache_disk_to_mem(PTCacheID *pid)
 {
   PointCache *cache = pid->cache;
@@ -3495,8 +3443,9 @@ void BKE_ptcache_toggle_disk_cache(PTCacheID *pid)
 {
   PointCache *cache = pid->cache;
   int last_exact = cache->last_exact;
+  const char *blendfile_path = BKE_main_blendfile_path_from_global();
 
-  if (!G.relbase_valid) {
+  if (blendfile_path[0] == '\0') {
     cache->flag &= ~PTCACHE_DISK_CACHE;
     if (G.debug & G_DEBUG) {
       printf("File must be saved before using disk cache!\n");
@@ -3548,6 +3497,11 @@ void BKE_ptcache_disk_cache_rename(PTCacheID *pid, const char *name_src, const c
   char old_path_full[MAX_PTCACHE_FILE];
   char ext[MAX_PTCACHE_PATH];
 
+  /* If both names are the same, there is nothing to do. */
+  if (STREQ(name_src, name_dst)) {
+    return;
+  }
+
   /* save old name */
   BLI_strncpy(old_name, pid->cache->name, sizeof(old_name));
 
@@ -3569,8 +3523,8 @@ void BKE_ptcache_disk_cache_rename(PTCacheID *pid, const char *name_src, const c
   BLI_strncpy(pid->cache->name, name_dst, sizeof(pid->cache->name));
 
   while ((de = readdir(dir)) != NULL) {
-    if (strstr(de->d_name, ext)) {                   /* do we have the right extension?*/
-      if (STREQLEN(old_filename, de->d_name, len)) { /* do we have the right prefix */
+    if (strstr(de->d_name, ext)) {                   /* Do we have the right extension? */
+      if (STREQLEN(old_filename, de->d_name, len)) { /* Do we have the right prefix. */
         /* read the number of the file */
         const int frame = ptcache_frame_from_filename(de->d_name, ext);
 
@@ -3589,7 +3543,7 @@ void BKE_ptcache_disk_cache_rename(PTCacheID *pid, const char *name_src, const c
 
 void BKE_ptcache_load_external(PTCacheID *pid)
 {
-  /*todo*/
+  /* TODO: */
   PointCache *cache = pid->cache;
   int len; /* store the length of the string */
   int info = 0;
@@ -3626,8 +3580,8 @@ void BKE_ptcache_load_external(PTCacheID *pid)
   }
 
   while ((de = readdir(dir)) != NULL) {
-    if (strstr(de->d_name, ext)) {               /* do we have the right extension?*/
-      if (STREQLEN(filename, de->d_name, len)) { /* do we have the right prefix */
+    if (strstr(de->d_name, ext)) {               /* Do we have the right extension? */
+      if (STREQLEN(filename, de->d_name, len)) { /* Do we have the right prefix. */
         /* read the number of the file */
         const int frame = ptcache_frame_from_filename(de->d_name, ext);
 

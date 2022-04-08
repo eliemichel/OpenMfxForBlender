@@ -201,7 +201,7 @@ static void panel_draw(const bContext *C, Panel *panel)
   for (RNA_collection_begin(ptr, "extra_inputs", &iter); iter.valid;
        RNA_property_collection_next(&iter)) {
     PointerRNA input_ptr = iter.ptr;
-    label = RNA_string_get_alloc(&input_ptr, "label", NULL, 0);
+    label = RNA_string_get_alloc(&input_ptr, "label", NULL, 0, NULL);
     uiItemR(layout, &input_ptr, "connected_object", 0, label, ICON_NONE);
     MEM_freeN(label);
   }
@@ -212,7 +212,7 @@ static void panel_draw(const bContext *C, Panel *panel)
     PointerRNA param_ptr = iter.ptr;
     row = uiLayoutRow(layout, true);
 
-    label = RNA_string_get_alloc(&param_ptr, "label", NULL, 0);
+    label = RNA_string_get_alloc(&param_ptr, "label", NULL, 0, NULL);
     uiItemL(row, label, ICON_NONE);
     MEM_freeN(label);
     
@@ -323,8 +323,8 @@ ModifierTypeInfo modifierType_OpenMfx = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
-    /* modifyVolume */ NULL,
+    /* modifyGeometrySet */ NULL,
+    
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
@@ -335,7 +335,7 @@ ModifierTypeInfo modifierType_OpenMfx = {
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,
-    /* uiPanel */ panelRegister,
+    /* panelRegister */ panelRegister,
     /* blendWrite */ blendWrite,
     /* blendRead */ blendRead,
 };

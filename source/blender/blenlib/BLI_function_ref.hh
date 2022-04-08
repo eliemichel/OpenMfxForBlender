@@ -80,6 +80,8 @@
  *
  */
 
+#include "BLI_memory_utils.hh"
+
 namespace blender {
 
 template<typename Function> class FunctionRef;
@@ -95,7 +97,7 @@ template<typename Ret, typename... Params> class FunctionRef<Ret(Params...)> {
    * A pointer to the referenced callable object. This can be a C function, a lambda object or any
    * other callable.
    *
-   * The value does not need to be initialized because it is not used unless callback_ is set as
+   * The value does not need to be initialized because it is not used unless `callback_` is set as
    * well, in which case it will be initialized as well.
    *
    * Use `intptr_t` to avoid warnings when casting to function pointers.
@@ -110,6 +112,10 @@ template<typename Ret, typename... Params> class FunctionRef<Ret(Params...)> {
  public:
   FunctionRef() = default;
 
+  FunctionRef(std::nullptr_t)
+  {
+  }
+
   /**
    * A `FunctionRef` itself is a callable as well. However, we don't want that this
    * constructor is called when `Callable` is a `FunctionRef`. If we would allow this, it
@@ -121,8 +127,8 @@ template<typename Ret, typename... Params> class FunctionRef<Ret(Params...)> {
    * another lambda.
    */
   template<typename Callable,
-           std::enable_if_t<!std::is_same_v<std::remove_cv_t<std::remove_reference_t<Callable>>,
-                                            FunctionRef>> * = nullptr>
+           BLI_ENABLE_IF((
+               !std::is_same_v<std::remove_cv_t<std::remove_reference_t<Callable>>, FunctionRef>))>
   FunctionRef(Callable &&callable)
       : callback_(callback_fn<typename std::remove_reference_t<Callable>>),
         callable_(reinterpret_cast<intptr_t>(&callable))

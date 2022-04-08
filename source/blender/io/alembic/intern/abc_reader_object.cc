@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -67,7 +67,6 @@ AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings
   determine_inherits_xform();
 }
 
-/* Determine whether we can inherit our parent's XForm */
 void AbcObjectReader::determine_inherits_xform()
 {
   m_inherits_xform = false;
@@ -121,29 +120,10 @@ static Imath::M44d blend_matrices(const Imath::M44d &m0, const Imath::M44d &m1, 
    * the matrices manually.
    */
 
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      mat0[i][j] = static_cast<float>(m0[i][j]);
-    }
-  }
-
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      mat1[i][j] = static_cast<float>(m1[i][j]);
-    }
-  }
-
+  convert_matrix_datatype(m0, mat0);
+  convert_matrix_datatype(m1, mat1);
   interp_m4_m4m4(ret, mat0, mat1, weight);
-
-  Imath::M44d m;
-
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      m[i][j] = ret[i][j];
-    }
-  }
-
-  return m;
+  return convert_matrix_datatype(ret);
 }
 
 Imath::M44d get_matrix(const IXformSchema &schema, const float time)
@@ -167,6 +147,8 @@ Imath::M44d get_matrix(const IXformSchema &schema, const float time)
 struct Mesh *AbcObjectReader::read_mesh(struct Mesh *existing_mesh,
                                         const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
                                         int UNUSED(read_flag),
+                                        const char *UNUSED(velocity_name),
+                                        const float UNUSED(velocity_scale),
                                         const char **UNUSED(err_str))
 {
   return existing_mesh;
@@ -197,7 +179,7 @@ void AbcObjectReader::setupObjectTransform(const float time)
   BKE_object_apply_mat4(m_object, transform_from_alembic, true, false);
   BKE_object_to_mat4(m_object, m_object->obmat);
 
-  if (!is_constant) {
+  if (!is_constant || m_settings->always_add_cache_reader) {
     bConstraint *con = BKE_constraint_add_for_object(
         m_object, nullptr, CONSTRAINT_TYPE_TRANSFORM_CACHE);
     bTransformCacheConstraint *data = static_cast<bTransformCacheConstraint *>(con->data);
@@ -210,7 +192,7 @@ void AbcObjectReader::setupObjectTransform(const float time)
 
 Alembic::AbcGeom::IXform AbcObjectReader::xform()
 {
-  /* Check that we have an empty object (locator, bone head/tail...).  */
+  /* Check that we have an empty object (locator, bone head/tail...). */
   if (IXform::matches(m_iobject.getMetaData())) {
     try {
       return IXform(m_iobject, Alembic::AbcGeom::kWrapExisting);

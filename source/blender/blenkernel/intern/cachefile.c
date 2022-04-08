@@ -40,6 +40,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_anim_data.h"
+#include "BKE_bpath.h"
 #include "BKE_cachefile.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -49,10 +50,18 @@
 
 #include "DEG_depsgraph_query.h"
 
+#include "RE_engine.h"
+
 #include "BLO_read_write.h"
+
+#include "MEM_guardedalloc.h"
 
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
+#endif
+
+#ifdef WITH_USD
+#  include "usd.h"
 #endif
 
 static void cachefile_handle_free(CacheFile *cache_file);
@@ -79,6 +88,7 @@ static void cache_file_copy_data(Main *UNUSED(bmain),
   cache_file_dst->handle = NULL;
   cache_file_dst->handle_readers = NULL;
   BLI_duplicatelist(&cache_file_dst->object_paths, &cache_file_src->object_paths);
+  BLI_duplicatelist(&cache_file_dst->layers, &cache_file_src->layers);
 }
 
 static void cache_file_free_data(ID *id)
@@ -86,24 +96,35 @@ static void cache_file_free_data(ID *id)
   CacheFile *cache_file = (CacheFile *)id;
   cachefile_handle_free(cache_file);
   BLI_freelistN(&cache_file->object_paths);
+  BLI_freelistN(&cache_file->layers);
+}
+
+static void cache_file_foreach_path(ID *id, BPathForeachPathData *bpath_data)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  BKE_bpath_foreach_path_fixed_process(bpath_data, cache_file->filepath);
 }
 
 static void cache_file_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   CacheFile *cache_file = (CacheFile *)id;
-  if (cache_file->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
-    BLI_listbase_clear(&cache_file->object_paths);
-    cache_file->handle = NULL;
-    memset(cache_file->handle_filepath, 0, sizeof(cache_file->handle_filepath));
-    cache_file->handle_readers = NULL;
 
-    BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
-    BKE_id_blend_write(writer, &cache_file->id);
+  /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+  BLI_listbase_clear(&cache_file->object_paths);
+  cache_file->handle = NULL;
+  memset(cache_file->handle_filepath, 0, sizeof(cache_file->handle_filepath));
+  cache_file->handle_readers = NULL;
 
-    if (cache_file->adt) {
-      BKE_animdata_blend_write(writer, cache_file->adt);
-    }
+  BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
+  BKE_id_blend_write(writer, &cache_file->id);
+
+  if (cache_file->adt) {
+    BKE_animdata_blend_write(writer, cache_file->adt);
+  }
+
+  /* write layers */
+  LISTBASE_FOREACH (CacheFileLayer *, layer, &cache_file->layers) {
+    BLO_write_struct(writer, CacheFileLayer, layer);
   }
 }
 
@@ -118,6 +139,9 @@ static void cache_file_blend_read_data(BlendDataReader *reader, ID *id)
   /* relink animdata */
   BLO_read_data_address(reader, &cache_file->adt);
   BKE_animdata_blend_read_data(reader, cache_file->adt);
+
+  /* relink layers */
+  BLO_read_list(reader, &cache_file->layers);
 }
 
 IDTypeInfo IDType_ID_CF = {
@@ -128,7 +152,8 @@ IDTypeInfo IDType_ID_CF = {
     .name = "CacheFile",
     .name_plural = "cache_files",
     .translation_context = BLT_I18NCONTEXT_ID_CACHEFILE,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
+    .asset_type_info = NULL,
 
     .init_data = cache_file_init_data,
     .copy_data = cache_file_copy_data,
@@ -136,6 +161,7 @@ IDTypeInfo IDType_ID_CF = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .foreach_path = cache_file_foreach_path,
     .owner_get = NULL,
 
     .blend_write = cache_file_blend_write,
@@ -166,15 +192,30 @@ void BKE_cachefile_reader_open(CacheFile *cache_file,
                                Object *object,
                                const char *object_path)
 {
-#ifdef WITH_ALEMBIC
+#if defined(WITH_ALEMBIC) || defined(WITH_USD)
+
   BLI_assert(cache_file->id.tag & LIB_TAG_COPIED_ON_WRITE);
 
   if (cache_file->handle == NULL) {
     return;
   }
 
-  /* Open Alembic cache reader. */
-  *reader = CacheReader_open_alembic_object(cache_file->handle, *reader, object, object_path);
+  switch (cache_file->type) {
+    case CACHEFILE_TYPE_ALEMBIC:
+#  ifdef WITH_ALEMBIC
+      /* Open Alembic cache reader. */
+      *reader = CacheReader_open_alembic_object(cache_file->handle, *reader, object, object_path);
+#  endif
+      break;
+    case CACHEFILE_TYPE_USD:
+#  ifdef WITH_USD
+      /* Open USD cache reader. */
+      *reader = CacheReader_open_usd_object(cache_file->handle, *reader, object, object_path);
+#  endif
+      break;
+    case CACHE_FILE_TYPE_INVALID:
+      break;
+  }
 
   /* Multiple modifiers and constraints can call this function concurrently. */
   BLI_spin_lock(&spin);
@@ -197,22 +238,37 @@ void BKE_cachefile_reader_open(CacheFile *cache_file,
 
 void BKE_cachefile_reader_free(CacheFile *cache_file, struct CacheReader **reader)
 {
-#ifdef WITH_ALEMBIC
+#if defined(WITH_ALEMBIC) || defined(WITH_USD)
+  /* Multiple modifiers and constraints can call this function concurrently, and
+   * cachefile_handle_free() can also be called at the same time. */
+  BLI_spin_lock(&spin);
   if (*reader != NULL) {
     if (cache_file) {
       BLI_assert(cache_file->id.tag & LIB_TAG_COPIED_ON_WRITE);
+
+      switch (cache_file->type) {
+        case CACHEFILE_TYPE_ALEMBIC:
+#  ifdef WITH_ALEMBIC
+          ABC_CacheReader_free(*reader);
+#  endif
+          break;
+        case CACHEFILE_TYPE_USD:
+#  ifdef WITH_USD
+          USD_CacheReader_free(*reader);
+#  endif
+          break;
+        case CACHE_FILE_TYPE_INVALID:
+          break;
+      }
     }
 
-    CacheReader_free(*reader);
     *reader = NULL;
 
-    /* Multiple modifiers and constraints can call this function concurrently. */
-    BLI_spin_lock(&spin);
     if (cache_file && cache_file->handle_readers) {
       BLI_gset_remove(cache_file->handle_readers, reader, NULL);
     }
-    BLI_spin_unlock(&spin);
   }
+  BLI_spin_unlock(&spin);
 #else
   UNUSED_VARS(cache_file, reader);
 #endif
@@ -220,7 +276,8 @@ void BKE_cachefile_reader_free(CacheFile *cache_file, struct CacheReader **reade
 
 static void cachefile_handle_free(CacheFile *cache_file)
 {
-#ifdef WITH_ALEMBIC
+#if defined(WITH_ALEMBIC) || defined(WITH_USD)
+
   /* Free readers in all modifiers and constraints that use the handle, before
    * we free the handle itself. */
   BLI_spin_lock(&spin);
@@ -229,7 +286,21 @@ static void cachefile_handle_free(CacheFile *cache_file)
     GSET_ITER (gs_iter, cache_file->handle_readers) {
       struct CacheReader **reader = BLI_gsetIterator_getKey(&gs_iter);
       if (*reader != NULL) {
-        CacheReader_free(*reader);
+        switch (cache_file->type) {
+          case CACHEFILE_TYPE_ALEMBIC:
+#  ifdef WITH_ALEMBIC
+            ABC_CacheReader_free(*reader);
+#  endif
+            break;
+          case CACHEFILE_TYPE_USD:
+#  ifdef WITH_USD
+            USD_CacheReader_free(*reader);
+#  endif
+            break;
+          case CACHE_FILE_TYPE_INVALID:
+            break;
+        }
+
         *reader = NULL;
       }
     }
@@ -241,7 +312,22 @@ static void cachefile_handle_free(CacheFile *cache_file)
 
   /* Free handle. */
   if (cache_file->handle) {
-    ABC_free_handle(cache_file->handle);
+
+    switch (cache_file->type) {
+      case CACHEFILE_TYPE_ALEMBIC:
+#  ifdef WITH_ALEMBIC
+        ABC_free_handle(cache_file->handle);
+#  endif
+        break;
+      case CACHEFILE_TYPE_USD:
+#  ifdef WITH_USD
+        USD_free_handle(cache_file->handle);
+#  endif
+        break;
+      case CACHE_FILE_TYPE_INVALID:
+        break;
+    }
+
     cache_file->handle = NULL;
   }
 
@@ -288,12 +374,23 @@ void BKE_cachefile_eval(Main *bmain, Depsgraph *depsgraph, CacheFile *cache_file
   BLI_freelistN(&cache_file->object_paths);
 
 #ifdef WITH_ALEMBIC
-  cache_file->handle = ABC_create_handle(bmain, filepath, &cache_file->object_paths);
-  BLI_strncpy(cache_file->handle_filepath, filepath, FILE_MAX);
+  if (BLI_path_extension_check_glob(filepath, "*abc")) {
+    cache_file->type = CACHEFILE_TYPE_ALEMBIC;
+    cache_file->handle = ABC_create_handle(
+        bmain, filepath, cache_file->layers.first, &cache_file->object_paths);
+    BLI_strncpy(cache_file->handle_filepath, filepath, FILE_MAX);
+  }
+#endif
+#ifdef WITH_USD
+  if (BLI_path_extension_check_glob(filepath, "*.usd;*.usda;*.usdc")) {
+    cache_file->type = CACHEFILE_TYPE_USD;
+    cache_file->handle = USD_create_handle(bmain, filepath, &cache_file->object_paths);
+    BLI_strncpy(cache_file->handle_filepath, filepath, FILE_MAX);
+  }
 #endif
 
   if (DEG_is_active(depsgraph)) {
-    /* Flush object paths back to original datablock for UI. */
+    /* Flush object paths back to original data-block for UI. */
     CacheFile *cache_file_orig = (CacheFile *)DEG_get_original_id(&cache_file->id);
     BLI_freelistN(&cache_file_orig->object_paths);
     BLI_duplicatelist(&cache_file_orig->object_paths, &cache_file->object_paths);
@@ -313,7 +410,7 @@ bool BKE_cachefile_filepath_get(const Main *bmain,
 
   if (cache_file->is_sequence && BLI_path_frame_get(r_filepath, &fframe, &frame_len)) {
     Scene *scene = DEG_get_evaluated_scene(depsgraph);
-    const float ctime = BKE_scene_frame_get(scene);
+    const float ctime = BKE_scene_ctime_get(scene);
     const float fps = (((double)scene->r.frs_sec) / (double)scene->r.frs_sec_base);
     const float frame = BKE_cachefile_time_offset(cache_file, ctime, fps);
 
@@ -334,4 +431,52 @@ float BKE_cachefile_time_offset(const CacheFile *cache_file, const float time, c
   const float time_offset = cache_file->frame_offset / fps;
   const float frame = (cache_file->override_frame ? cache_file->frame : time);
   return cache_file->is_sequence ? frame : frame / fps - time_offset;
+}
+
+bool BKE_cache_file_uses_render_procedural(const CacheFile *cache_file,
+                                           Scene *scene,
+                                           const int dag_eval_mode)
+{
+  RenderEngineType *render_engine_type = RE_engines_find(scene->r.engine);
+
+  if (cache_file->type != CACHEFILE_TYPE_ALEMBIC ||
+      !RE_engine_supports_alembic_procedural(render_engine_type, scene)) {
+    return false;
+  }
+
+  /* The render time procedural is only enabled during viewport rendering. */
+  const bool is_final_render = (eEvaluationMode)dag_eval_mode == DAG_EVAL_RENDER;
+  return cache_file->use_render_procedural && !is_final_render;
+}
+
+CacheFileLayer *BKE_cachefile_add_layer(CacheFile *cache_file, const char filename[1024])
+{
+  for (CacheFileLayer *layer = cache_file->layers.first; layer; layer = layer->next) {
+    if (STREQ(layer->filepath, filename)) {
+      return NULL;
+    }
+  }
+
+  const int num_layers = BLI_listbase_count(&cache_file->layers);
+
+  CacheFileLayer *layer = MEM_callocN(sizeof(CacheFileLayer), "CacheFileLayer");
+  BLI_strncpy(layer->filepath, filename, sizeof(layer->filepath));
+
+  BLI_addtail(&cache_file->layers, layer);
+
+  cache_file->active_layer = (char)(num_layers + 1);
+
+  return layer;
+}
+
+CacheFileLayer *BKE_cachefile_get_active_layer(CacheFile *cache_file)
+{
+  return BLI_findlink(&cache_file->layers, cache_file->active_layer - 1);
+}
+
+void BKE_cachefile_remove_layer(CacheFile *cache_file, CacheFileLayer *layer)
+{
+  cache_file->active_layer = 0;
+  BLI_remlink(&cache_file->layers, layer);
+  MEM_freeN(layer);
 }

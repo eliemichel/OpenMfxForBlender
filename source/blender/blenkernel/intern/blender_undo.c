@@ -68,7 +68,7 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
                              bContext *C)
 {
   Main *bmain = CTX_data_main(C);
-  char mainstr[sizeof(bmain->name)];
+  char mainstr[sizeof(bmain->filepath)];
   int success = 0, fileflags;
 
   BLI_strncpy(mainstr, BKE_main_blendfile_path(bmain), sizeof(mainstr)); /* temporal store */
@@ -78,9 +78,10 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
 
   if (UNDO_DISK) {
     const struct BlendFileReadParams params = {0};
-    struct BlendFileData *bfd = BKE_blendfile_read(mfu->filename, &params, NULL);
+    BlendFileReadReport bf_reports = {.reports = NULL};
+    struct BlendFileData *bfd = BKE_blendfile_read(mfu->filename, &params, &bf_reports);
     if (bfd != NULL) {
-      BKE_blendfile_read_setup(C, bfd, &params, NULL);
+      BKE_blendfile_read_setup(C, bfd, &params, &bf_reports);
       success = true;
     }
   }
@@ -93,19 +94,19 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
     struct BlendFileData *bfd = BKE_blendfile_read_from_memfile(
         bmain, &mfu->memfile, &params, NULL);
     if (bfd != NULL) {
-      BKE_blendfile_read_setup(C, bfd, &params, NULL);
+      BKE_blendfile_read_setup(C, bfd, &params, &(BlendFileReadReport){NULL});
       success = true;
     }
   }
 
   /* Restore, bmain has been re-allocated. */
   bmain = CTX_data_main(C);
-  BLI_strncpy(bmain->name, mainstr, sizeof(bmain->name));
+  STRNCPY(bmain->filepath, mainstr);
   G.fileflags = fileflags;
 
   if (success) {
     /* important not to update time here, else non keyed transforms are lost */
-    DEG_on_visible_update(bmain, false);
+    DEG_tag_on_visible_update(bmain, false);
   }
 
   return success;

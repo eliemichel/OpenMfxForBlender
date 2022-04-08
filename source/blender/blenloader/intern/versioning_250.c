@@ -23,8 +23,7 @@
 #else
 #  include "BLI_winstuff.h"
 #  include "winsock2.h"
-#  include <io.h>   /* for open close read */
-#  include <zlib.h> /* odd include order-issue */
+#  include <io.h> /* for open close read */
 #endif
 
 /* allow readfile to use deprecated functionality */
@@ -71,6 +70,7 @@
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
+#include "BKE_node_tree_update.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_screen.h"
@@ -132,7 +132,7 @@ static void sequencer_init_preview_region(ARegion *region)
   region->v2d.max[0] = 12000.0f;
   region->v2d.max[1] = 12000.0f;
   region->v2d.cur = region->v2d.tot;
-  region->v2d.align = V2D_ALIGN_FREE;  // (V2D_ALIGN_NO_NEG_X|V2D_ALIGN_NO_NEG_Y);
+  region->v2d.align = V2D_ALIGN_FREE; /* `(V2D_ALIGN_NO_NEG_X|V2D_ALIGN_NO_NEG_Y)` */
   region->v2d.keeptot = V2D_KEEPTOT_FREE;
 }
 
@@ -446,7 +446,7 @@ static void versions_gpencil_add_main(ListBase *lb, ID *id, const char *name)
   id->flag = LIB_FAKEUSER;
   *((short *)id->name) = ID_GD;
 
-  BKE_id_new_name_validate(lb, id, name);
+  BKE_id_new_name_validate(lb, id, name, false);
   /* alphabetic insertion: is in BKE_id_new_name_validate */
 
   if ((id->tag & LIB_TAG_TEMP_MAIN) == 0) {
@@ -580,7 +580,6 @@ static bNodeSocket *do_versions_node_group_add_socket_2_56_2(bNodeTree *ngroup,
   gsock->type = type;
 
   gsock->next = gsock->prev = NULL;
-  gsock->new_sock = NULL;
   gsock->link = NULL;
   /* assign new unique index */
   gsock->own_index = ngroup->cur_index++;
@@ -591,7 +590,7 @@ static bNodeSocket *do_versions_node_group_add_socket_2_56_2(bNodeTree *ngroup,
 
   BLI_addtail(in_out == SOCK_IN ? &ngroup->inputs : &ngroup->outputs, gsock);
 
-  ngroup->update |= (in_out == SOCK_IN ? NTREE_UPDATE_GROUP_IN : NTREE_UPDATE_GROUP_OUT);
+  BKE_ntree_update_tag_interface(ngroup);
 
   return gsock;
 }
@@ -639,6 +638,46 @@ static void do_versions_socket_default_value_259(bNodeSocket *sock)
   }
 }
 
+static bool seq_sound_proxy_update_cb(Sequence *seq, void *user_data)
+{
+  Main *bmain = (Main *)user_data;
+  if (seq->type == SEQ_TYPE_SOUND_HD) {
+    char str[FILE_MAX];
+    BLI_join_dirfile(str, sizeof(str), seq->strip->dir, seq->strip->stripdata->name);
+    BLI_path_abs(str, BKE_main_blendfile_path(bmain));
+    seq->sound = BKE_sound_new_file(bmain, str);
+  }
+#define SEQ_USE_PROXY_CUSTOM_DIR (1 << 19)
+#define SEQ_USE_PROXY_CUSTOM_FILE (1 << 21)
+  /* don't know, if anybody used that this way, but just in case, upgrade to new way... */
+  if ((seq->flag & SEQ_USE_PROXY_CUSTOM_FILE) && !(seq->flag & SEQ_USE_PROXY_CUSTOM_DIR)) {
+    BLI_snprintf(seq->strip->proxy->dir, FILE_MAXDIR, "%s/BL_proxy", seq->strip->dir);
+  }
+#undef SEQ_USE_PROXY_CUSTOM_DIR
+#undef SEQ_USE_PROXY_CUSTOM_FILE
+  return true;
+}
+
+static bool seq_set_volume_cb(Sequence *seq, void *UNUSED(user_data))
+{
+  seq->volume = 1.0f;
+  return true;
+}
+
+static bool seq_set_sat_cb(Sequence *seq, void *UNUSED(user_data))
+{
+  if (seq->sat == 0.0f) {
+    seq->sat = 1.0f;
+  }
+  return true;
+}
+
+static bool seq_set_pitch_cb(Sequence *seq, void *UNUSED(user_data))
+{
+  seq->pitch = 1.0f;
+  return true;
+}
+
 /* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 {
@@ -655,11 +694,12 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     Tex *tx;
     ParticleSettings *part;
     Object *ob;
-    // PTCacheID *pid;
-    // ListBase pidlist;
+#if 0
+    PTCacheID *pid;
+    ListBase pidlist;
+#endif
 
     bSound *sound;
-    Sequence *seq;
 
     for (sound = bmain->sounds.first; sound; sound = sound->id.next) {
       if (sound->newpackedfile) {
@@ -670,23 +710,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
       if (scene->ed && scene->ed->seqbasep) {
-        SEQ_ALL_BEGIN (scene->ed, seq) {
-          if (seq->type == SEQ_TYPE_SOUND_HD) {
-            char str[FILE_MAX];
-            BLI_join_dirfile(str, sizeof(str), seq->strip->dir, seq->strip->stripdata->name);
-            BLI_path_abs(str, BKE_main_blendfile_path(bmain));
-            seq->sound = BKE_sound_new_file(bmain, str);
-          }
-#define SEQ_USE_PROXY_CUSTOM_DIR (1 << 19)
-#define SEQ_USE_PROXY_CUSTOM_FILE (1 << 21)
-          /* don't know, if anybody used that this way, but just in case, upgrade to new way... */
-          if ((seq->flag & SEQ_USE_PROXY_CUSTOM_FILE) && !(seq->flag & SEQ_USE_PROXY_CUSTOM_DIR)) {
-            BLI_snprintf(seq->strip->proxy->dir, FILE_MAXDIR, "%s/BL_proxy", seq->strip->dir);
-          }
-#undef SEQ_USE_PROXY_CUSTOM_DIR
-#undef SEQ_USE_PROXY_CUSTOM_FILE
-        }
-        SEQ_ALL_END;
+        SEQ_for_each_callback(&scene->ed->seqbase, seq_sound_proxy_update_cb, bmain);
       }
     }
 
@@ -766,12 +790,15 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     /* set old pointcaches to have disk cache flag */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 
-      // BKE_ptcache_ids_from_object(&pidlist, ob);
+#if 0
+      BKE_ptcache_ids_from_object(&pidlist, ob);
 
-      // for (pid = pidlist.first; pid; pid = pid->next)
-      //  pid->cache->flag |= PTCACHE_DISK_CACHE;
+      for (pid = pidlist.first; pid; pid = pid->next) {
+       pid->cache->flag |= PTCACHE_DISK_CACHE;
+      }
 
-      // BLI_freelistN(&pidlist);
+      BLI_freelistN(&pidlist);
+#endif
     }
 
     /* type was a mixed flag & enum. move the 2d flag elsewhere */
@@ -789,18 +816,23 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     Tex *tex;
     Scene *sce;
     ToolSettings *ts;
-    // PTCacheID *pid;
-    // ListBase pidlist;
+#if 0
+    PTCacheID *pid;
+    ListBase pidlist;
+#endif
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      // BKE_ptcache_ids_from_object(&pidlist, ob);
+#if 0
+      BKE_ptcache_ids_from_object(&pidlist, ob);
 
-      // for (pid = pidlist.first; pid; pid = pid->next) {
-      //  if (BLI_listbase_is_empty(pid->ptcaches))
-      //      pid->ptcaches->first = pid->ptcaches->last = pid->cache;
-      //}
+      for (pid = pidlist.first; pid; pid = pid->next) {
+        if (BLI_listbase_is_empty(pid->ptcaches)) {
+          pid->ptcaches->first = pid->ptcaches->last = pid->cache;
+        }
+      }
 
-      // BLI_freelistN(&pidlist);
+      BLI_freelistN(&pidlist);
+#endif
 
       if (ob->totcol && ob->matbits == NULL) {
         int a;
@@ -824,10 +856,9 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       if (!ts->uv_selectmode || ts->vgroup_weight == 0.0f) {
         ts->selectmode = SCE_SELECT_VERTEX;
 
-        /* autokeying - setting should be taken from the user-prefs
-         * but the userprefs version may not have correct flags set
-         * (i.e. will result in blank box when enabled)
-         */
+        /* The auto-keying setting should be taken from the user-preferences
+         * but the user-preferences version may not have correct flags set
+         * (i.e. will result in blank box when enabled). */
         ts->autokey_mode = U.autokey_mode;
         if (ts->autokey_mode == 0) {
           ts->autokey_mode = 2; /* 'add/replace' but not on */
@@ -842,7 +873,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     Object *ob;
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      if (ob->flag & 8192) {  // OB_POSEMODE = 8192
+      if (ob->flag & 8192) { /* OB_POSEMODE = 8192. */
         ob->mode |= OB_MODE_POSE;
       }
     }
@@ -972,7 +1003,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     int a, tot;
 
     /* shape keys are no longer applied to the mesh itself, but rather
-     * to the derivedmesh/displist, so here we ensure that the basis
+     * to the evaluated #Mesh / #DispList, so here we ensure that the basis
      * shape key is always set in the mesh coordinates. */
     for (me = bmain->meshes.first; me; me = me->id.next) {
       if ((key = blo_do_versions_newlibadr(fd, lib, me->key)) && key->refkey) {
@@ -1274,7 +1305,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
        */
       if (ob->pose && ob->data) {
         bArmature *arm = blo_do_versions_newlibadr(fd, lib, ob->data);
-        if (arm) { /* XXX - why does this fail in some cases? */
+        if (arm) { /* XXX: why does this fail in some cases? */
           bAnimVizSettings *avs = &ob->pose->avs;
 
           /* path settings --------------------- */
@@ -1382,7 +1413,6 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
   if (!MAIN_VERSION_ATLEAST(bmain, 250, 17)) {
     Scene *sce;
-    Sequence *seq;
 
     /* initialize to sane default so toggling on border shows something */
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
@@ -1395,13 +1425,11 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       }
 
       if ((sce->r.ffcodecdata.flags & FFMPEG_MULTIPLEX_AUDIO) == 0) {
-        sce->r.ffcodecdata.audio_codec = 0x0;  // CODEC_ID_NONE
+        sce->r.ffcodecdata.audio_codec = 0x0; /* `CODEC_ID_NONE` */
       }
-
-      SEQ_ALL_BEGIN (sce->ed, seq) {
-        seq->volume = 1.0f;
+      if (sce->ed) {
+        SEQ_for_each_callback(&sce->ed->seqbase, seq_set_volume_cb, NULL);
       }
-      SEQ_ALL_END;
     }
 
     /* particle brush strength factor was changed from int to float */
@@ -1669,13 +1697,9 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
-      Sequence *seq;
-      SEQ_ALL_BEGIN (scene->ed, seq) {
-        if (seq->sat == 0.0f) {
-          seq->sat = 1.0f;
-        }
+      if (scene->ed) {
+        SEQ_for_each_callback(&scene->ed->seqbase, seq_set_sat_cb, NULL);
       }
-      SEQ_ALL_END;
     }
 
     /* GSOC 2010 Sculpt - New settings for Brush */
@@ -1735,7 +1759,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
       /* New Settings */
       if (!MAIN_VERSION_ATLEAST(bmain, 252, 5)) {
-        brush->flag |= BRUSH_SPACE_ATTEN;  // explicitly enable adaptive space
+        brush->flag |= BRUSH_SPACE_ATTEN; /* Explicitly enable adaptive space. */
 
         /* spacing was originally in pixels, convert it to percentage for new version
          * size should not be zero due to sanity check above
@@ -1994,7 +2018,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
             link->fromsock = gsock;
             link->tonode = node;
             link->tosock = sock;
-            ntree->update |= NTREE_UPDATE_LINKS;
+            BKE_ntree_update_tag_link_added(ntree, link);
 
             sock->link = link;
           }
@@ -2017,7 +2041,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
             link->fromsock = sock;
             link->tonode = NULL;
             link->tosock = gsock;
-            ntree->update |= NTREE_UPDATE_LINKS;
+            BKE_ntree_update_tag_link_added(ntree, link);
 
             gsock->link = link;
           }
@@ -2052,7 +2076,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    /* replace 'rim material' option for in offset*/
+    /* Replace 'rim material' option for in offset. */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       ModifierData *md;
       for (md = ob->modifiers.first; md; md = md->next) {
@@ -2150,15 +2174,13 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 259, 1)) {
     {
       Scene *scene;
-      Sequence *seq;
 
       for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
         scene->r.ffcodecdata.audio_channels = 2;
         scene->audio.volume = 1.0f;
-        SEQ_ALL_BEGIN (scene->ed, seq) {
-          seq->pitch = 1.0f;
+        if (scene->ed) {
+          SEQ_for_each_callback(&scene->ed->seqbase, seq_set_pitch_cb, NULL);
         }
-        SEQ_ALL_END;
       }
     }
 
@@ -2259,7 +2281,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
           do_versions_socket_default_value_259(sock);
         }
 
-        ntree->update |= NTREE_UPDATE;
+        BKE_ntree_update_tag_all(ntree);
       }
       FOREACH_NODETREE_END;
     }

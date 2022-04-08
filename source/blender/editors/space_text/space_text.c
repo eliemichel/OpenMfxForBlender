@@ -32,6 +32,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_remap.h"
 #include "BKE_screen.h"
 
 #include "ED_screen.h"
@@ -302,7 +303,7 @@ static void text_cursor(wmWindow *win, ScrArea *area, ARegion *region)
   int wmcursor = WM_CURSOR_TEXT_EDIT;
 
   if (st->text && BLI_rcti_isect_pt(&st->runtime.scroll_region_handle,
-                                    win->eventstate->x - region->winrct.xmin,
+                                    win->eventstate->xy[0] - region->winrct.xmin,
                                     st->runtime.scroll_region_handle.ymin)) {
     wmcursor = WM_CURSOR_DEFAULT;
   }
@@ -312,10 +313,7 @@ static void text_cursor(wmWindow *win, ScrArea *area, ARegion *region)
 
 /* ************* dropboxes ************* */
 
-static bool text_drop_poll(bContext *UNUSED(C),
-                           wmDrag *drag,
-                           const wmEvent *UNUSED(event),
-                           const char **UNUSED(r_tooltip))
+static bool text_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
 {
   if (drag->type == WM_DRAG_PATH) {
     /* rule might not work? */
@@ -332,10 +330,7 @@ static void text_drop_copy(wmDrag *drag, wmDropBox *drop)
   RNA_string_set(drop->ptr, "filepath", drag->path);
 }
 
-static bool text_drop_paste_poll(bContext *UNUSED(C),
-                                 wmDrag *drag,
-                                 const wmEvent *UNUSED(event),
-                                 const char **UNUSED(r_tooltip))
+static bool text_drop_paste_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
 {
   return (drag->type == WM_DRAG_ID);
 }
@@ -356,8 +351,8 @@ static void text_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy, NULL);
-  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste, NULL);
+  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy, NULL, NULL);
+  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste, NULL, NULL);
 }
 
 /* ************* end drop *********** */
@@ -407,23 +402,16 @@ static void text_properties_region_draw(const bContext *C, ARegion *region)
   }
 }
 
-static void text_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, ID *new_id)
+static void text_id_remap(ScrArea *UNUSED(area),
+                          SpaceLink *slink,
+                          const struct IDRemapper *mappings)
 {
   SpaceText *stext = (SpaceText *)slink;
-
-  if (!ELEM(GS(old_id->name), ID_TXT)) {
-    return;
-  }
-
-  if ((ID *)stext->text == old_id) {
-    stext->text = (Text *)new_id;
-    id_us_ensure_real(new_id);
-  }
+  BKE_id_remapper_apply(mappings, (ID **)&stext->text, ID_REMAP_APPLY_ENSURE_REAL);
 }
 
 /********************* registration ********************/
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_text(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype text");

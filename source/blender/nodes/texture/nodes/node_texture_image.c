@@ -101,7 +101,6 @@ static void init(bNodeTree *UNUSED(ntree), bNode *node)
   ImageUser *iuser = MEM_callocN(sizeof(ImageUser), "node image user");
   node->storage = iuser;
   iuser->sfra = 1;
-  iuser->ok = 1;
   iuser->flag |= IMA_ANIM_ALWAYS;
 }
 
@@ -109,12 +108,13 @@ void register_node_type_tex_image(void)
 {
   static bNodeType ntype;
 
-  tex_node_type_base(&ntype, TEX_NODE_IMAGE, "Image", NODE_CLASS_INPUT, NODE_PREVIEW);
+  tex_node_type_base(&ntype, TEX_NODE_IMAGE, "Image", NODE_CLASS_INPUT);
   node_type_socket_templates(&ntype, NULL, outputs);
   node_type_init(&ntype, init);
   node_type_storage(&ntype, "ImageUser", node_free_standard_storage, node_copy_standard_storage);
   node_type_exec(&ntype, NULL, NULL, exec);
-  node_type_label(&ntype, node_image_label);
+  ntype.labelfunc = node_image_label;
+  ntype.flag |= NODE_PREVIEW;
 
   nodeRegisterType(&ntype);
 }

@@ -33,6 +33,8 @@
 
 #include "RNA_access.h"
 
+#include "GHOST_Path-api.h"
+
 namespace blender::bke::tests {
 
 TEST(view_layer, aov_unique_names)
@@ -69,7 +71,7 @@ TEST(view_layer, aov_unique_names)
   EXPECT_FALSE((aov1->flag & AOV_CONFLICT) != 0);
   EXPECT_FALSE((aov2->flag & AOV_CONFLICT) != 0);
   EXPECT_TRUE(STREQ(aov1->name, "AOV"));
-  EXPECT_TRUE(STREQ(aov2->name, "AOV.001"));
+  EXPECT_TRUE(STREQ(aov2->name, "AOV_001"));
 
   /* Revert previous resolution */
   BLI_strncpy(aov2->name, "AOV", MAX_NAME);
@@ -78,7 +80,7 @@ TEST(view_layer, aov_unique_names)
   EXPECT_FALSE((aov1->flag & AOV_CONFLICT) != 0);
   EXPECT_FALSE((aov2->flag & AOV_CONFLICT) != 0);
   EXPECT_TRUE(STREQ(aov1->name, "AOV"));
-  EXPECT_TRUE(STREQ(aov2->name, "AOV.001"));
+  EXPECT_TRUE(STREQ(aov2->name, "AOV_001"));
 
   /* Resolve by removing AOV resolution */
   BKE_view_layer_remove_aov(view_layer, aov2);
@@ -94,6 +96,7 @@ TEST(view_layer, aov_unique_names)
   IMB_exit();
   BKE_appdir_exit();
   CLG_exit();
+  GHOST_DisposeSystemPaths();
 }
 
 static void test_render_pass_conflict(Scene *scene,
@@ -173,6 +176,7 @@ TEST(view_layer, aov_conflict)
   IMB_exit();
   BKE_appdir_exit();
   CLG_exit();
+  GHOST_DisposeSystemPaths();
 }
 
 }  // namespace blender::bke::tests

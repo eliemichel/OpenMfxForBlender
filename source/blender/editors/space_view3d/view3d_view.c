@@ -85,7 +85,7 @@ struct SmoothView3DState {
 };
 
 struct SmoothView3DStore {
-  /* source*/
+  /* Source. */
   struct SmoothView3DState src; /* source */
   struct SmoothView3DState dst; /* destination */
   struct SmoothView3DState org; /* original */
@@ -123,7 +123,6 @@ static void view3d_smooth_view_state_restore(const struct SmoothView3DState *sms
 }
 
 /* will start timer if appropriate */
-/* the arguments are the desired situation */
 void ED_view3d_smooth_view_ex(
     /* avoid passing in the context */
     const Depsgraph *depsgraph,
@@ -137,7 +136,6 @@ void ED_view3d_smooth_view_ex(
 {
   RegionView3D *rv3d = region->regiondata;
   struct SmoothView3DStore sms = {{0}};
-  bool ok = false;
 
   /* initialize sms */
   view3d_smooth_view_state_backup(&sms.dst, v3d, rv3d);
@@ -200,92 +198,75 @@ void ED_view3d_smooth_view_ex(
     sms.to_camera = true; /* restore view3d values in end */
   }
 
-  /* skip smooth viewing for external render engine draw */
-  if (smooth_viewtx && !(v3d->shading.type == OB_RENDER && rv3d->render_engine)) {
-    bool changed = false; /* zero means no difference */
-
-    if (sview->camera_old != sview->camera) {
-      changed = true;
-    }
-    else if (sms.dst.dist != rv3d->dist) {
-      changed = true;
-    }
-    else if (sms.dst.lens != v3d->lens) {
-      changed = true;
-    }
-    else if (!equals_v3v3(sms.dst.ofs, rv3d->ofs)) {
-      changed = true;
-    }
-    else if (!equals_v4v4(sms.dst.quat, rv3d->viewquat)) {
-      changed = true;
-    }
-
-    /* The new view is different from the old one
-     * so animate the view */
-    if (changed) {
-      /* original values */
-      if (sview->camera_old) {
-        Object *ob_camera_old_eval = DEG_get_evaluated_object(depsgraph, sview->camera_old);
-        if (sview->ofs != NULL) {
-          sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, sview->ofs, 0.0f);
-        }
-        ED_view3d_from_object(
-            ob_camera_old_eval, sms.src.ofs, sms.src.quat, &sms.src.dist, &sms.src.lens);
-      }
-      /* grid draw as floor */
-      if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION) == 0) {
-        /* use existing if exists, means multiple calls to smooth view
-         * wont lose the original 'view' setting */
-        rv3d->view = RV3D_VIEW_USER;
-      }
-
-      sms.time_allowed = (double)smooth_viewtx / 1000.0;
-
-      /* if this is view rotation only
-       * we can decrease the time allowed by
-       * the angle between quats
-       * this means small rotations wont lag */
-      if (sview->quat && !sview->ofs && !sview->dist) {
-        /* scale the time allowed by the rotation */
-        /* 180deg == 1.0 */
-        sms.time_allowed *= (double)fabsf(
-                                angle_signed_normalized_qtqt(sms.dst.quat, sms.src.quat)) /
-                            M_PI;
-      }
-
-      /* ensure it shows correct */
-      if (sms.to_camera) {
-        /* use ortho if we move from an ortho view to an ortho camera */
-        Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, sview->camera);
-        rv3d->persp = (((rv3d->is_persp == false) && (ob_camera_eval->type == OB_CAMERA) &&
-                        (((Camera *)ob_camera_eval->data)->type == CAM_ORTHO)) ?
-                           RV3D_ORTHO :
-                           RV3D_PERSP);
-      }
-
-      rv3d->rflag |= RV3D_NAVIGATING;
-
-      /* not essential but in some cases the caller will tag the area for redraw, and in that
-       * case we can get a flicker of the 'org' user view but we want to see 'src' */
-      view3d_smooth_view_state_restore(&sms.src, v3d, rv3d);
-
-      /* keep track of running timer! */
-      if (rv3d->sms == NULL) {
-        rv3d->sms = MEM_mallocN(sizeof(struct SmoothView3DStore), "smoothview v3d");
-      }
-      *rv3d->sms = sms;
-      if (rv3d->smooth_timer) {
-        WM_event_remove_timer(wm, win, rv3d->smooth_timer);
-      }
-      /* #TIMER1 is hard-coded in key-map. */
-      rv3d->smooth_timer = WM_event_add_timer(wm, win, TIMER1, 1.0 / 100.0);
-
-      ok = true;
-    }
+  if ((sview->camera_old == sview->camera) &&   /* Camera. */
+      (sms.dst.dist == rv3d->dist) &&           /* Distance. */
+      (sms.dst.lens == v3d->lens) &&            /* Lens. */
+      equals_v3v3(sms.dst.ofs, rv3d->ofs) &&    /* Offset. */
+      equals_v4v4(sms.dst.quat, rv3d->viewquat) /* Rotation. */
+  ) {
+    /* Early return if nothing changed. */
+    return;
   }
 
-  /* if we get here nothing happens */
-  if (ok == false) {
+  /* Skip smooth viewing for external render engine draw. */
+  if (smooth_viewtx && !(v3d->shading.type == OB_RENDER && rv3d->render_engine)) {
+
+    /* original values */
+    if (sview->camera_old) {
+      Object *ob_camera_old_eval = DEG_get_evaluated_object(depsgraph, sview->camera_old);
+      if (sview->ofs != NULL) {
+        sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, sview->ofs, 0.0f);
+      }
+      ED_view3d_from_object(
+          ob_camera_old_eval, sms.src.ofs, sms.src.quat, &sms.src.dist, &sms.src.lens);
+    }
+    /* grid draw as floor */
+    if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION) == 0) {
+      /* use existing if exists, means multiple calls to smooth view
+       * won't lose the original 'view' setting */
+      rv3d->view = RV3D_VIEW_USER;
+    }
+
+    sms.time_allowed = (double)smooth_viewtx / 1000.0;
+
+    /* If this is view rotation only we can decrease the time allowed by the angle between quats
+     * this means small rotations won't lag. */
+    if (sview->quat && !sview->ofs && !sview->dist) {
+      /* scale the time allowed by the rotation */
+      /* 180deg == 1.0 */
+      sms.time_allowed *= (double)fabsf(angle_signed_normalized_qtqt(sms.dst.quat, sms.src.quat)) /
+                          M_PI;
+    }
+
+    /* ensure it shows correct */
+    if (sms.to_camera) {
+      /* use ortho if we move from an ortho view to an ortho camera */
+      Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, sview->camera);
+      rv3d->persp = (((rv3d->is_persp == false) && (ob_camera_eval->type == OB_CAMERA) &&
+                      (((Camera *)ob_camera_eval->data)->type == CAM_ORTHO)) ?
+                         RV3D_ORTHO :
+                         RV3D_PERSP);
+    }
+
+    rv3d->rflag |= RV3D_NAVIGATING;
+
+    /* not essential but in some cases the caller will tag the area for redraw, and in that
+     * case we can get a flicker of the 'org' user view but we want to see 'src' */
+    view3d_smooth_view_state_restore(&sms.src, v3d, rv3d);
+
+    /* keep track of running timer! */
+    if (rv3d->sms == NULL) {
+      rv3d->sms = MEM_mallocN(sizeof(struct SmoothView3DStore), "smoothview v3d");
+    }
+    *rv3d->sms = sms;
+    if (rv3d->smooth_timer) {
+      WM_event_remove_timer(wm, win, rv3d->smooth_timer);
+    }
+    /* #TIMER1 is hard-coded in key-map. */
+    rv3d->smooth_timer = WM_event_add_timer(wm, win, TIMER1, 1.0 / 100.0);
+  }
+  else {
+    /* Animation is disabled, apply immediately. */
     if (sms.to_camera == false) {
       copy_v3_v3(rv3d->ofs, sms.dst.ofs);
       copy_qt_qt(rv3d->viewquat, sms.dst.quat);
@@ -300,6 +281,8 @@ void ED_view3d_smooth_view_ex(
     }
 
     ED_region_tag_redraw(region);
+
+    WM_event_add_mousemove(win);
   }
 }
 
@@ -320,6 +303,7 @@ void ED_view3d_smooth_view(bContext *C,
 /* only meant for timer usage */
 static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *region, bool sync_boxview)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   RegionView3D *rv3d = region->regiondata;
   struct SmoothView3DStore *sms = rv3d->sms;
   float step, step_inv;
@@ -333,6 +317,7 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *region, b
 
   /* end timer */
   if (step >= 1.0f) {
+    wmWindow *win = CTX_wm_window(C);
 
     /* if we went to camera, store the original */
     if (sms->to_camera) {
@@ -355,9 +340,12 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *region, b
     MEM_freeN(rv3d->sms);
     rv3d->sms = NULL;
 
-    WM_event_remove_timer(CTX_wm_manager(C), CTX_wm_window(C), rv3d->smooth_timer);
+    WM_event_remove_timer(wm, win, rv3d->smooth_timer);
     rv3d->smooth_timer = NULL;
     rv3d->rflag &= ~RV3D_NAVIGATING;
+
+    /* Event handling won't know if a UI item has been moved under the pointer. */
+    WM_event_add_mousemove(win);
   }
   else {
     /* ease in/out */
@@ -380,19 +368,16 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *region, b
 
     const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     ED_view3d_camera_lock_sync(depsgraph, v3d, rv3d);
-    if (ED_screen_animation_playing(CTX_wm_manager(C))) {
+    if (ED_screen_animation_playing(wm)) {
       ED_view3d_camera_lock_autokey(v3d, rv3d, C, true, true);
     }
-
-    /* Event handling won't know if a UI item has been moved under the pointer. */
-    WM_event_add_mousemove(CTX_wm_window(C));
   }
 
   if (sync_boxview && (RV3D_LOCK_FLAGS(rv3d) & RV3D_BOXVIEW)) {
     view3d_boxview_copy(CTX_wm_area(C), region);
   }
 
-  /* note: this doesn't work right because the v3d->lens is now used in ortho mode r51636,
+  /* NOTE: this doesn't work right because the v3d->lens is now used in ortho mode r51636,
    * when switching camera in quad-view the other ortho views would zoom & reset.
    *
    * For now only redraw all regions when smooth-view finishes.
@@ -421,10 +406,6 @@ static int view3d_smoothview_invoke(bContext *C, wmOperator *UNUSED(op), const w
   return OPERATOR_FINISHED;
 }
 
-/**
- * Apply the smooth-view immediately, use when we need to start a new view operation.
- * (so we don't end up half-applying a view operation when pressing keys quickly).
- */
 void ED_view3d_smooth_view_force_finish(bContext *C, View3D *v3d, ARegion *region)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -710,21 +691,18 @@ void VIEW3D_OT_object_as_camera(wmOperatorType *ot)
 /** \name Window and View Matrix Calculation
  * \{ */
 
-/**
- * \param rect: optional for picking (can be NULL).
- */
 void view3d_winmatrix_set(Depsgraph *depsgraph,
                           ARegion *region,
                           const View3D *v3d,
                           const rcti *rect)
 {
   RegionView3D *rv3d = region->regiondata;
-  rctf viewplane;
+  rctf full_viewplane;
   float clipsta, clipend;
   bool is_ortho;
 
   is_ortho = ED_view3d_viewplane_get(
-      depsgraph, v3d, rv3d, region->winx, region->winy, &viewplane, &clipsta, &clipend, NULL);
+      depsgraph, v3d, rv3d, region->winx, region->winy, &full_viewplane, &clipsta, &clipend, NULL);
   rv3d->is_persp = !is_ortho;
 
 #if 0
@@ -732,21 +710,29 @@ void view3d_winmatrix_set(Depsgraph *depsgraph,
          __func__,
          winx,
          winy,
-         viewplane.xmin,
-         viewplane.ymin,
-         viewplane.xmax,
-         viewplane.ymax,
+         full_viewplane.xmin,
+         full_viewplane.ymin,
+         full_viewplane.xmax,
+         full_viewplane.ymax,
          clipsta,
          clipend);
 #endif
 
-  if (rect) { /* picking */
-    rctf r;
-    r.xmin = viewplane.xmin + (BLI_rctf_size_x(&viewplane) * (rect->xmin / (float)region->winx));
-    r.ymin = viewplane.ymin + (BLI_rctf_size_y(&viewplane) * (rect->ymin / (float)region->winy));
-    r.xmax = viewplane.xmin + (BLI_rctf_size_x(&viewplane) * (rect->xmax / (float)region->winx));
-    r.ymax = viewplane.ymin + (BLI_rctf_size_y(&viewplane) * (rect->ymax / (float)region->winy));
-    viewplane = r;
+  /* Note the code here was tweaked to avoid an apparent compiler bug in clang 13 (see T91680). */
+  rctf viewplane;
+  if (rect) {
+    /* Smaller viewplane subset for selection picking. */
+    viewplane.xmin = full_viewplane.xmin +
+                     (BLI_rctf_size_x(&full_viewplane) * (rect->xmin / (float)region->winx));
+    viewplane.ymin = full_viewplane.ymin +
+                     (BLI_rctf_size_y(&full_viewplane) * (rect->ymin / (float)region->winy));
+    viewplane.xmax = full_viewplane.xmin +
+                     (BLI_rctf_size_x(&full_viewplane) * (rect->xmax / (float)region->winx));
+    viewplane.ymax = full_viewplane.ymin +
+                     (BLI_rctf_size_y(&full_viewplane) * (rect->ymax / (float)region->winy));
+  }
+  else {
+    viewplane = full_viewplane;
   }
 
   if (is_ortho) {
@@ -775,18 +761,6 @@ static void obmat_to_viewmat(RegionView3D *rv3d, Object *ob)
   mat4_normalized_to_quat(rv3d->viewquat, rv3d->viewmat);
 }
 
-/**
- * Sets #RegionView3D.viewmat
- *
- * \param depsgraph: Depsgraph.
- * \param scene: Scene for camera and cursor location.
- * \param v3d: View 3D space data.
- * \param rv3d: 3D region which stores the final matrices.
- * \param rect_scale: Optional 2D scale argument,
- * Use when displaying a sub-region, eg: when #view3d_winmatrix_set takes a 'rect' argument.
- *
- * \note don't set windows active in here, is used by renderwin too.
- */
 void view3d_viewmatrix_set(Depsgraph *depsgraph,
                            const Scene *scene,
                            const View3D *v3d,
@@ -876,11 +850,6 @@ void view3d_viewmatrix_set(Depsgraph *depsgraph,
 /** \name OpenGL Select Utilities
  * \{ */
 
-/**
- * Optionally cache data for multiple calls to #view3d_opengl_select
- *
- * just avoid GPU_select headers outside this file
- */
 void view3d_opengl_select_cache_begin(void)
 {
   GPU_select_cache_begin();
@@ -957,19 +926,13 @@ static bool drw_select_filter_object_mode_lock_for_weight_paint(Object *ob, void
   return ob_pose_list && (BLI_linklist_index(ob_pose_list, DEG_get_original_object(ob)) != -1);
 }
 
-/**
- * \warning be sure to account for a negative return value
- * This is an error, "Too many objects in select buffer"
- * and no action should be taken (can crash blender) if this happens
- *
- * \note (vc->obedit == NULL) can be set to explicitly skip edit-object selection.
- */
-int view3d_opengl_select(ViewContext *vc,
-                         uint *buffer,
-                         uint bufsize,
-                         const rcti *input,
-                         eV3DSelectMode select_mode,
-                         eV3DSelectObjectFilter select_filter)
+int view3d_opengl_select_ex(ViewContext *vc,
+                            uint *buffer,
+                            uint bufsize,
+                            const rcti *input,
+                            eV3DSelectMode select_mode,
+                            eV3DSelectObjectFilter select_filter,
+                            const bool do_material_slot_selection)
 {
   struct bThemeState theme_state;
   const wmWindowManager *wm = CTX_wm_manager(vc->C);
@@ -1119,6 +1082,7 @@ int view3d_opengl_select(ViewContext *vc,
                          use_obedit_skip,
                          draw_surface,
                          use_nearest,
+                         do_material_slot_selection,
                          &rect,
                          drw_select_loop_pass,
                          &drw_select_loop_user_data,
@@ -1149,6 +1113,7 @@ int view3d_opengl_select(ViewContext *vc,
                          use_obedit_skip,
                          draw_surface,
                          use_nearest,
+                         do_material_slot_selection,
                          &rect,
                          drw_select_loop_pass,
                          &drw_select_loop_user_data,
@@ -1176,6 +1141,16 @@ finally:
   UI_Theme_Restore(&theme_state);
 
   return hits;
+}
+
+int view3d_opengl_select(ViewContext *vc,
+                         uint *buffer,
+                         uint bufsize,
+                         const rcti *input,
+                         eV3DSelectMode select_mode,
+                         eV3DSelectObjectFilter select_filter)
+{
+  return view3d_opengl_select_ex(vc, buffer, bufsize, input, select_mode, select_filter, false);
 }
 
 int view3d_opengl_select_with_id_filter(ViewContext *vc,
@@ -1261,7 +1236,7 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
 
   if (local_view_bit == 0) {
     /* TODO(dfelinto): We can kick one of the other 3D views out of local view
-     * specially if it is not being used.  */
+     * specially if it is not being used. */
     BKE_report(reports, RPT_ERROR, "No more than 16 local views");
     ok = false;
   }
@@ -1393,6 +1368,7 @@ static void view3d_localview_exit(const Depsgraph *depsgraph,
 
   MEM_freeN(v3d->localvd);
   v3d->localvd = NULL;
+  MEM_SAFE_FREE(v3d->runtime.local_stats);
 
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     if (region->regiontype == RGN_TYPE_WINDOW) {
@@ -1516,7 +1492,7 @@ static int localview_remove_from_exec(bContext *C, wmOperator *op)
   }
 
   if (changed) {
-    DEG_on_visible_update(bmain, false);
+    DEG_tag_on_visible_update(bmain, false);
     DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
@@ -1564,7 +1540,7 @@ static uint free_localcollection_bit(Main *bmain, ushort local_collections_uuid,
 
   ushort local_view_bits = 0;
 
-  /* Check all areas: which localviews are in use? */
+  /* Check all areas: which local-views are in use? */
   for (screen = bmain->screens.first; screen; screen = screen->id.next) {
     for (area = screen->areabase.first; area; area = area->next) {
       SpaceLink *sl = area->spacedata.first;
@@ -1621,11 +1597,6 @@ static void view3d_local_collections_reset(Main *bmain, const uint local_view_bi
   }
 }
 
-/**
- * See if current uuid is valid, otherwise set a valid uuid to v3d,
- * Try to keep the same uuid previously used to allow users to
- * quickly toggle back and forth.
- */
 bool ED_view3d_local_collections_set(Main *bmain, struct View3D *v3d)
 {
   if ((v3d->flag & V3D_LOCAL_COLLECTIONS) == 0) {
@@ -1730,7 +1701,12 @@ void ED_view3d_xr_shading_update(wmWindowManager *wm, const View3D *v3d, const S
   if (v3d->runtime.flag & V3D_RUNTIME_XR_SESSION_ROOT) {
     View3DShading *xr_shading = &wm->xr.session_settings.shading;
     /* Flags that shouldn't be overridden by the 3D View shading. */
-    const int flag_copy = V3D_SHADING_WORLD_ORIENTATION;
+    int flag_copy = 0;
+    if (v3d->shading.type != OB_SOLID) {
+      /* Don't set V3D_SHADING_WORLD_ORIENTATION for solid shading since it results in distorted
+       * lighting when the view matrix has a scale factor. */
+      flag_copy |= V3D_SHADING_WORLD_ORIENTATION;
+    }
 
     BLI_assert(WM_xr_session_exists(&wm->xr));
 

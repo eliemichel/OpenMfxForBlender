@@ -93,7 +93,8 @@ static const char PY_BVH_TREE_TYPE_DEFAULT = 4;
 static const char PY_BVH_AXIS_DEFAULT = 6;
 
 typedef struct {
-  PyObject_HEAD BVHTree *tree;
+  PyObject_HEAD
+  BVHTree *tree;
   float epsilon;
 
   float (*coords)[3];
@@ -434,7 +435,7 @@ static void py_bvhtree_nearest_point_range_cb(void *userdata,
   struct PyBVH_RangeData *data = userdata;
   PyBVHTree *self = data->self;
 
-  const float(*coords)[3] = (const float(*)[3])self->coords;
+  const float(*coords)[3] = self->coords;
   const uint *tri = self->tris[index];
   const float *tri_co[3] = {coords[tri[0]], coords[tri[1]], coords[tri[2]]};
   float nearest_tmp[3], dist_sq;
@@ -961,8 +962,6 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
 
   /* Get data for tessellation */
   {
-    int tris_len_dummy;
-
     coords_len = (uint)bm->totvert;
     tris_len = (uint)poly_to_tri_count(bm->totface, bm->totloop);
 
@@ -971,8 +970,7 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
 
     looptris = MEM_mallocN(sizeof(*looptris) * (size_t)tris_len, __func__);
 
-    BM_mesh_calc_tessellation(bm, looptris, &tris_len_dummy);
-    BLI_assert(tris_len_dummy == (int)tris_len);
+    BM_mesh_calc_tessellation(bm, looptris);
   }
 
   {
@@ -1111,7 +1109,7 @@ PyDoc_STRVAR(C_BVHTree_FromObject_doc,
              "   :type cage: bool\n" PYBVH_FROM_GENERIC_EPSILON_DOC);
 static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyObject *kwargs)
 {
-  /* note, options here match 'bpy_bmesh_from_object' */
+  /* NOTE: options here match #bpy_bmesh_from_object. */
   const char *keywords[] = {"object", "depsgraph", "deform", "cage", "epsilon", NULL};
 
   PyObject *py_ob, *py_depsgraph;
@@ -1182,10 +1180,8 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
     tree = BLI_bvhtree_new((int)tris_len, epsilon, PY_BVH_TREE_TYPE_DEFAULT, PY_BVH_AXIS_DEFAULT);
     if (tree) {
       orig_index = MEM_mallocN(sizeof(*orig_index) * (size_t)tris_len, __func__);
-      CustomData *pdata = &mesh->pdata;
-      orig_normal = CustomData_get_layer(pdata, CD_NORMAL); /* can be NULL */
-      if (orig_normal) {
-        orig_normal = MEM_dupallocN(orig_normal);
+      if (!BKE_mesh_poly_normals_are_dirty(mesh)) {
+        orig_normal = MEM_dupallocN(BKE_mesh_poly_normals_ensure(mesh));
       }
 
       for (i = 0; i < tris_len; i++, lt++) {

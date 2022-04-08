@@ -105,7 +105,7 @@
 
 #include "CLG_log.h"
 
-/* for menu/popup icons etc etc*/
+/* For menu/popup icons etc etc. */
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -134,8 +134,6 @@ Object *ED_object_context(const bContext *C)
   return CTX_data_pointer_get_type(C, "object", &RNA_Object).data;
 }
 
-/* find the correct active object per context
- * note: context can be NULL when called from a enum with PROP_ENUM_NO_CONTEXT */
 Object *ED_object_active_context(const bContext *C)
 {
   Object *ob = NULL;
@@ -148,16 +146,8 @@ Object *ED_object_active_context(const bContext *C)
   return ob;
 }
 
-/**
- * Return an array of objects:
- * - When in the property space, return the pinned or active object.
- * - When in edit-mode/pose-mode, return an array of objects in the mode.
- * - Otherwise return selected objects,
- *   the callers \a filter_fn needs to check of they are editable
- *   (assuming they need to be modified).
- */
 Object **ED_object_array_in_mode_or_selected(bContext *C,
-                                             bool (*filter_fn)(Object *ob, void *user_data),
+                                             bool (*filter_fn)(const Object *ob, void *user_data),
                                              void *filter_user_data,
                                              uint *r_objects_len)
 {
@@ -384,7 +374,7 @@ static int object_hide_collection_exec(bContext *C, wmOperator *op)
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
 
   if (v3d->flag & V3D_LOCAL_COLLECTIONS) {
-    if (lc->runtime_flag & LAYER_COLLECTION_RESTRICT_VIEWPORT) {
+    if (lc->runtime_flag & LAYER_COLLECTION_HIDE_VIEWPORT) {
       return OPERATOR_CANCELLED;
     }
     if (toggle) {
@@ -421,7 +411,7 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
       continue;
     }
 
-    if (lc->collection->flag & COLLECTION_RESTRICT_VIEWPORT) {
+    if (lc->collection->flag & COLLECTION_HIDE_VIEWPORT) {
       continue;
     }
 
@@ -557,7 +547,7 @@ static bool ED_object_editmode_load_free_ex(Main *bmain,
     }
 
     if (free_data) {
-      EDBM_mesh_free(me->edit_mesh);
+      EDBM_mesh_free_data(me->edit_mesh);
       MEM_freeN(me->edit_mesh);
       me->edit_mesh = NULL;
     }
@@ -669,10 +659,6 @@ bool ED_object_editmode_load(Main *bmain, Object *obedit)
   return ED_object_editmode_load_free_ex(bmain, obedit, true, false);
 }
 
-/**
- * \param flag:
- * - If #EM_FREEDATA isn't in the flag, use ED_object_editmode_load directly.
- */
 bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int flag)
 {
   const bool free_data = (flag & EM_FREEDATA) != 0;
@@ -723,11 +709,6 @@ bool ED_object_editmode_exit(bContext *C, int flag)
   return ED_object_editmode_exit_ex(bmain, scene, obedit, flag);
 }
 
-/**
- * Support freeing edit-mode data without flushing it back to the object.
- *
- * \return true if data was freed.
- */
 bool ED_object_editmode_free_ex(Main *bmain, Object *obedit)
 {
   return ED_object_editmode_load_free_ex(bmain, obedit, false, true);
@@ -794,9 +775,7 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
 
     BMEditMesh *em = BKE_editmesh_from_object(ob);
     if (LIKELY(em)) {
-      /* order doesn't matter */
-      EDBM_mesh_normals_update(em);
-      BKE_editmesh_looptri_calc(em);
+      BKE_editmesh_looptri_and_normals_calc(em);
     }
 
     WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_MESH, NULL);
@@ -928,7 +907,7 @@ static bool editmode_toggle_poll(bContext *C)
   }
 
   /* if hidden but in edit mode, we still display */
-  if ((ob->restrictflag & OB_RESTRICT_VIEWPORT) && !(ob->mode & OB_MODE_EDIT)) {
+  if ((ob->visibility_flag & OB_HIDE_VIEWPORT) && !(ob->mode & OB_MODE_EDIT)) {
     return false;
   }
 
@@ -1127,12 +1106,46 @@ static eAnimvizCalcRange object_path_convert_range(eObjectPathCalcRange range)
   return ANIMVIZ_CALC_RANGE_FULL;
 }
 
-/* For the objects with animation: update paths for those that have got them
- * This should selectively update paths that exist...
- *
- * To be called from various tools that do incremental updates
- */
-void ED_objects_recalculate_paths(bContext *C, Scene *scene, eObjectPathCalcRange range)
+void ED_objects_recalculate_paths_selected(bContext *C, Scene *scene, eObjectPathCalcRange range)
+{
+  ListBase selected_objects = {NULL, NULL};
+  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+    BLI_addtail(&selected_objects, BLI_genericNodeN(ob));
+  }
+  CTX_DATA_END;
+
+  ED_objects_recalculate_paths(C, scene, range, &selected_objects);
+
+  BLI_freelistN(&selected_objects);
+}
+
+void ED_objects_recalculate_paths_visible(bContext *C, Scene *scene, eObjectPathCalcRange range)
+{
+  ListBase visible_objects = {NULL, NULL};
+  CTX_DATA_BEGIN (C, Object *, ob, visible_objects) {
+    BLI_addtail(&visible_objects, BLI_genericNodeN(ob));
+  }
+  CTX_DATA_END;
+
+  ED_objects_recalculate_paths(C, scene, range, &visible_objects);
+
+  BLI_freelistN(&visible_objects);
+}
+
+static bool has_object_motion_paths(Object *ob)
+{
+  return (ob->avs.path_bakeflag & MOTIONPATH_BAKE_HAS_PATHS) != 0;
+}
+
+static bool has_pose_motion_paths(Object *ob)
+{
+  return ob->pose && (ob->pose->avs.path_bakeflag & MOTIONPATH_BAKE_HAS_PATHS) != 0;
+}
+
+void ED_objects_recalculate_paths(bContext *C,
+                                  Scene *scene,
+                                  eObjectPathCalcRange range,
+                                  ListBase *ld_objects)
 {
   /* Transform doesn't always have context available to do update. */
   if (C == NULL) {
@@ -1143,18 +1156,25 @@ void ED_objects_recalculate_paths(bContext *C, Scene *scene, eObjectPathCalcRang
   ViewLayer *view_layer = CTX_data_view_layer(C);
 
   ListBase targets = {NULL, NULL};
-  /* loop over objects in scene */
-  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+  LISTBASE_FOREACH (LinkData *, link, ld_objects) {
+    Object *ob = link->data;
+
     /* set flag to force recalc, then grab path(s) from object */
-    ob->avs.recalc |= ANIMVIZ_RECALC_PATHS;
+    if (has_object_motion_paths(ob)) {
+      ob->avs.recalc |= ANIMVIZ_RECALC_PATHS;
+    }
+
+    if (has_pose_motion_paths(ob)) {
+      ob->pose->avs.recalc |= ANIMVIZ_RECALC_PATHS;
+    }
+
     animviz_get_object_motionpaths(ob, &targets);
   }
-  CTX_DATA_END;
 
   Depsgraph *depsgraph;
   bool free_depsgraph = false;
   /* For a single frame update it's faster to re-use existing dependency graph and avoid overhead
-   * of building all the relations and so on for a temporary one.  */
+   * of building all the relations and so on for a temporary one. */
   if (range == OBJECT_PATH_CALC_RANGE_CURRENT_FRAME) {
     /* NOTE: Dependency graph will be evaluated at all the frames, but we first need to access some
      * nested pointers, like animation data. */
@@ -1174,12 +1194,13 @@ void ED_objects_recalculate_paths(bContext *C, Scene *scene, eObjectPathCalcRang
   if (range != OBJECT_PATH_CALC_RANGE_CURRENT_FRAME) {
     /* Tag objects for copy on write - so paths will draw/redraw
      * For currently frame only we update evaluated object directly. */
-    CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
-      if (ob->mpath) {
+    LISTBASE_FOREACH (LinkData *, link, ld_objects) {
+      Object *ob = link->data;
+
+      if (has_object_motion_paths(ob) || has_pose_motion_paths(ob)) {
         DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
       }
     }
-    CTX_DATA_END;
   }
 
   /* Free temporary depsgraph. */
@@ -1231,10 +1252,10 @@ static int object_calculate_paths_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   /* calculate the paths for objects that have them (and are tagged to get refreshed) */
-  ED_objects_recalculate_paths(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
+  ED_objects_recalculate_paths_selected(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
 
   /* notifiers for updates */
-  WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
+  WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM | ND_POSE, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -1300,10 +1321,10 @@ static int object_update_paths_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   /* calculate the paths for objects that have them (and are tagged to get refreshed) */
-  ED_objects_recalculate_paths(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
+  ED_objects_recalculate_paths_selected(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
 
   /* notifiers for updates */
-  WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
+  WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM | ND_POSE, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -1313,11 +1334,52 @@ void OBJECT_OT_paths_update(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Update Object Paths";
   ot->idname = "OBJECT_OT_paths_update";
-  ot->description = "Recalculate paths for selected objects";
+  ot->description = "Recalculate motion paths for selected objects";
 
   /* api callbacks */
   ot->exec = object_update_paths_exec;
   ot->poll = object_update_paths_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Update All Motion Paths Operator
+ * \{ */
+
+static bool object_update_all_paths_poll(bContext *UNUSED(C))
+{
+  return true;
+}
+
+static int object_update_all_paths_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  Scene *scene = CTX_data_scene(C);
+
+  if (scene == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  ED_objects_recalculate_paths_visible(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
+
+  WM_event_add_notifier(C, NC_OBJECT | ND_POSE | ND_TRANSFORM, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void OBJECT_OT_paths_update_visible(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Update All Object Paths";
+  ot->idname = "OBJECT_OT_paths_update_visible";
+  ot->description = "Recalculate all visible motion paths for objects and poses";
+
+  /* api callbacks */
+  ot->exec = object_update_all_paths_exec;
+  ot->poll = object_update_all_paths_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -1342,7 +1404,6 @@ static void object_clear_mpath(Object *ob)
   }
 }
 
-/* Clear motion paths for all objects */
 void ED_objects_clear_paths(bContext *C, bool only_selected)
 {
   if (only_selected) {
@@ -1577,10 +1638,10 @@ void OBJECT_OT_shade_smooth(wmOperatorType *ot)
 /** \name Object Mode Set Operator
  * \{ */
 
-static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
-                                                      PointerRNA *UNUSED(ptr),
-                                                      PropertyRNA *UNUSED(prop),
-                                                      bool *r_free)
+static const EnumPropertyItem *object_mode_set_itemf(bContext *C,
+                                                     PointerRNA *UNUSED(ptr),
+                                                     PropertyRNA *UNUSED(prop),
+                                                     bool *r_free)
 {
   const EnumPropertyItem *input = rna_enum_object_mode_items;
   EnumPropertyItem *item = NULL;
@@ -1592,25 +1653,8 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
 
   const Object *ob = CTX_data_active_object(C);
   if (ob) {
-    const bool use_mode_particle_edit = ED_object_particle_edit_mode_supported(ob);
     while (input->identifier) {
-      if ((input->value == OB_MODE_EDIT && OB_TYPE_SUPPORT_EDITMODE(ob->type)) ||
-          (input->value == OB_MODE_POSE && (ob->type == OB_ARMATURE)) ||
-          (input->value == OB_MODE_PARTICLE_EDIT && use_mode_particle_edit) ||
-          (ELEM(input->value,
-                OB_MODE_SCULPT,
-                OB_MODE_VERTEX_PAINT,
-                OB_MODE_WEIGHT_PAINT,
-                OB_MODE_TEXTURE_PAINT) &&
-           (ob->type == OB_MESH)) ||
-          (ELEM(input->value,
-                OB_MODE_EDIT_GPENCIL,
-                OB_MODE_PAINT_GPENCIL,
-                OB_MODE_SCULPT_GPENCIL,
-                OB_MODE_WEIGHT_GPENCIL,
-                OB_MODE_VERTEX_GPENCIL) &&
-           (ob->type == OB_GPENCIL)) ||
-          (input->value == OB_MODE_OBJECT)) {
+      if (ED_object_mode_compat_test(ob, input->value)) {
         RNA_enum_item_add(&item, &totitem, input);
       }
       input++;
@@ -1746,7 +1790,7 @@ void OBJECT_OT_mode_set(wmOperatorType *ot)
 
   ot->prop = RNA_def_enum(
       ot->srna, "mode", rna_enum_object_mode_items, OB_MODE_OBJECT, "Mode", "");
-  RNA_def_enum_funcs(ot->prop, object_mode_set_itemsf);
+  RNA_def_enum_funcs(ot->prop, object_mode_set_itemf);
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna, "toggle", 0, "Toggle", "");
@@ -1758,7 +1802,7 @@ void OBJECT_OT_mode_set_with_submode(wmOperatorType *ot)
   OBJECT_OT_mode_set(ot);
 
   /* identifiers */
-  ot->name = "Set Object Mode with Submode";
+  ot->name = "Set Object Mode with Sub-mode";
   ot->idname = "OBJECT_OT_mode_set_with_submode";
 
   /* properties */
@@ -1932,8 +1976,14 @@ static void move_to_collection_menu_create(bContext *C, uiLayout *layout, void *
   RNA_int_set(&menu->ptr, "collection_index", menu->index);
   RNA_boolean_set(&menu->ptr, "is_new", true);
 
-  uiItemFullO_ptr(
-      layout, menu->ot, "New Collection", ICON_ADD, menu->ptr.data, WM_OP_INVOKE_DEFAULT, 0, NULL);
+  uiItemFullO_ptr(layout,
+                  menu->ot,
+                  CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "New Collection"),
+                  ICON_ADD,
+                  menu->ptr.data,
+                  WM_OP_INVOKE_DEFAULT,
+                  0,
+                  NULL);
 
   uiItemS(layout);
 
@@ -2009,7 +2059,7 @@ static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent 
    * Technically we could use #wmOperator.customdata. However there is no free callback
    * called to an operator that exit with OPERATOR_INTERFACE to launch a menu.
    *
-   * So we are left with a memory that will necessarily leak. It's a small leak though.*/
+   * So we are left with a memory that will necessarily leak. It's a small leak though. */
   if (master_collection_menu == NULL) {
     master_collection_menu = MEM_callocN(sizeof(MoveToCollectionData),
                                          "MoveToCollectionData menu - expected eventual memleak");

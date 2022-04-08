@@ -89,16 +89,16 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
   /* don't do notifier when we're rendering, avoid some viewport crashes
    * redrawing while the data is being modified for render */
   if (!G.is_rendering) {
-    /* cant use NC_SCENE|ND_FRAME because this causes wm_event_do_notifiers to call
+    /* can't use NC_SCENE|ND_FRAME because this causes wm_event_do_notifiers to call
      * BKE_scene_graph_update_for_newframe which will lose any un-keyed changes T24690. */
-    /* WM_main_add_notifier(NC_SCENE|ND_FRAME, scene); */
+    // WM_main_add_notifier(NC_SCENE|ND_FRAME, scene);
 
     /* instead just redraw the views */
     WM_main_add_notifier(NC_WINDOW, NULL);
   }
 }
 
-static void rna_Scene_uvedit_aspect(Scene *UNUSED(scene), Object *ob, float *aspect)
+static void rna_Scene_uvedit_aspect(Scene *UNUSED(scene), Object *ob, float aspect[2])
 {
   if ((ob->type == OB_MESH) && (ob->mode == OB_MODE_EDIT)) {
     BMEditMesh *em;
@@ -154,6 +154,7 @@ static void rna_Scene_ray_cast(Scene *scene,
 
   bool ret = ED_transform_snap_object_project_ray_ex(sctx,
                                                      depsgraph,
+                                                     NULL,
                                                      &(const struct SnapObjectParams){
                                                          .snap_select = SNAP_ALL,
                                                      },

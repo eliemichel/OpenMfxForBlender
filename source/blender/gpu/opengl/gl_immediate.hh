@@ -38,7 +38,7 @@ namespace blender::gpu {
 
 class GLImmediate : public Immediate {
  private:
-  /* Use two buffers for strict and unstrict vertex count to
+  /* Use two buffers for strict and non-strict vertex count to
    * avoid some huge driver slowdown (see T70922).
    * Use accessor functions to get / modify. */
   struct {
@@ -58,21 +58,21 @@ class GLImmediate : public Immediate {
   GLImmediate();
   ~GLImmediate();
 
-  uchar *begin(void) override;
-  void end(void) override;
+  uchar *begin() override;
+  void end() override;
 
  private:
-  GLuint &vbo_id(void)
+  GLuint &vbo_id()
   {
     return strict_vertex_len ? buffer_strict.vbo_id : buffer.vbo_id;
   };
 
-  size_t &buffer_offset(void)
+  size_t &buffer_offset()
   {
     return strict_vertex_len ? buffer_strict.buffer_offset : buffer.buffer_offset;
   };
 
-  size_t &buffer_size(void)
+  size_t &buffer_size()
   {
     return strict_vertex_len ? buffer_strict.buffer_size : buffer.buffer_size;
   };

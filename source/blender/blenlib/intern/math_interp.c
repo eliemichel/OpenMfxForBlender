@@ -567,10 +567,11 @@ static void radangle2imp(float a2, float b2, float th, float *A, float *B, float
   *F = a2 * b2;
 }
 
-/* all tests here are done to make sure possible overflows are hopefully minimized */
 void BLI_ewa_imp2radangle(
     float A, float B, float C, float F, float *a, float *b, float *th, float *ecc)
 {
+  /* NOTE: all tests here are done to make sure possible overflows are hopefully minimized. */
+
   if (F <= 1e-5f) { /* use arbitrary major radius, zero minor, infinite eccentricity */
     *a = sqrtf(A > C ? A : C);
     *b = 0.0f;
@@ -625,7 +626,7 @@ void BLI_ewa_filter(const int width,
    * Use a different radius based on interpolation switch,
    * just enough to anti-alias when interpolation is off,
    * and slightly larger to make result a bit smoother than bilinear interpolation when
-   * interpolation is on (minimum values: const float rmin = intpol ? 1.0f : 0.5f;) */
+   * interpolation is on (minimum values: `const float rmin = intpol ? 1.0f : 0.5f;`) */
   const float rmin = (intpol ? 1.5625f : 0.765625f) / ff2;
   BLI_ewa_imp2radangle(A, B, C, F, &a, &b, &th, &ecc);
   if ((b2 = b * b) < rmin) {
@@ -655,7 +656,7 @@ void BLI_ewa_filter(const int width,
   v2 = (int)(ceilf(V0 + ve));
 
   /* sane clamping to avoid unnecessarily huge loops */
-  /* note: if eccentricity gets clamped (see above),
+  /* NOTE: if eccentricity gets clamped (see above),
    * the ue/ve limits can also be lowered accordingly
    */
   if (U0 - (float)u1 > EWA_MAXIDX) {
@@ -708,6 +709,6 @@ void BLI_ewa_filter(const int width,
   /* d should hopefully never be zero anymore */
   d = 1.0f / d;
   mul_v3_fl(result, d);
-  /* clipping can be ignored if alpha used, texr->ta already includes filtered edge */
+  /* clipping can be ignored if alpha used, texr->trgba[3] already includes filtered edge */
   result[3] = use_alpha ? result[3] * d : 1.0f;
 }

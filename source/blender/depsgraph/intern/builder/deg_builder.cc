@@ -97,7 +97,7 @@ bool DepsgraphBuilder::need_pull_base_into_graph(Base *base)
     property_id = AnimatedPropertyID(&object->id, &RNA_Object, "hide_render");
   }
   else {
-    BLI_assert(!"Unknown evaluation mode.");
+    BLI_assert_msg(0, "Unknown evaluation mode.");
     return false;
   }
   return cache_->isPropertyAnimated(&object->id, property_id);
@@ -176,7 +176,22 @@ void deg_graph_build_flush_visibility(Depsgraph *graph)
     for (Relation *rel : op_node->inlinks) {
       if (rel->from->type == NodeType::OPERATION) {
         OperationNode *op_from = (OperationNode *)rel->from;
-        op_from->owner->affects_directly_visible |= op_node->owner->affects_directly_visible;
+        ComponentNode *comp_from = op_from->owner;
+        const bool target_directly_visible = op_node->owner->affects_directly_visible;
+
+        /* Visibility component forces all components of the current ID to be considered as
+         * affecting directly visible. */
+        if (comp_from->type == NodeType::VISIBILITY) {
+          if (target_directly_visible) {
+            IDNode *id_node_from = comp_from->owner;
+            for (ComponentNode *comp_node : id_node_from->components.values()) {
+              comp_node->affects_directly_visible |= target_directly_visible;
+            }
+          }
+        }
+        else {
+          comp_from->affects_directly_visible |= target_directly_visible;
+        }
       }
     }
     /* Schedule parent nodes. */

@@ -91,24 +91,24 @@ bool GpencilExporterPDF::write()
 {
   /* Support unicode character paths on Windows. */
   HPDF_STATUS res = 0;
-  /* TODO: It looks libharu does not support unicode. */
-  //#ifdef WIN32
-  //  char filename_cstr[FILE_MAX];
-  //  BLI_strncpy(filename_cstr, filename_, FILE_MAX);
-  //
-  //  UTF16_ENCODE(filename_cstr);
-  //  std::wstring wstr(filename_cstr_16);
-  //  res = HPDF_SaveToFile(pdf_, wstr.c_str());
-  //
-  //  UTF16_UN_ENCODE(filename_cstr);
-  //#else
+
+  /* TODO: It looks `libharu` does not support unicode. */
+#if 0 /* `ifdef WIN32` */
+  char filename_cstr[FILE_MAX];
+  BLI_strncpy(filename_cstr, filename_, FILE_MAX);
+
+  UTF16_ENCODE(filename_cstr);
+  std::wstring wstr(filename_cstr_16);
+  res = HPDF_SaveToFile(pdf_, wstr.c_str());
+
+  UTF16_UN_ENCODE(filename_cstr);
+#else
   res = HPDF_SaveToFile(pdf_, filename_);
-  //#endif
+#endif
 
   return (res == 0) ? true : false;
 }
 
-/* Create pdf document. */
 bool GpencilExporterPDF::create_document()
 {
   pdf_ = HPDF_New(error_handler, nullptr);
@@ -119,7 +119,6 @@ bool GpencilExporterPDF::create_document()
   return true;
 }
 
-/* Add page. */
 bool GpencilExporterPDF::add_page()
 {
   /* Add a new page object. */
@@ -135,7 +134,6 @@ bool GpencilExporterPDF::add_page()
   return true;
 }
 
-/* Main layer loop. */
 void GpencilExporterPDF::export_gpencil_layers()
 {
   /* If is doing a set of frames, the list of objects can change for each frame. */
@@ -228,10 +226,6 @@ void GpencilExporterPDF::export_gpencil_layers()
   }
 }
 
-/**
- * Export a stroke using polyline or polygon
- * \param do_fill: True if the stroke is only fill
- */
 void GpencilExporterPDF::export_stroke_to_polyline(bGPDlayer *gpl,
                                                    bGPDstroke *gps,
                                                    const bool is_stroke,
@@ -244,7 +238,7 @@ void GpencilExporterPDF::export_stroke_to_polyline(bGPDlayer *gpl,
   /* Get the thickness in pixels using a simple 1 point stroke. */
   bGPDstroke *gps_temp = BKE_gpencil_stroke_duplicate(gps, false, false);
   gps_temp->totpoints = 1;
-  gps_temp->points = (bGPDspoint *)MEM_callocN(sizeof(bGPDspoint), "gp_stroke_points");
+  gps_temp->points = MEM_cnew<bGPDspoint>("gp_stroke_points");
   const bGPDspoint *pt_src = &gps->points[0];
   bGPDspoint *pt_dst = &gps_temp->points[0];
   copy_v3_v3(&pt_dst->x, &pt_src->x);
@@ -287,10 +281,6 @@ void GpencilExporterPDF::export_stroke_to_polyline(bGPDlayer *gpl,
   HPDF_Page_GRestore(page_);
 }
 
-/**
- * Set color
- * @param do_fill: True if the stroke is only fill
- */
 void GpencilExporterPDF::color_set(bGPDlayer *gpl, const bool do_fill)
 {
   const float fill_opacity = fill_color_[3] * gpl->opacity;

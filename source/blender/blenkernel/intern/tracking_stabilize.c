@@ -376,7 +376,7 @@ static MovieTrackingMarker *get_tracking_data_point(StabContext *ctx,
  * always guesswork.
  *
  * As a simple default, we use the weighted average of the location markers
- * of the current frame as pivot point. TODO It is planned to add further
+ * of the current frame as pivot point. TODO: It is planned to add further
  * options,  like e.g. anchoring the pivot point at the canvas. Moreover,
  * it is planned to allow for a user controllable offset.
  */
@@ -661,7 +661,7 @@ static void average_marker_positions(StabContext *ctx, int framenr, float r_ref_
     int next_higher = MAXFRAME;
     use_values_from_fcurves(ctx, true);
     LISTBASE_FOREACH (MovieTrackingTrack *, track, &tracking->tracks) {
-      /* Note: we deliberately do not care if this track
+      /* NOTE: we deliberately do not care if this track
        *       is already initialized for stabilization. */
       if (track->flag & TRACK_USE_2D_STAB) {
         int startpoint = search_closest_marker_index(track, framenr);
@@ -1252,24 +1252,6 @@ static StabContext *init_stabilizer(MovieClip *clip, int size, float aspect)
 
 /* === public interface functions === */
 
-/* Get stabilization data (translation, scaling and angle) for a given frame.
- * Returned data describes how to compensate the detected movement, but with any
- * chosen scale factor already applied and any target frame position already
- * compensated. In case stabilization fails or is disabled, neutral values are
- * returned.
- *
- * framenr is a frame number, relative to the clip (not relative to the scene
- *         timeline)
- * width is an effective width of the canvas (square pixels), used to scale the
- *       determined translation
- *
- * Outputs:
- * - translation of the lateral shift, absolute canvas coordinates
- *   (square pixels).
- * - scale of the scaling to apply
- * - angle of the rotation angle, relative to the frame center
- */
-/* TODO(sergey): Use r_ prefix for output parameters here. */
 void BKE_tracking_stabilization_data_get(MovieClip *clip,
                                          int framenr,
                                          int width,
@@ -1307,7 +1289,7 @@ void BKE_tracking_stabilization_data_get(MovieClip *clip,
   discard_stabilization_working_context(ctx);
 }
 
-typedef void (*interpolation_func)(struct ImBuf *, struct ImBuf *, float, float, int, int);
+typedef void (*interpolation_func)(const struct ImBuf *, struct ImBuf *, float, float, int, int);
 
 typedef struct TrackingStabilizeFrameInterpolationData {
   ImBuf *ibuf;
@@ -1336,12 +1318,6 @@ static void tracking_stabilize_frame_interpolation_cb(
   }
 }
 
-/* Stabilize given image buffer using stabilization data for a specified
- * frame number.
- *
- * NOTE: frame number should be in clip space, not scene space.
- */
-/* TODO(sergey): Use r_ prefix for output parameters here. */
 ImBuf *BKE_tracking_stabilize_frame(
     MovieClip *clip, int framenr, ImBuf *ibuf, float translation[2], float *scale, float *angle)
 {
@@ -1381,7 +1357,7 @@ ImBuf *BKE_tracking_stabilize_frame(
     return ibuf;
   }
 
-  /* Allocate frame for stabilization result, copy alpha mode and colorspace.  */
+  /* Allocate frame for stabilization result, copy alpha mode and colorspace. */
   ibuf_flags = 0;
   if (ibuf->rect) {
     ibuf_flags |= IB_rect;
@@ -1449,16 +1425,6 @@ ImBuf *BKE_tracking_stabilize_frame(
   return tmpibuf;
 }
 
-/* Build a 4x4 transformation matrix based on the given 2D stabilization data.
- * mat is a 4x4 matrix in homogeneous coordinates, adapted to the
- *     final image buffer size and compensated for pixel aspect ratio,
- *     ready for direct OpenGL drawing.
- *
- * TODO(sergey): The signature of this function should be changed. we actually
- *               don't need the dimensions of the image buffer. Instead we
- *               should consider to provide the pivot point of the rotation as a
- *               further stabilization data parameter.
- */
 void BKE_tracking_stabilization_data_to_mat4(int buffer_width,
                                              int buffer_height,
                                              float pixel_aspect,

@@ -309,6 +309,12 @@ template<typename T> void uninitialized_fill_n(T *dst, int64_t n, const T &value
 }
 
 template<typename T> struct DestructValueAtAddress {
+  DestructValueAtAddress() = default;
+
+  template<typename U> DestructValueAtAddress(const U &)
+  {
+  }
+
   void operator()(T *ptr)
   {
     ptr->~T();
@@ -490,6 +496,12 @@ inline constexpr bool is_span_convertible_pointer_v =
      (!std::is_const_v<std::remove_pointer_t<From>> && std::is_same_v<To, void *>) ||
      /* Allow casting any pointer to const void pointers. */
      std::is_same_v<To, const void *>);
+
+/**
+ * Same as #std::is_same_v but allows for checking multiple types at the same time.
+ */
+template<typename T, typename... Args>
+inline constexpr bool is_same_any_v = (std::is_same_v<T, Args> || ...);
 
 /**
  * Inline buffers for small-object-optimization should be disable by default. Otherwise we might

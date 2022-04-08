@@ -54,10 +54,10 @@ typedef struct MTex {
   float ofs[3], size[3], rot, random_angle;
 
   char _pad0[2];
-  short colormodel, pmapto, pmaptoneg;
+  short colormodel;
   short normapspace, which_output;
   float r, g, b, k;
-  float def_var, rt;
+  float def_var;
 
   /* common */
   float colfac, varfac;
@@ -98,8 +98,10 @@ typedef struct CBData {
   int cur;
 } CBData;
 
-/* 32 = MAXCOLORBAND */
-/* note that this has to remain a single struct, for UserDef */
+/**
+ * 32 = #MAXCOLORBAND
+ * \note that this has to remain a single struct, for UserDef.
+ */
 typedef struct ColorBand {
   short tot, cur;
   char ipotype, ipotype_hue;
@@ -128,9 +130,9 @@ typedef struct PointDensity {
   struct Object *object;
   /** `index + 1` in ob.particlesystem, non-ID pointer not allowed */
   int psys;
-  /** cache points in worldspace, object space, ... ? */
+  /** cache points in world-space, object space, ... ? */
   short psys_cache_space;
-  /** cache points in worldspace, object space, ... ? */
+  /** cache points in world-space, object space, ... ? */
   short ob_cache_space;
   /** vertex attribute layer for color source, MAX_CUSTOMDATA_LAYER_NAME */
   char vertex_attribute_name[64];
@@ -218,10 +220,12 @@ typedef struct Tex {
 
 } Tex;
 
-/* used for mapping and texture nodes. note: rot is now in radians */
-
+/** Used for mapping and texture nodes. */
 typedef struct TexMapping {
-  float loc[3], rot[3], size[3];
+  float loc[3];
+  /** Rotation in radians. */
+  float rot[3];
+  float size[3];
   int flag;
   char projx, projy, projz, mapping;
   int type;
@@ -452,14 +456,14 @@ typedef struct ColorMapping {
 
 /* **************** ColorBand ********************* */
 
-/* colormode */
+/** color-mode. */
 enum {
   COLBAND_BLEND_RGB = 0,
   COLBAND_BLEND_HSV = 1,
   COLBAND_BLEND_HSL = 2,
 };
 
-/* interpolation */
+/** Interpolation. */
 enum {
   COLBAND_INTERP_LINEAR = 0,
   COLBAND_INTERP_EASE = 1,
@@ -468,7 +472,7 @@ enum {
   COLBAND_INTERP_CONSTANT = 4,
 };
 
-/* color interpolation */
+/** Color interpolation. */
 enum {
   COLBAND_HUE_NEAR = 0,
   COLBAND_HUE_FAR = 1,
@@ -507,7 +511,7 @@ enum {
 /* #define TEX_PD_NOISE_AGE     2 */ /* Deprecated */
 /* #define TEX_PD_NOISE_TIME    3 */ /* Deprecated */
 
-/* color_source */
+/** color_source. */
 enum {
   TEX_PD_COLOR_CONSTANT = 0,
   /* color_source: particles */

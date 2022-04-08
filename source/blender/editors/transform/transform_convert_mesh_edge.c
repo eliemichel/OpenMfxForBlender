@@ -28,6 +28,7 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
+#include "BKE_customdata.h"
 #include "BKE_editmesh.h"
 #include "BKE_mesh.h"
 
@@ -85,8 +86,8 @@ void createTransEdge(TransInfo *t)
       BM_mesh_cd_flag_ensure(em->bm, BKE_mesh_from_object(tc->obedit), ME_CDFLAG_EDGE_BWEIGHT);
       cd_edge_float_offset = CustomData_get_offset(&em->bm->edata, CD_BWEIGHT);
     }
-    else { /* if (t->mode == TFM_CREASE) { */
-      BLI_assert(t->mode == TFM_CREASE);
+    else { /* if (t->mode == TFM_EDGE_CREASE) { */
+      BLI_assert(t->mode == TFM_EDGE_CREASE);
       BM_mesh_cd_flag_ensure(em->bm, BKE_mesh_from_object(tc->obedit), ME_CDFLAG_EDGE_CREASE);
       cd_edge_float_offset = CustomData_get_offset(&em->bm->edata, CD_CREASE);
     }
@@ -120,6 +121,13 @@ void createTransEdge(TransInfo *t)
         td++;
       }
     }
+  }
+}
+
+void recalcData_mesh_edge(TransInfo *t)
+{
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+    DEG_id_tag_update(tc->obedit->data, ID_RECALC_GEOMETRY);
   }
 }
 

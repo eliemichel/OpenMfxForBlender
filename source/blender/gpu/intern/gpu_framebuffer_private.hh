@@ -100,6 +100,20 @@ class FrameBuffer {
   bool scissor_test_ = false;
   bool dirty_state_ = true;
 
+#ifndef GPU_NO_USE_PY_REFERENCES
+ public:
+  /**
+   * Reference of a pointer that needs to be cleaned when deallocating the frame-buffer.
+   * Points to #BPyGPUFrameBuffer.fb
+   */
+  void **py_ref = nullptr;
+#endif
+
+ public:
+  /* Reference of a pointer that needs to be cleaned when deallocating the frame-buffer.
+   * Points to #BPyGPUFrameBuffer::fb */
+  void **ref = nullptr;
+
  public:
   FrameBuffer(const char *name);
   virtual ~FrameBuffer();
@@ -174,24 +188,24 @@ class FrameBuffer {
     copy_v4_v4_int(r_scissor, scissor_);
   }
 
-  inline bool scissor_test_get(void) const
+  inline bool scissor_test_get() const
   {
     return scissor_test_;
   }
 
-  inline void viewport_reset(void)
+  inline void viewport_reset()
   {
     int viewport_rect[4] = {0, 0, width_, height_};
     viewport_set(viewport_rect);
   }
 
-  inline void scissor_reset(void)
+  inline void scissor_reset()
   {
     int scissor_rect[4] = {0, 0, width_, height_};
     scissor_set(scissor_rect);
   }
 
-  inline GPUTexture *depth_tex(void) const
+  inline GPUTexture *depth_tex() const
   {
     if (attachments_[GPU_FB_DEPTH_ATTACHMENT].tex) {
       return attachments_[GPU_FB_DEPTH_ATTACHMENT].tex;

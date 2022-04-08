@@ -120,7 +120,7 @@ struct DDSHeader {
   void setHasAlphaFlag(bool b);
   void setUserVersion(int version);
 
-  /*void swapBytes();*/
+  // void swapBytes();
 
   bool hasDX10Header() const;
   uint signature() const;
@@ -157,6 +157,10 @@ class DirectDrawSurface {
   void setUserVersion(int version);
 
   void mipmap(Image *img, uint f, uint m);
+  /**
+   * It was easier to copy this function from upstream than to resync.
+   * This should be removed if a resync ever occurs.
+   */
   void *readData(uint &size);
   //  void mipmap(FloatImage *img, uint f, uint m);
 
@@ -174,7 +178,8 @@ class DirectDrawSurface {
   void readBlock(ColorBlock *rgba);
 
  private:
-  Stream stream; /* Memory where DDS file resides. */
+  /** Memory where DDS file resides. */
+  Stream stream;
   DDSHeader header;
 };
 

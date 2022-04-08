@@ -59,7 +59,6 @@ static struct GPUTexture *gpencil_image_texture_get(Image *image, bool *r_alpha_
   struct GPUTexture *gpu_tex = NULL;
   void *lock;
 
-  iuser.ok = true;
   ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
 
   if (ibuf != NULL && ibuf->rect != NULL) {
@@ -177,16 +176,11 @@ static MaterialGPencilStyle *gpencil_viewport_material_overrides(
   return gp_style;
 }
 
-/**
- * Creates a linked list of material pool containing all materials assigned for a given object.
- * We merge the material pools together if object does not contain a huge amount of materials.
- * Also return an offset to the first material of the object in the ubo.
- */
 GPENCIL_MaterialPool *gpencil_material_pool_create(GPENCIL_PrivateData *pd, Object *ob, int *ofs)
 {
   GPENCIL_MaterialPool *matpool = pd->last_material_pool;
 
-  int mat_len = max_ii(1, ob->totcol);
+  int mat_len = max_ii(1, BKE_object_material_count_eval(ob));
 
   bool reuse_matpool = matpool && ((matpool->used_count + mat_len) <= GP_MATERIAL_BUFFER_LEN);
 
@@ -430,9 +424,6 @@ void gpencil_light_pool_populate(GPENCIL_LightPool *lightpool, Object *ob)
   }
 }
 
-/**
- * Creates a single pool containing all lights assigned (light linked) for a given object.
- */
 GPENCIL_LightPool *gpencil_light_pool_create(GPENCIL_PrivateData *pd, Object *UNUSED(ob))
 {
   GPENCIL_LightPool *lightpool = pd->last_light_pool;

@@ -24,11 +24,11 @@
  * Use these instead of glGenBuffers & its friends
  * - alloc must be called from a thread that is bound
  *   to the context that will be used for drawing with
- *   this vao.
+ *   this VAO.
  * - free can be called from any thread
  */
 
-/* TODO Create cmake option. */
+/* TODO: Create cmake option. */
 #define WITH_OPENGL_BACKEND 1
 
 #include "BLI_assert.h"
@@ -99,7 +99,7 @@ Context *Context::get()
 GPUContext *GPU_context_create(void *ghost_window)
 {
   if (GPUBackend::get() == nullptr) {
-    /* TODO move where it make sense. */
+    /* TODO: move where it make sense. */
     GPU_backend_init(GPU_BACKEND_OPENGL);
   }
 
@@ -109,7 +109,6 @@ GPUContext *GPU_context_create(void *ghost_window)
   return wrap(ctx);
 }
 
-/* to be called after GPU_context_active_set(ctx_to_destroy) */
 void GPU_context_discard(GPUContext *ctx_)
 {
   Context *ctx = unwrap(ctx_);
@@ -117,7 +116,6 @@ void GPU_context_discard(GPUContext *ctx_)
   active_ctx = nullptr;
 }
 
-/* ctx can be NULL */
 void GPU_context_active_set(GPUContext *ctx_)
 {
   Context *ctx = unwrap(ctx_);
@@ -133,7 +131,7 @@ void GPU_context_active_set(GPUContext *ctx_)
   }
 }
 
-GPUContext *GPU_context_active_get(void)
+GPUContext *GPU_context_active_get()
 {
   return wrap(Context::get());
 }
@@ -146,12 +144,12 @@ GPUContext *GPU_context_active_get(void)
 
 static std::mutex main_context_mutex;
 
-void GPU_context_main_lock(void)
+void GPU_context_main_lock()
 {
   main_context_mutex.lock();
 }
 
-void GPU_context_main_unlock(void)
+void GPU_context_main_unlock()
 {
   main_context_mutex.unlock();
 }
@@ -180,12 +178,21 @@ void GPU_backend_init(eGPUBackendType backend_type)
   }
 }
 
-void GPU_backend_exit(void)
+void GPU_backend_exit()
 {
-  /* TODO assert no resource left. Currently UI textures are still not freed in their context
+  /* TODO: assert no resource left. Currently UI textures are still not freed in their context
    * correctly. */
   delete g_backend;
   g_backend = nullptr;
+}
+
+eGPUBackendType GPU_backend_get_type()
+{
+  if (g_backend && dynamic_cast<GLBackend *>(g_backend) != nullptr) {
+    return GPU_BACKEND_OPENGL;
+  }
+
+  return GPU_BACKEND_NONE;
 }
 
 GPUBackend *GPUBackend::get()

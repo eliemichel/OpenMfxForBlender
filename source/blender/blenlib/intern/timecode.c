@@ -18,7 +18,7 @@
  */
 
 /** \file
- * \ingroup blendlib
+ * \ingroup bli
  *
  * Time-Code string formatting
  */
@@ -35,19 +35,6 @@
 
 #include "BLI_strict_flags.h"
 
-/**
- * Generate time-code/frame number string and store in \a str
- *
- * \param str: destination string
- * \param maxncpy: maximum number of characters to copy ``sizeof(str)``
- * \param brevity_level: special setting for #View2D grid drawing,
- *        used to specify how detailed we need to be
- * \param time_seconds: time total time in seconds
- * \param fps: frames per second, typically from the #FPS macro
- * \param timecode_style: enum from #eTimecodeStyles
- * \return length of \a str
- */
-
 size_t BLI_timecode_string_from_time(char *str,
                                      const size_t maxncpy,
                                      const int brevity_level,
@@ -62,7 +49,7 @@ size_t BLI_timecode_string_from_time(char *str,
 
   /* get cframes */
   if (time < 0) {
-    /* correction for negative cfraues */
+    /* Correction for negative cframes. */
     neg[0] = '-';
     time = -time;
   }
@@ -115,7 +102,7 @@ size_t BLI_timecode_string_from_time(char *str,
               str, maxncpy, "%s%02d:%02d+%02d", neg, minutes, seconds, frames);
         }
         else {
-          rlen = BLI_snprintf_rlen(str, maxncpy, "%s%d+%02d", neg, seconds, frames);
+          rlen = BLI_snprintf_rlen(str, maxncpy, "%s00:%02d+%02d", neg, seconds, frames);
         }
       }
       else {
@@ -195,14 +182,6 @@ size_t BLI_timecode_string_from_time(char *str,
   return rlen;
 }
 
-/**
- * Generate time string and store in \a str
- *
- * \param str: destination string
- * \param maxncpy: maximum number of characters to copy ``sizeof(str)``
- * \param time_seconds: time total time in seconds
- * \return length of \a str
- */
 size_t BLI_timecode_string_from_time_simple(char *str,
                                             const size_t maxncpy,
                                             const double time_seconds)
@@ -216,27 +195,15 @@ size_t BLI_timecode_string_from_time_simple(char *str,
   const int hun = ((int)(fmod(time_seconds, 1.0) * 100));
 
   if (hr) {
-    rlen = BLI_snprintf(str, maxncpy, "%.2d:%.2d:%.2d.%.2d", hr, min, sec, hun);
+    rlen = BLI_snprintf_rlen(str, maxncpy, "%.2d:%.2d:%.2d.%.2d", hr, min, sec, hun);
   }
   else {
-    rlen = BLI_snprintf(str, maxncpy, "%.2d:%.2d.%.2d", min, sec, hun);
+    rlen = BLI_snprintf_rlen(str, maxncpy, "%.2d:%.2d.%.2d", min, sec, hun);
   }
 
   return rlen;
 }
 
-/**
- * Generate time string and store in \a str
- *
- * \param str: destination string
- * \param maxncpy: maximum number of characters to copy ``sizeof(str)``
- * \param brevity_level: special setting for #View2D grid drawing,
- *        used to specify how detailed we need to be
- * \param time_seconds: time total time in seconds
- * \return length of \a str
- *
- * \note in some cases this is used to print non-seconds values.
- */
 size_t BLI_timecode_string_from_time_seconds(char *str,
                                              const size_t maxncpy,
                                              const int brevity_level,

@@ -165,11 +165,6 @@ void GPU_depth_range(float near, float far)
   copy_v2_fl2(state.depth_range, near, far);
 }
 
-/**
- * \note By convention, this is set as needed and not reset back to 1.0.
- * This means code that draws lines must always set the line width beforehand,
- * but is not expected to restore it's previous value.
- */
 void GPU_line_width(float width)
 {
   width = max_ff(1.0f, width * PIXELSIZE);
@@ -184,10 +179,6 @@ void GPU_point_size(float size)
   state.point_size = size * ((state.point_size > 0.0) ? 1.0f : -1.0f);
 }
 
-/* Programmable point size
- * - shaders set their own point size when enabled
- * - use GPU_point_size when disabled */
-/* TODO remove and use program point size everywhere */
 void GPU_program_point_size(bool enable)
 {
   StateManager *stack = Context::get()->state_manager;
@@ -248,7 +239,7 @@ eGPUWriteMask GPU_write_mask_get()
 
 uint GPU_stencil_mask_get()
 {
-  GPUStateMutable &state = Context::get()->state_manager->mutable_state;
+  const GPUStateMutable &state = Context::get()->state_manager->mutable_state;
   return state.stencil_write_mask;
 }
 
@@ -264,10 +255,9 @@ eGPUStencilTest GPU_stencil_test_get()
   return (eGPUStencilTest)state.stencil_test;
 }
 
-/* NOTE: Already premultiplied by U.pixelsize. */
 float GPU_line_width_get()
 {
-  GPUStateMutable &state = Context::get()->state_manager->mutable_state;
+  const GPUStateMutable &state = Context::get()->state_manager->mutable_state;
   return state.line_width;
 }
 
@@ -292,7 +282,7 @@ void GPU_viewport_size_get_i(int coords[4])
 
 bool GPU_depth_mask_get()
 {
-  GPUState &state = Context::get()->state_manager->state;
+  const GPUState &state = Context::get()->state_manager->state;
   return (state.write_mask & GPU_WRITE_DEPTH) != 0;
 }
 
@@ -363,7 +353,6 @@ void GPU_bgl_start()
   }
 }
 
-/* Just turn off the bgl safeguard system. Can be called even without GPU_bgl_start. */
 void GPU_bgl_end()
 {
   Context *ctx = Context::get();

@@ -39,8 +39,10 @@ struct bArmature;
 struct LinkData;
 struct ListBase;
 
-/* ******************************************************* */
-/* Armature EditMode Operators */
+/* -------------------------------------------------------------------- */
+/** \name Armature EditMode Operators
+ * \{ */
+
 void ARMATURE_OT_bone_primitive_add(struct wmOperatorType *ot);
 
 void ARMATURE_OT_align(struct wmOperatorType *ot);
@@ -82,8 +84,12 @@ void ARMATURE_OT_layers_show_all(struct wmOperatorType *ot);
 void ARMATURE_OT_armature_layers(struct wmOperatorType *ot);
 void ARMATURE_OT_bone_layers(struct wmOperatorType *ot);
 
-/* ******************************************************* */
-/* Pose-Mode Operators */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pose-Mode Operators
+ * \{ */
+
 void POSE_OT_hide(struct wmOperatorType *ot);
 void POSE_OT_reveal(struct wmOperatorType *ot);
 
@@ -131,8 +137,12 @@ void POSE_OT_quaternions_flip(struct wmOperatorType *ot);
 
 void POSE_OT_bone_layers(struct wmOperatorType *ot);
 
-/* ******************************************************* */
-/* Pose Tool Utilities (for PoseLib, Pose Sliding, etc.) */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pose Tool Utilities (for PoseLib, Pose Sliding, etc.)
+ * \{ */
+
 /* pose_utils.c */
 
 /* Temporary data linking PoseChannels with the F-Curves they affect */
@@ -161,11 +171,11 @@ typedef struct tPChanFCurveLink {
   /** old bbone values (to be restored along with the transform properties) */
   float roll1, roll2;
   /** (NOTE: we haven't renamed these this time, as their names are already long enough) */
-  float curve_in_x, curve_in_y;
-  float curve_out_x, curve_out_y;
+  float curve_in_x, curve_in_z;
+  float curve_out_x, curve_out_z;
   float ease1, ease2;
-  float scale_in_x, scale_in_y;
-  float scale_out_x, scale_out_y;
+  float scale_in[3];
+  float scale_out[3];
 
   /** copy of custom properties at start of operator (to be restored before each modal step) */
   struct IDProperty *oldprops;
@@ -173,21 +183,39 @@ typedef struct tPChanFCurveLink {
 
 /* ----------- */
 
+/** Returns a valid pose armature for this object, else returns NULL. */
 struct Object *poseAnim_object_get(struct Object *ob_);
+/** Get sets of F-Curves providing transforms for the bones in the Pose. */
 void poseAnim_mapping_get(struct bContext *C, ListBase *pfLinks);
+/** Free F-Curve <-> PoseChannel links. */
 void poseAnim_mapping_free(ListBase *pfLinks);
 
+/**
+ * Helper for apply() / reset() - refresh the data.
+ */
 void poseAnim_mapping_refresh(struct bContext *C, struct Scene *scene, struct Object *ob);
+/**
+ * Reset changes made to current pose.
+ */
 void poseAnim_mapping_reset(ListBase *pfLinks);
+/** Perform auto-key-framing after changes were made + confirmed. */
 void poseAnim_mapping_autoKeyframe(struct bContext *C,
                                    struct Scene *scene,
                                    ListBase *pfLinks,
                                    float cframe);
 
+/**
+ * Find the next F-Curve for a PoseChannel with matching path...
+ * - path is not just the pfl rna_path, since that path doesn't have property info yet.
+ */
 LinkData *poseAnim_mapping_getNextFCurve(ListBase *fcuLinks, LinkData *prev, const char *path);
 
-/* ******************************************************* */
-/* PoseLib */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name PoseLib
+ * \{ */
+
 /* pose_lib.c */
 
 void POSELIB_OT_new(struct wmOperatorType *ot);
@@ -203,8 +231,16 @@ void POSELIB_OT_pose_move(struct wmOperatorType *ot);
 void POSELIB_OT_browse_interactive(struct wmOperatorType *ot);
 void POSELIB_OT_apply_pose(struct wmOperatorType *ot);
 
-/* ******************************************************* */
-/* Pose Sliding Tools */
+/* pose_lib_2.c */
+void POSELIB_OT_apply_pose_asset(struct wmOperatorType *ot);
+void POSELIB_OT_blend_pose_asset(struct wmOperatorType *ot);
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pose Sliding Tools
+ * \{ */
+
 /* pose_slide.c */
 
 void POSE_OT_push(struct wmOperatorType *ot);
@@ -212,11 +248,15 @@ void POSE_OT_relax(struct wmOperatorType *ot);
 void POSE_OT_push_rest(struct wmOperatorType *ot);
 void POSE_OT_relax_rest(struct wmOperatorType *ot);
 void POSE_OT_breakdown(struct wmOperatorType *ot);
+void POSE_OT_blend_to_neighbors(struct wmOperatorType *ot);
 
 void POSE_OT_propagate(struct wmOperatorType *ot);
 
-/* ******************************************************* */
-/* Various Armature Edit/Pose Editing API's */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Various Armature Edit/Pose Editing API's
+ * \{ */
 
 /* Ideally, many of these defines would not be needed as everything would be strictly
  * self-contained within each file,
@@ -227,7 +267,9 @@ struct EditBone *make_boneList(struct ListBase *edbo,
                                struct ListBase *bones,
                                struct Bone *actBone);
 
-/* duplicate method */
+/* Duplicate method. */
+
+/** Call this before doing any duplications. */
 void preEditBoneDuplicate(struct ListBase *editbones);
 void postEditBoneDuplicate(struct ListBase *editbones, struct Object *ob);
 struct EditBone *duplicateEditBone(struct EditBone *cur_bone,
@@ -235,21 +277,36 @@ struct EditBone *duplicateEditBone(struct EditBone *cur_bone,
                                    struct ListBase *editbones,
                                    struct Object *ob);
 
-/* duplicate method (cross objects) */
-/* editbones is the target list */
+/* Duplicate method (cross objects). */
+
+/**
+ * \param editbones: The target list.
+ */
 struct EditBone *duplicateEditBoneObjects(struct EditBone *cur_bone,
                                           const char *name,
                                           struct ListBase *editbones,
                                           struct Object *src_ob,
                                           struct Object *dst_ob);
 
+/** Adds an EditBone between the nominated locations (should be in the right space). */
 struct EditBone *add_points_bone(struct Object *obedit, float head[3], float tail[3]);
 void bone_free(struct bArmature *arm, struct EditBone *bone);
 
 void armature_tag_select_mirrored(struct bArmature *arm);
-void armature_select_mirrored_ex(struct bArmature *arm, const int flag);
+/**
+ * Helper function for tools to work on mirrored parts.
+ * it leaves mirrored bones selected then too, which is a good indication of what happened.
+ */
+void armature_select_mirrored_ex(struct bArmature *arm, int flag);
 void armature_select_mirrored(struct bArmature *arm);
+/** Only works when tagged. */
 void armature_tag_unselect(struct bArmature *arm);
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Selection Picking
+ * \{ */
 
 struct EditBone *ED_armature_pick_ebone(struct bContext *C,
                                         const int xy[2],
@@ -286,7 +343,19 @@ struct Bone *ED_armature_pick_bone_from_selectbuffer(struct Base **bases,
                                                      bool do_nearest,
                                                      struct Base **r_base);
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Iteration
+ * \{ */
+
+/**
+ * XXX: bone_looper is only to be used when we want to access settings
+ * (i.e. editability/visibility/selected) that context doesn't offer.
+ */
 int bone_looper(struct Object *ob,
                 struct Bone *bone,
                 void *data,
                 int (*bone_func)(struct Object *, struct Bone *, void *));
+
+/** \} */

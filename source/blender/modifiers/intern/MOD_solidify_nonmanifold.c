@@ -71,6 +71,16 @@ static float angle_signed_on_axis_normalized_v3v3_v3(const float n[3],
   return angle;
 }
 
+static float clamp_nonzero(const float value, const float epsilon)
+{
+  BLI_assert(!(epsilon < 0.0f));
+  /* Return closest value with `abs(value) >= epsilon`. */
+  if (value < 0.0f) {
+    return min_ff(value, -epsilon);
+  }
+  return max_ff(value, epsilon);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -148,7 +158,6 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
   const uint numVerts = (uint)mesh->totvert;
   const uint numEdges = (uint)mesh->totedge;
   const uint numPolys = (uint)mesh->totpoly;
-  const uint numLoops = (uint)mesh->totloop;
 
   if (numPolys == 0 && numVerts != 0) {
     return mesh;
@@ -160,17 +169,22 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
   const short mat_ofs = mat_nrs > 1 ? smd->mat_ofs : 0;
   const short mat_ofs_rim = mat_nrs > 1 ? smd->mat_ofs_rim : 0;
 
-  float(*poly_nors)[3] = NULL;
-
+  /* #ofs_front and #ofs_back are the offset from the original
+   * surface along the normal, where #oft_front is along the positive
+   * and #oft_back is along the negative normal. */
   const float ofs_front = (smd->offset_fac + 1.0f) * 0.5f * smd->offset;
   const float ofs_back = ofs_front - smd->offset * smd->offset_fac;
-  const float ofs_front_clamped = max_ff(1e-5f, fabsf(smd->offset > 0 ? ofs_front : ofs_back));
-  const float ofs_back_clamped = max_ff(1e-5f, fabsf(smd->offset > 0 ? ofs_back : ofs_front));
+  /* #ofs_front_clamped and #ofs_back_clamped are the same as
+   * #ofs_front and #ofs_back, but never zero. */
+  const float ofs_front_clamped = clamp_nonzero(ofs_front, 1e-5f);
+  const float ofs_back_clamped = clamp_nonzero(ofs_back, 1e-5f);
   const float offset_fac_vg = smd->offset_fac_vg;
   const float offset_fac_vg_inv = 1.0f - smd->offset_fac_vg;
   const float offset = fabsf(smd->offset) * smd->offset_clamp;
   const bool do_angle_clamp = smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP;
-  const bool do_flip = (smd->flag & MOD_SOLIDIFY_FLIP) != 0;
+  /* #do_flip, flips the normals of the result. This is inverted if negative thickness
+   * is used, since simple solidify with negative thickness keeps the faces facing outside. */
+  const bool do_flip = ((smd->flag & MOD_SOLIDIFY_FLIP) != 0) == (smd->offset > 0);
   const bool do_rim = smd->flag & MOD_SOLIDIFY_RIM;
   const bool do_shell = ((smd->flag & MOD_SOLIDIFY_RIM) && (smd->flag & MOD_SOLIDIFY_NOSHELL)) ==
                         0;
@@ -181,9 +195,8 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
   MDeformVert *dvert;
   const bool defgrp_invert = (smd->flag & MOD_SOLIDIFY_VGROUP_INV) != 0;
   int defgrp_index;
-  const int shell_defgrp_index = BKE_object_defgroup_name_index(ctx->object,
-                                                                smd->shell_defgrp_name);
-  const int rim_defgrp_index = BKE_object_defgroup_name_index(ctx->object, smd->rim_defgrp_name);
+  const int shell_defgrp_index = BKE_id_defgroup_name_index(&mesh->id, smd->shell_defgrp_name);
+  const int rim_defgrp_index = BKE_id_defgroup_name_index(&mesh->id, smd->rim_defgrp_name);
 
   MOD_get_vgroup(ctx->object, mesh, smd->defgrp_name, &dvert, &defgrp_index);
 
@@ -201,17 +214,9 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
 
 #define MOD_SOLIDIFY_EMPTY_TAG ((uint)-1)
 
-  /* Calculate only face normals. */
-  poly_nors = MEM_malloc_arrayN(numPolys, sizeof(*poly_nors), __func__);
-  BKE_mesh_calc_normals_poly(orig_mvert,
-                             NULL,
-                             (int)numVerts,
-                             orig_mloop,
-                             orig_mpoly,
-                             (int)numLoops,
-                             (int)numPolys,
-                             poly_nors,
-                             true);
+  /* Calculate only face normals. Copied because they are modified directly below. */
+  float(*poly_nors)[3] = MEM_malloc_arrayN(numPolys, sizeof(float[3]), __func__);
+  memcpy(poly_nors, BKE_mesh_poly_normals_ensure(mesh), sizeof(float[3]) * numPolys);
 
   NewFaceRef *face_sides_arr = MEM_malloc_arrayN(
       numPolys * 2, sizeof(*face_sides_arr), "face_sides_arr in solidify");
@@ -913,7 +918,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
           uint unassigned_edges_len = 0;
           for (uint j = 0; j < tot_adj_edges; j++) {
             NewEdgeRef **new_edges = orig_edge_data_arr[adj_edges[j]];
-            /* TODO check where the null pointer come from,
+            /* TODO: check where the null pointer come from,
              * because there should not be any... */
             if (new_edges) {
               /* count the number of new edges around the original vert */
@@ -1107,7 +1112,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
 
           MEM_freeN(unassigned_edges);
 
-          /* TODO reshape the edge_groups array to its actual size
+          /* TODO: reshape the edge_groups array to its actual size
            * after writing is finished to save on memory. */
         }
 
@@ -1167,9 +1172,9 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           add_index++;
                         }
                         if (last_split > split) {
-                          const uint size = (split + edges_len) - (uint)last_split;
+                          const uint edges_len_group = (split + edges_len) - (uint)last_split;
                           NewEdgeRef **edges = MEM_malloc_arrayN(
-                              size, sizeof(*edges), "edge_group split in solidify");
+                              edges_len_group, sizeof(*edges), "edge_group split in solidify");
                           memcpy(edges,
                                  g.edges + last_split,
                                  (edges_len - (uint)last_split) * sizeof(*edges));
@@ -1179,7 +1184,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           edge_groups[j + add_index] = (EdgeGroup){
                               .valid = true,
                               .edges = edges,
-                              .edges_len = size,
+                              .edges_len = edges_len_group,
                               .open_face_edge = MOD_SOLIDIFY_EMPTY_TAG,
                               .is_orig_closed = g.is_orig_closed,
                               .is_even_split = is_even_split,
@@ -1192,14 +1197,14 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           };
                         }
                         else {
-                          const uint size = split - (uint)last_split;
+                          const uint edges_len_group = split - (uint)last_split;
                           NewEdgeRef **edges = MEM_malloc_arrayN(
-                              size, sizeof(*edges), "edge_group split in solidify");
-                          memcpy(edges, g.edges + last_split, size * sizeof(*edges));
+                              edges_len_group, sizeof(*edges), "edge_group split in solidify");
+                          memcpy(edges, g.edges + last_split, edges_len_group * sizeof(*edges));
                           edge_groups[j + add_index] = (EdgeGroup){
                               .valid = true,
                               .edges = edges,
-                              .edges_len = size,
+                              .edges_len = edges_len_group,
                               .open_face_edge = MOD_SOLIDIFY_EMPTY_TAG,
                               .is_orig_closed = g.is_orig_closed,
                               .is_even_split = is_even_split,
@@ -1374,7 +1379,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
     MEM_freeN(vert_adj_edges);
   }
 
-  /* TODO create_regions if fix_intersections. */
+  /* TODO: create_regions if fix_intersections. */
 
   /* General use pointer for #EdgeGroup iteration. */
   EdgeGroup **gs_ptr;
@@ -1854,7 +1859,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
     MEM_freeN(null_faces);
   }
 
-  /* TODO create vertdata for intersection fixes (intersection fixing per topology region). */
+  /* TODO: create vertdata for intersection fixes (intersection fixing per topology region). */
 
   /* Correction for adjacent one sided groups around a vert to
    * prevent edge duplicates and null polys. */
@@ -1919,7 +1924,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
   int *origindex_edge = CustomData_get_layer(&result->edata, CD_ORIGINDEX);
   int *origindex_poly = CustomData_get_layer(&result->pdata, CD_ORIGINDEX);
 
-  if (bevel_convex != 0.0f) {
+  if (bevel_convex != 0.0f || (result->cd_flag & ME_CDFLAG_VERT_BWEIGHT) != 0) {
     /* make sure bweight is enabled */
     result->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
   }
@@ -1954,7 +1959,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
     }
   }
 
-  result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+  BKE_mesh_normals_tag_dirty(result);
 
   /* Make edges. */
   {
@@ -2018,7 +2023,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
      * - new_edge value should have no duplicates
      * - every old_edge value should appear twice
      * - every group should have at least two members (edges)
-     * Note: that there can be vertices that only have one group. They are called singularities.
+     * NOTE: that there can be vertices that only have one group. They are called singularities.
      * These vertices will only have one side (there is no way of telling apart front
      * from back like on a mobius strip)
      */

@@ -215,7 +215,7 @@ static void mball_undosys_step_decode(struct bContext *C,
     }
     undomball_to_editmball(&elem->data, mb);
     mb->needs_flush_to_id = 1;
-    DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
+    DEG_id_tag_update(&mb->id, ID_RECALC_GEOMETRY);
   }
 
   /* The first element is always active */
@@ -253,7 +253,6 @@ static void mball_undosys_foreach_ID_ref(UndoStep *us_p,
   }
 }
 
-/* Export for ED_undo_sys. */
 void ED_mball_undosys_type(UndoType *ut)
 {
   ut->name = "Edit MBall";

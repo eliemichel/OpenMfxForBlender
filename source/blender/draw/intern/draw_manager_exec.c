@@ -29,6 +29,7 @@
 
 #include "BKE_global.h"
 
+#include "GPU_compute.h"
 #include "GPU_platform.h"
 #include "GPU_shader.h"
 #include "GPU_state.h"
@@ -224,7 +225,7 @@ void drw_state_set(DRWState state)
     GPU_shadow_offset(false);
   }
 
-  /* TODO this should be part of shader state. */
+  /* TODO: this should be part of shader state. */
   if (state & DRW_STATE_CLIP_PLANES) {
     GPU_clip_distances(DST.view_active->clip_planes_len);
   }
@@ -272,7 +273,6 @@ static void drw_stencil_state_set(uint write_mask, uint reference, uint compare_
   GPU_stencil_compare_mask_set(compare_mask);
 }
 
-/* Reset state to not interfere with other UI draw-call. */
 void DRW_state_reset_ex(DRWState state)
 {
   DST.state = ~state;
@@ -282,21 +282,15 @@ void DRW_state_reset_ex(DRWState state)
 static void drw_state_validate(void)
 {
   /* Cannot write to stencil buffer without stencil test. */
-  if ((DST.state & DRW_STATE_WRITE_STENCIL_ENABLED)) {
+  if (DST.state & DRW_STATE_WRITE_STENCIL_ENABLED) {
     BLI_assert(DST.state & DRW_STATE_STENCIL_TEST_ENABLED);
   }
   /* Cannot write to depth buffer without depth test. */
-  if ((DST.state & DRW_STATE_WRITE_DEPTH)) {
+  if (DST.state & DRW_STATE_WRITE_DEPTH) {
     BLI_assert(DST.state & DRW_STATE_DEPTH_TEST_ENABLED);
   }
 }
 
-/**
- * Use with care, intended so selection code can override passes depth settings,
- * which is important for selection to work properly.
- *
- * Should be set in main draw loop, cleared afterwards
- */
 void DRW_state_lock(DRWState state)
 {
   DST.state_lock = state;
@@ -360,10 +354,14 @@ static bool draw_call_is_culled(const DRWResourceHandle *handle, DRWView *view)
   return (culling->mask & view->culling_mask) != 0;
 }
 
-/* Set active view for rendering. */
-void DRW_view_set_active(DRWView *view)
+void DRW_view_set_active(const DRWView *view)
 {
-  DST.view_active = (view) ? view : DST.view_default;
+  DST.view_active = (view != NULL) ? ((DRWView *)view) : DST.view_default;
+}
+
+const DRWView *DRW_view_get_active(void)
+{
+  return DST.view_active;
 }
 
 /* Return True if the given BoundSphere intersect the current view frustum */
@@ -382,10 +380,10 @@ static bool draw_culling_sphere_test(const BoundSphere *frustum_bsphere,
   if (center_dist_sq > square_f(radius_sum)) {
     return false;
   }
-  /* TODO we could test against the inscribed sphere of the frustum to early out positively. */
+  /* TODO: we could test against the inscribed sphere of the frustum to early out positively. */
 
   /* Test against the 6 frustum planes. */
-  /* TODO order planes with sides first then far then near clip. Should be better culling
+  /* TODO: order planes with sides first then far then near clip. Should be better culling
    * heuristic when sculpting. */
   for (int p = 0; p < 6; p++) {
     float dist = plane_point_side_v3(frustum_planes[p], bsphere->center);
@@ -429,32 +427,24 @@ static bool draw_culling_plane_test(const BoundBox *corners, const float plane[4
   return false;
 }
 
-/* Return True if the given BoundSphere intersect the current view frustum.
- * bsphere must be in world space. */
 bool DRW_culling_sphere_test(const DRWView *view, const BoundSphere *bsphere)
 {
   view = view ? view : DST.view_default;
   return draw_culling_sphere_test(&view->frustum_bsphere, view->frustum_planes, bsphere);
 }
 
-/* Return True if the given BoundBox intersect the current view frustum.
- * bbox must be in world space. */
 bool DRW_culling_box_test(const DRWView *view, const BoundBox *bbox)
 {
   view = view ? view : DST.view_default;
   return draw_culling_box_test(view->frustum_planes, bbox);
 }
 
-/* Return True if the view frustum is inside or intersect the given plane.
- * plane must be in world space. */
 bool DRW_culling_plane_test(const DRWView *view, const float plane[4])
 {
   view = view ? view : DST.view_default;
   return draw_culling_plane_test(&view->frustum_corners, plane);
 }
 
-/* Return True if the given box intersect the current view frustum.
- * This function will have to be replaced when world space bb per objects is implemented. */
 bool DRW_culling_min_max_test(const DRWView *view, float obmat[4][4], float min[3], float max[3])
 {
   view = view ? view : DST.view_default;
@@ -672,6 +662,9 @@ static void draw_update_uniforms(DRWShadingGroup *shgroup,
           *use_tfeedback = GPU_shader_transform_feedback_enable(shgroup->shader,
                                                                 ((GPUVertBuf *)uni->pvalue));
           break;
+        case DRW_UNIFORM_VERTEX_BUFFER_AS_STORAGE:
+          GPU_vertbuf_bind_as_ssbo((GPUVertBuf *)uni->pvalue, uni->location);
+          break;
           /* Legacy/Fallback support. */
         case DRW_UNIFORM_BASE_INSTANCE:
           state->baseinst_loc = uni->location;
@@ -697,7 +690,7 @@ BLI_INLINE void draw_select_buffer(DRWShadingGroup *shgroup,
   int count = 1;
   int tot = is_instancing ? GPU_vertbuf_get_vertex_len(batch->inst[0]) :
                             GPU_vertbuf_get_vertex_len(batch->verts[0]);
-  /* Hack : get "vbo" data without actually drawing. */
+  /* HACK: get VBO data without actually drawing. */
   int *select_id = (void *)GPU_vertbuf_get_data(state->select_buf);
 
   /* Batching */
@@ -814,7 +807,7 @@ static void draw_call_single_do(DRWShadingGroup *shgroup,
 
   draw_call_resource_bind(state, &handle);
 
-  /* TODO This is Legacy. Need to be removed. */
+  /* TODO: This is Legacy. Need to be removed. */
   if (state->obmats_loc == -1 && (state->obmat_loc != -1 || state->obinv_loc != -1)) {
     draw_legacy_matrix_update(shgroup, &handle, state->obmat_loc, state->obinv_loc);
   }
@@ -1050,6 +1043,12 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
                               cmd->instance_range.inst_count,
                               false);
           break;
+        case DRW_CMD_COMPUTE:
+          GPU_compute_dispatch(shgroup->shader,
+                               cmd->compute.groups_x_len,
+                               cmd->compute.groups_y_len,
+                               cmd->compute.groups_z_len);
+          break;
       }
     }
 
@@ -1066,7 +1065,7 @@ static void drw_update_view(void)
   /* TODO(fclem): update a big UBO and only bind ranges here. */
   GPU_uniformbuf_update(G_draw.view_ubo, &DST.view_active->storage);
 
-  /* TODO get rid of this. */
+  /* TODO: get rid of this. */
   DST.view_storage_cpy = DST.view_active->storage;
 
   draw_compute_culling(DST.view_active);
@@ -1154,7 +1153,6 @@ void DRW_draw_pass(DRWPass *pass)
   }
 }
 
-/* Draw only a subset of shgroups. Used in special situations as grease pencil strokes */
 void DRW_draw_pass_subset(DRWPass *pass, DRWShadingGroup *start_group, DRWShadingGroup *end_group)
 {
   drw_draw_pass_ex(pass, start_group, end_group);

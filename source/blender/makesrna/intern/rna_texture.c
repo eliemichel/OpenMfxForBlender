@@ -35,6 +35,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_node.h"
+#include "BKE_node_tree_update.h"
 #include "BKE_paint.h"
 
 #include "RNA_define.h"
@@ -199,14 +200,29 @@ static void rna_Texture_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *pt
   }
   else if (GS(id->name) == ID_NT) {
     bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
-    ED_node_tag_update_nodetree(bmain, ntree, NULL);
+    ED_node_tree_propagate_change(NULL, bmain, ntree);
   }
 }
 
 static void rna_Texture_mapping_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
+  ID *id = ptr->owner_id;
   TexMapping *texmap = ptr->data;
   BKE_texture_mapping_init(texmap);
+
+  if (GS(id->name) == ID_NT) {
+    bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
+    /* Try to find and tag the node that this #TexMapping belongs to. */
+    LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+      /* This assumes that the #TexMapping is stored at the beginning of the node storage. This is
+       * generally true, see #NodeTexBase. If the assumption happens to be false, there might be a
+       * missing update. */
+      if (node->storage == texmap) {
+        BKE_ntree_update_tag_node_property(ntree, node);
+      }
+    }
+  }
+
   rna_Texture_update(bmain, scene, ptr);
 }
 
@@ -1642,6 +1658,7 @@ static void rna_def_texture(BlenderRNA *brna)
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
   RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node-based textures");
   RNA_def_property_update(prop, 0, "rna_Texture_nodes_update");
 
@@ -1659,7 +1676,7 @@ static void rna_def_texture(BlenderRNA *brna)
   rna_def_texture_musgrave(brna);
   rna_def_texture_voronoi(brna);
   rna_def_texture_distorted_noise(brna);
-  /* XXX add more types here .. */
+  /* XXX add more types here. */
 
   RNA_api_texture(srna);
 }

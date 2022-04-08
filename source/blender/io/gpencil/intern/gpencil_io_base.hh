@@ -22,9 +22,8 @@
  * \ingroup bgpencil
  */
 
-#include "BLI_float2.hh"
-#include "BLI_float3.hh"
 #include "BLI_float4x4.hh"
+#include "BLI_math_vec_types.hh"
 #include "BLI_vector.hh"
 
 #include "DNA_space_types.h" /* for FILE_MAX */
@@ -37,9 +36,9 @@ struct Object;
 struct RegionView3D;
 struct Scene;
 
-struct bGPdata;
 struct bGPDlayer;
 struct bGPDstroke;
+struct bGPdata;
 
 using blender::Vector;
 
@@ -49,8 +48,8 @@ class GpencilIO {
  public:
   GpencilIO(const GpencilIOParams *iparams);
 
-  void frame_number_set(const int value);
-  void prepare_camera_params(const GpencilIOParams *iparams);
+  void frame_number_set(int value);
+  void prepare_camera_params(Scene *scene, const GpencilIOParams *iparams);
 
  protected:
   GpencilIOParams params_;
@@ -87,29 +86,37 @@ class GpencilIO {
   float stroke_color_[4], fill_color_[4];
 
   /* Geometry functions. */
+  /** Convert to screenspace. */
   bool gpencil_3D_point_to_screen_space(const float3 co, float2 &r_co);
-  float2 gpencil_3D_point_to_render_space(const float3 co, const bool is_ortho);
+  /** Convert to render space. */
+  float2 gpencil_3D_point_to_render_space(const float3 co);
+  /** Convert to 2D. */
   float2 gpencil_3D_point_to_2D(const float3 co);
 
+  /** Get radius of point. */
   float stroke_point_radius_get(struct bGPDlayer *gpl, struct bGPDstroke *gps);
+  /** Create a list of selected objects sorted from back to front */
   void create_object_list();
 
   bool is_camera_mode();
-  bool is_orthographic();
 
   float stroke_average_opacity_get();
 
   void prepare_layer_export_matrix(struct Object *ob, struct bGPDlayer *gpl);
   void prepare_stroke_export_colors(struct Object *ob, struct bGPDstroke *gps);
 
+  /* Calculate selected strokes boundbox. */
   void selected_objects_boundbox_calc();
   void selected_objects_boundbox_get(rctf *boundbox);
+  /**
+   * Set file input_text full path.
+   * \param filename: Path of the file provided by save dialog.
+   */
   void filename_set(const char *filename);
 
  private:
   float avg_opacity_;
   bool is_camera_;
-  bool is_ortho_;
   rctf select_boundbox_;
 
   /* Camera matrix. */

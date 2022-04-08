@@ -949,8 +949,9 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Period", "Period of the noise");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
-  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "seed");
+  RNA_def_property_range(prop, 1, SHRT_MAX);
   RNA_def_property_ui_text(prop, "Seed", "Seed for the noise generation");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
@@ -1051,8 +1052,9 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Period", "Period of the noise");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
-  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "seed");
+  RNA_def_property_range(prop, 1, SHRT_MAX);
   RNA_def_property_ui_text(prop, "Seed", "Seed for the noise generation");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
@@ -1191,8 +1193,9 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Period", "Period of the noise");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
-  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "seed", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "seed");
+  RNA_def_property_range(prop, 1, SHRT_MAX);
   RNA_def_property_ui_text(prop, "Seed", "Seed for the noise generation");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
@@ -1306,8 +1309,9 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
       srna, "Sinus Displacement", "Add sinus displacement to stroke backbone geometry");
   rna_def_geometry_modifier(srna);
 
-  prop = RNA_def_property(srna, "wavelength", PROP_FLOAT, PROP_NONE);
+  prop = RNA_def_property(srna, "wavelength", PROP_FLOAT, PROP_UNSIGNED);
   RNA_def_property_float_sdna(prop, NULL, "wavelength");
+  RNA_def_property_range(prop, 0.0001f, FLT_MAX);
   RNA_def_property_ui_text(prop, "Wavelength", "Wavelength of the sinus displacement");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
@@ -2189,6 +2193,7 @@ static void rna_def_linestyle(BlenderRNA *brna)
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
   RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node-based shaders");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);

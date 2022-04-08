@@ -25,40 +25,49 @@
  * the code has been extended and modified to support more primitives and work
  * with CPU/CUDA/OpenCL. */
 
+#pragma once
+
 #ifdef __EMBREE__
-#  include "kernel/bvh/bvh_embree.h"
+#  include "kernel/bvh/embree.h"
 #endif
+
+#ifdef __METALRT__
+#  include "kernel/bvh/metal.h"
+#endif
+
+#include "kernel/bvh/types.h"
+#include "kernel/bvh/util.h"
+
+#include "kernel/integrator/state_util.h"
 
 CCL_NAMESPACE_BEGIN
 
-#include "kernel/bvh/bvh_types.h"
-
-#ifndef __KERNEL_OPTIX__
+#if !defined(__KERNEL_GPU_RAYTRACING__)
 
 /* Regular BVH traversal */
 
-#  include "kernel/bvh/bvh_nodes.h"
+#  include "kernel/bvh/nodes.h"
 
 #  define BVH_FUNCTION_NAME bvh_intersect
-#  define BVH_FUNCTION_FEATURES 0
-#  include "kernel/bvh/bvh_traversal.h"
+#  define BVH_FUNCTION_FEATURES BVH_POINTCLOUD
+#  include "kernel/bvh/traversal.h"
 
 #  if defined(__HAIR__)
 #    define BVH_FUNCTION_NAME bvh_intersect_hair
-#    define BVH_FUNCTION_FEATURES BVH_HAIR
-#    include "kernel/bvh/bvh_traversal.h"
+#    define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_POINTCLOUD
+#    include "kernel/bvh/traversal.h"
 #  endif
 
 #  if defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_motion
-#    define BVH_FUNCTION_FEATURES BVH_MOTION
-#    include "kernel/bvh/bvh_traversal.h"
+#    define BVH_FUNCTION_FEATURES BVH_MOTION | BVH_POINTCLOUD
+#    include "kernel/bvh/traversal.h"
 #  endif
 
 #  if defined(__HAIR__) && defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_hair_motion
-#    define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_MOTION
-#    include "kernel/bvh/bvh_traversal.h"
+#    define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_MOTION | BVH_POINTCLOUD
+#    include "kernel/bvh/traversal.h"
 #  endif
 
 /* Subsurface scattering BVH traversal */
@@ -66,12 +75,12 @@ CCL_NAMESPACE_BEGIN
 #  if defined(__BVH_LOCAL__)
 #    define BVH_FUNCTION_NAME bvh_intersect_local
 #    define BVH_FUNCTION_FEATURES BVH_HAIR
-#    include "kernel/bvh/bvh_local.h"
+#    include "kernel/bvh/local.h"
 
 #    if defined(__OBJECT_MOTION__)
 #      define BVH_FUNCTION_NAME bvh_intersect_local_motion
 #      define BVH_FUNCTION_FEATURES BVH_MOTION | BVH_HAIR
-#      include "kernel/bvh/bvh_local.h"
+#      include "kernel/bvh/local.h"
 #    endif
 #  endif /* __BVH_LOCAL__ */
 
@@ -80,12 +89,12 @@ CCL_NAMESPACE_BEGIN
 #  if defined(__VOLUME__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume
 #    define BVH_FUNCTION_FEATURES BVH_HAIR
-#    include "kernel/bvh/bvh_volume.h"
+#    include "kernel/bvh/volume.h"
 
 #    if defined(__OBJECT_MOTION__)
 #      define BVH_FUNCTION_NAME bvh_intersect_volume_motion
 #      define BVH_FUNCTION_FEATURES BVH_MOTION | BVH_HAIR
-#      include "kernel/bvh/bvh_volume.h"
+#      include "kernel/bvh/volume.h"
 #    endif
 #  endif /* __VOLUME__ */
 
@@ -93,39 +102,40 @@ CCL_NAMESPACE_BEGIN
 
 #  if defined(__SHADOW_RECORD_ALL__)
 #    define BVH_FUNCTION_NAME bvh_intersect_shadow_all
-#    define BVH_FUNCTION_FEATURES 0
-#    include "kernel/bvh/bvh_shadow_all.h"
+#    define BVH_FUNCTION_FEATURES BVH_POINTCLOUD
+#    include "kernel/bvh/shadow_all.h"
 
 #    if defined(__HAIR__)
 #      define BVH_FUNCTION_NAME bvh_intersect_shadow_all_hair
-#      define BVH_FUNCTION_FEATURES BVH_HAIR
-#      include "kernel/bvh/bvh_shadow_all.h"
+#      define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_POINTCLOUD
+#      include "kernel/bvh/shadow_all.h"
 #    endif
 
 #    if defined(__OBJECT_MOTION__)
 #      define BVH_FUNCTION_NAME bvh_intersect_shadow_all_motion
-#      define BVH_FUNCTION_FEATURES BVH_MOTION
-#      include "kernel/bvh/bvh_shadow_all.h"
+#      define BVH_FUNCTION_FEATURES BVH_MOTION | BVH_POINTCLOUD
+#      include "kernel/bvh/shadow_all.h"
 #    endif
 
 #    if defined(__HAIR__) && defined(__OBJECT_MOTION__)
 #      define BVH_FUNCTION_NAME bvh_intersect_shadow_all_hair_motion
-#      define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_MOTION
-#      include "kernel/bvh/bvh_shadow_all.h"
+#      define BVH_FUNCTION_FEATURES BVH_HAIR | BVH_MOTION | BVH_POINTCLOUD
+#      include "kernel/bvh/shadow_all.h"
 #    endif
+
 #  endif /* __SHADOW_RECORD_ALL__ */
 
-/* Record all intersections - Volume BVH traversal  */
+/* Record all intersections - Volume BVH traversal. */
 
 #  if defined(__VOLUME_RECORD_ALL__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume_all
 #    define BVH_FUNCTION_FEATURES BVH_HAIR
-#    include "kernel/bvh/bvh_volume_all.h"
+#    include "kernel/bvh/volume_all.h"
 
 #    if defined(__OBJECT_MOTION__)
 #      define BVH_FUNCTION_NAME bvh_intersect_volume_all_motion
 #      define BVH_FUNCTION_FEATURES BVH_MOTION | BVH_HAIR
-#      include "kernel/bvh/bvh_volume_all.h"
+#      include "kernel/bvh/volume_all.h"
 #    endif
 #  endif /* __VOLUME_RECORD_ALL__ */
 
@@ -134,9 +144,9 @@ CCL_NAMESPACE_BEGIN
 #  undef BVH_NAME_EVAL
 #  undef BVH_FUNCTION_FULL_NAME
 
-#endif /* __KERNEL_OPTIX__ */
+#endif /* !defined(__KERNEL_GPU_RAYTRACING__) */
 
-ccl_device_inline bool scene_intersect_valid(const Ray *ray)
+ccl_device_inline bool scene_intersect_valid(ccl_private const Ray *ray)
 {
   /* NOTE: Due to some vectorization code  non-finite origin point might
    * cause lots of false-positive intersections which will overflow traversal
@@ -151,13 +161,11 @@ ccl_device_inline bool scene_intersect_valid(const Ray *ray)
   return isfinite_safe(ray->P.x) && isfinite_safe(ray->D.x) && len_squared(ray->D) != 0.0f;
 }
 
-ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
-                                          const Ray *ray,
+ccl_device_intersect bool scene_intersect(KernelGlobals kg,
+                                          ccl_private const Ray *ray,
                                           const uint visibility,
-                                          Intersection *isect)
+                                          ccl_private Intersection *isect)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT);
-
 #ifdef __KERNEL_OPTIX__
   uint p0 = 0;
   uint p1 = 0;
@@ -165,6 +173,17 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
   uint p3 = 0;
   uint p4 = visibility;
   uint p5 = PRIMITIVE_NONE;
+  uint p6 = ((uint64_t)ray) & 0xFFFFFFFF;
+  uint p7 = (((uint64_t)ray) >> 32) & 0xFFFFFFFF;
+
+  uint ray_mask = visibility & 0xFF;
+  uint ray_flags = OPTIX_RAY_FLAG_ENFORCE_ANYHIT;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+  }
+  else if (visibility & PATH_RAY_SHADOW_OPAQUE) {
+    ray_flags |= OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT;
+  }
 
   optixTrace(scene_intersect_valid(ray) ? kernel_data.bvh.scene : 0,
              ray->P,
@@ -172,9 +191,9 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
              0.0f,
              ray->t,
              ray->time,
-             0xF,
-             OPTIX_RAY_FLAG_NONE,
-             0,  // SBT offset for PG_HITD
+             ray_mask,
+             ray_flags,
+             0, /* SBT offset for PG_HITD */
              0,
              0,
              p0,
@@ -182,7 +201,9 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
              p2,
              p3,
              p4,
-             p5);
+             p5,
+             p6,
+             p7);
 
   isect->t = __uint_as_float(p0);
   isect->u = __uint_as_float(p1);
@@ -192,7 +213,96 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
   isect->type = p5;
 
   return p5 != PRIMITIVE_NONE;
-#else /* __KERNEL_OPTIX__ */
+#elif defined(__METALRT__)
+
+  if (!scene_intersect_valid(ray)) {
+    isect->t = ray->t;
+    isect->type = PRIMITIVE_NONE;
+    return false;
+  }
+
+#  if defined(__KERNEL_DEBUG__)
+  if (is_null_instance_acceleration_structure(metal_ancillaries->accel_struct)) {
+    isect->t = ray->t;
+    isect->type = PRIMITIVE_NONE;
+    kernel_assert(!"Invalid metal_ancillaries->accel_struct pointer");
+    return false;
+  }
+
+  if (is_null_intersection_function_table(metal_ancillaries->ift_default)) {
+    isect->t = ray->t;
+    isect->type = PRIMITIVE_NONE;
+    kernel_assert(!"Invalid ift_default");
+    return false;
+  }
+#  endif
+
+  metal::raytracing::ray r(ray->P, ray->D, 0.0f, ray->t);
+  metalrt_intersector_type metalrt_intersect;
+
+  if (!kernel_data.bvh.have_curves) {
+    metalrt_intersect.assume_geometry_type(metal::raytracing::geometry_type::triangle);
+  }
+
+  MetalRTIntersectionPayload payload;
+  payload.self = ray->self;
+  payload.u = 0.0f;
+  payload.v = 0.0f;
+  payload.visibility = visibility;
+
+  typename metalrt_intersector_type::result_type intersection;
+
+  uint ray_mask = visibility & 0xFF;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+    /* No further intersector setup required: Default MetalRT behavior is any-hit. */
+  }
+  else if (visibility & PATH_RAY_SHADOW_OPAQUE) {
+    /* No further intersector setup required: Shadow ray early termination is controlled by the
+     * intersection handler */
+  }
+
+#  if defined(__METALRT_MOTION__)
+  payload.time = ray->time;
+  intersection = metalrt_intersect.intersect(r,
+                                             metal_ancillaries->accel_struct,
+                                             ray_mask,
+                                             ray->time,
+                                             metal_ancillaries->ift_default,
+                                             payload);
+#  else
+  intersection = metalrt_intersect.intersect(
+      r, metal_ancillaries->accel_struct, ray_mask, metal_ancillaries->ift_default, payload);
+#  endif
+
+  if (intersection.type == intersection_type::none) {
+    isect->t = ray->t;
+    isect->type = PRIMITIVE_NONE;
+
+    return false;
+  }
+
+  isect->t = intersection.distance;
+
+  isect->prim = payload.prim;
+  isect->type = payload.type;
+  isect->object = intersection.user_instance_id;
+
+  isect->t = intersection.distance;
+  if (intersection.type == intersection_type::triangle) {
+    isect->u = 1.0f - intersection.triangle_barycentric_coord.y -
+               intersection.triangle_barycentric_coord.x;
+    isect->v = intersection.triangle_barycentric_coord.x;
+  }
+  else {
+    isect->u = payload.u;
+    isect->v = payload.v;
+  }
+
+  return isect->type != PRIMITIVE_NONE;
+
+#else
+
   if (!scene_intersect_valid(ray)) {
     return false;
   }
@@ -203,6 +313,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
     CCLIntersectContext ctx(kg, CCLIntersectContext::RAY_REGULAR);
     IntersectContext rtc_ctx(&ctx);
     RTCRayHit ray_hit;
+    ctx.ray = ray;
     kernel_embree_setup_rayhit(*ray, ray_hit, visibility);
     rtcIntersect1(kernel_data.bvh.scene, &rtc_ctx.context, &ray_hit);
     if (ray_hit.hit.geomID != RTC_INVALID_GEOMETRY_ID &&
@@ -237,26 +348,27 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 }
 
 #ifdef __BVH_LOCAL__
-ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
-                                                const Ray *ray,
-                                                LocalIntersection *local_isect,
+ccl_device_intersect bool scene_intersect_local(KernelGlobals kg,
+                                                ccl_private const Ray *ray,
+                                                ccl_private LocalIntersection *local_isect,
                                                 int local_object,
-                                                uint *lcg_state,
+                                                ccl_private uint *lcg_state,
                                                 int max_hits)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_LOCAL);
-
 #  ifdef __KERNEL_OPTIX__
-  uint p0 = ((uint64_t)lcg_state) & 0xFFFFFFFF;
-  uint p1 = (((uint64_t)lcg_state) >> 32) & 0xFFFFFFFF;
-  uint p2 = ((uint64_t)local_isect) & 0xFFFFFFFF;
-  uint p3 = (((uint64_t)local_isect) >> 32) & 0xFFFFFFFF;
+  uint p0 = pointer_pack_to_uint_0(lcg_state);
+  uint p1 = pointer_pack_to_uint_1(lcg_state);
+  uint p2 = pointer_pack_to_uint_0(local_isect);
+  uint p3 = pointer_pack_to_uint_1(local_isect);
   uint p4 = local_object;
-  // Is set to zero on miss or if ray is aborted, so can be used as return value
+  uint p6 = ((uint64_t)ray) & 0xFFFFFFFF;
+  uint p7 = (((uint64_t)ray) >> 32) & 0xFFFFFFFF;
+
+  /* Is set to zero on miss or if ray is aborted, so can be used as return value. */
   uint p5 = max_hits;
 
   if (local_isect) {
-    local_isect->num_hits = 0;  // Initialize hit count to zero
+    local_isect->num_hits = 0; /* Initialize hit count to zero. */
   }
   optixTrace(scene_intersect_valid(ray) ? kernel_data.bvh.scene : 0,
              ray->P,
@@ -264,11 +376,10 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
              0.0f,
              ray->t,
              ray->time,
-             // Skip curves
-             0x3,
-             // Need to always call into __anyhit__kernel_optix_local_hit
+             0xFF,
+             /* Need to always call into __anyhit__kernel_optix_local_hit. */
              OPTIX_RAY_FLAG_ENFORCE_ANYHIT,
-             2,  // SBT offset for PG_HITL
+             2, /* SBT offset for PG_HITL */
              0,
              0,
              p0,
@@ -276,10 +387,75 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
              p2,
              p3,
              p4,
-             p5);
+             p5,
+             p6,
+             p7);
 
   return p5;
-#  else /* __KERNEL_OPTIX__ */
+#  elif defined(__METALRT__)
+  if (!scene_intersect_valid(ray)) {
+    if (local_isect) {
+      local_isect->num_hits = 0;
+    }
+    return false;
+  }
+
+#    if defined(__KERNEL_DEBUG__)
+  if (is_null_instance_acceleration_structure(metal_ancillaries->accel_struct)) {
+    if (local_isect) {
+      local_isect->num_hits = 0;
+    }
+    kernel_assert(!"Invalid metal_ancillaries->accel_struct pointer");
+    return false;
+  }
+
+  if (is_null_intersection_function_table(metal_ancillaries->ift_local)) {
+    if (local_isect) {
+      local_isect->num_hits = 0;
+    }
+    kernel_assert(!"Invalid ift_local");
+    return false;
+  }
+#    endif
+
+  metal::raytracing::ray r(ray->P, ray->D, 0.0f, ray->t);
+  metalrt_intersector_type metalrt_intersect;
+
+  metalrt_intersect.force_opacity(metal::raytracing::forced_opacity::non_opaque);
+  if (!kernel_data.bvh.have_curves) {
+    metalrt_intersect.assume_geometry_type(metal::raytracing::geometry_type::triangle);
+  }
+
+  MetalRTIntersectionLocalPayload payload;
+  payload.self = ray->self;
+  payload.local_object = local_object;
+  payload.max_hits = max_hits;
+  payload.local_isect.num_hits = 0;
+  if (lcg_state) {
+    payload.has_lcg_state = true;
+    payload.lcg_state = *lcg_state;
+  }
+  payload.result = false;
+
+  typename metalrt_intersector_type::result_type intersection;
+
+#    if defined(__METALRT_MOTION__)
+  intersection = metalrt_intersect.intersect(
+      r, metal_ancillaries->accel_struct, 0xFF, ray->time, metal_ancillaries->ift_local, payload);
+#    else
+  intersection = metalrt_intersect.intersect(
+      r, metal_ancillaries->accel_struct, 0xFF, metal_ancillaries->ift_local, payload);
+#    endif
+
+  if (lcg_state) {
+    *lcg_state = payload.lcg_state;
+  }
+  *local_isect = payload.local_isect;
+
+  return payload.result;
+
+#  else
+
   if (!scene_intersect_valid(ray)) {
     if (local_isect) {
       local_isect->num_hits = 0;
@@ -295,6 +471,7 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
         kg, has_bvh ? CCLIntersectContext::RAY_SSS : CCLIntersectContext::RAY_LOCAL);
     ctx.lcg_state = lcg_state;
     ctx.max_hits = max_hits;
+    ctx.ray = ray;
     ctx.local_isect = local_isect;
     if (local_isect) {
       local_isect->num_hits = 0;
@@ -312,8 +489,8 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
         float3 dir = ray->D;
         float3 idir = ray->D;
         Transform ob_itfm;
-        rtc_ray.tfar = bvh_instance_motion_push(
-            kg, local_object, ray, &P, &dir, &idir, ray->t, &ob_itfm);
+        rtc_ray.tfar = ray->t *
+                       bvh_instance_motion_push(kg, local_object, ray, &P, &dir, &idir, &ob_itfm);
         /* bvh_instance_motion_push() returns the inverse transform but
          * it's not needed here. */
         (void)ob_itfm;
@@ -352,117 +529,39 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
 #endif
 
 #ifdef __SHADOW_RECORD_ALL__
-ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
-                                                     const Ray *ray,
-                                                     Intersection *isect,
+ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals kg,
+                                                     IntegratorShadowState state,
+                                                     ccl_private const Ray *ray,
                                                      uint visibility,
                                                      uint max_hits,
-                                                     uint *num_hits)
+                                                     ccl_private uint *num_recorded_hits,
+                                                     ccl_private float *throughput)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_SHADOW_ALL);
-
 #  ifdef __KERNEL_OPTIX__
-  uint p0 = ((uint64_t)isect) & 0xFFFFFFFF;
-  uint p1 = (((uint64_t)isect) >> 32) & 0xFFFFFFFF;
+  uint p0 = state;
+  uint p1 = __float_as_uint(1.0f); /* Throughput. */
+  uint p2 = 0;                     /* Number of hits. */
   uint p3 = max_hits;
   uint p4 = visibility;
   uint p5 = false;
+  uint p6 = ((uint64_t)ray) & 0xFFFFFFFF;
+  uint p7 = (((uint64_t)ray) >> 32) & 0xFFFFFFFF;
 
-  *num_hits = 0;  // Initialize hit count to zero
+  uint ray_mask = visibility & 0xFF;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+  }
+
   optixTrace(scene_intersect_valid(ray) ? kernel_data.bvh.scene : 0,
              ray->P,
              ray->D,
              0.0f,
              ray->t,
              ray->time,
-             0xF,
-             // Need to always call into __anyhit__kernel_optix_shadow_all_hit
+             ray_mask,
+             /* Need to always call into __anyhit__kernel_optix_shadow_all_hit. */
              OPTIX_RAY_FLAG_ENFORCE_ANYHIT,
-             1,  // SBT offset for PG_HITS
-             0,
-             0,
-             p0,
-             p1,
-             *num_hits,
-             p3,
-             p4,
-             p5);
-
-  return p5;
-#  else /* __KERNEL_OPTIX__ */
-  if (!scene_intersect_valid(ray)) {
-    *num_hits = 0;
-    return false;
-  }
-
-#    ifdef __EMBREE__
-  if (kernel_data.bvh.scene) {
-    CCLIntersectContext ctx(kg, CCLIntersectContext::RAY_SHADOW_ALL);
-    ctx.isect_s = isect;
-    ctx.max_hits = max_hits;
-    ctx.num_hits = 0;
-    IntersectContext rtc_ctx(&ctx);
-    RTCRay rtc_ray;
-    kernel_embree_setup_ray(*ray, rtc_ray, visibility);
-    rtcOccluded1(kernel_data.bvh.scene, &rtc_ctx.context, &rtc_ray);
-
-    if (ctx.num_hits > max_hits) {
-      return true;
-    }
-    *num_hits = ctx.num_hits;
-    return rtc_ray.tfar == -INFINITY;
-  }
-#    endif /* __EMBREE__ */
-
-#    ifdef __OBJECT_MOTION__
-  if (kernel_data.bvh.have_motion) {
-#      ifdef __HAIR__
-    if (kernel_data.bvh.have_curves) {
-      return bvh_intersect_shadow_all_hair_motion(kg, ray, isect, visibility, max_hits, num_hits);
-    }
-#      endif /* __HAIR__ */
-
-    return bvh_intersect_shadow_all_motion(kg, ray, isect, visibility, max_hits, num_hits);
-  }
-#    endif   /* __OBJECT_MOTION__ */
-
-#    ifdef __HAIR__
-  if (kernel_data.bvh.have_curves) {
-    return bvh_intersect_shadow_all_hair(kg, ray, isect, visibility, max_hits, num_hits);
-  }
-#    endif /* __HAIR__ */
-
-  return bvh_intersect_shadow_all(kg, ray, isect, visibility, max_hits, num_hits);
-#  endif   /* __KERNEL_OPTIX__ */
-}
-#endif /* __SHADOW_RECORD_ALL__ */
-
-#ifdef __VOLUME__
-ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
-                                                 const Ray *ray,
-                                                 Intersection *isect,
-                                                 const uint visibility)
-{
-  PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME);
-
-#  ifdef __KERNEL_OPTIX__
-  uint p0 = 0;
-  uint p1 = 0;
-  uint p2 = 0;
-  uint p3 = 0;
-  uint p4 = visibility;
-  uint p5 = PRIMITIVE_NONE;
-
-  optixTrace(scene_intersect_valid(ray) ? kernel_data.bvh.scene : 0,
-             ray->P,
-             ray->D,
-             0.0f,
-             ray->t,
-             ray->time,
-             // Skip everything but volumes
-             0x2,
-             OPTIX_RAY_FLAG_NONE,
-             0,  // SBT offset for PG_HITD
+             1, /* SBT offset for PG_HITS */
              0,
              0,
              p0,
@@ -470,7 +569,168 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
              p2,
              p3,
              p4,
-             p5);
+             p5,
+             p6,
+             p7);
+
+  *num_recorded_hits = uint16_unpack_from_uint_0(p2);
+  *throughput = __uint_as_float(p1);
+
+  return p5;
+#  elif defined(__METALRT__)
+
+  if (!scene_intersect_valid(ray)) {
+    return false;
+  }
+
+#    if defined(__KERNEL_DEBUG__)
+  if (is_null_instance_acceleration_structure(metal_ancillaries->accel_struct)) {
+    kernel_assert(!"Invalid metal_ancillaries->accel_struct pointer");
+    return false;
+  }
+
+  if (is_null_intersection_function_table(metal_ancillaries->ift_shadow)) {
+    kernel_assert(!"Invalid ift_shadow");
+    return false;
+  }
+#    endif
+
+  metal::raytracing::ray r(ray->P, ray->D, 0.0f, ray->t);
+  metalrt_intersector_type metalrt_intersect;
+
+  metalrt_intersect.force_opacity(metal::raytracing::forced_opacity::non_opaque);
+  if (!kernel_data.bvh.have_curves) {
+    metalrt_intersect.assume_geometry_type(metal::raytracing::geometry_type::triangle);
+  }
+
+  MetalRTIntersectionShadowPayload payload;
+  payload.self = ray->self;
+  payload.visibility = visibility;
+  payload.max_hits = max_hits;
+  payload.num_hits = 0;
+  payload.num_recorded_hits = 0;
+  payload.throughput = 1.0f;
+  payload.result = false;
+  payload.state = state;
+
+  uint ray_mask = visibility & 0xFF;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+  }
+
+  typename metalrt_intersector_type::result_type intersection;
+
+#    if defined(__METALRT_MOTION__)
+  payload.time = ray->time;
+  intersection = metalrt_intersect.intersect(r,
+                                             metal_ancillaries->accel_struct,
+                                             ray_mask,
+                                             ray->time,
+                                             metal_ancillaries->ift_shadow,
+                                             payload);
+#    else
+  intersection = metalrt_intersect.intersect(
+      r, metal_ancillaries->accel_struct, ray_mask, metal_ancillaries->ift_shadow, payload);
+#    endif
+
+  *num_recorded_hits = payload.num_recorded_hits;
+  *throughput = payload.throughput;
+
+  return payload.result;
+
+#  else
+  if (!scene_intersect_valid(ray)) {
+    *num_recorded_hits = 0;
+    *throughput = 1.0f;
+    return false;
+  }
+
+#    ifdef __EMBREE__
+  if (kernel_data.bvh.scene) {
+    CCLIntersectContext ctx(kg, CCLIntersectContext::RAY_SHADOW_ALL);
+    Intersection *isect_array = (Intersection *)state->shadow_isect;
+    ctx.isect_s = isect_array;
+    ctx.max_hits = max_hits;
+    ctx.ray = ray;
+    IntersectContext rtc_ctx(&ctx);
+    RTCRay rtc_ray;
+    kernel_embree_setup_ray(*ray, rtc_ray, visibility);
+    rtcOccluded1(kernel_data.bvh.scene, &rtc_ctx.context, &rtc_ray);
+
+    *num_recorded_hits = ctx.num_recorded_hits;
+    *throughput = ctx.throughput;
+    return ctx.opaque_hit;
+  }
+#    endif /* __EMBREE__ */
+
+#    ifdef __OBJECT_MOTION__
+  if (kernel_data.bvh.have_motion) {
+#      ifdef __HAIR__
+    if (kernel_data.bvh.have_curves) {
+      return bvh_intersect_shadow_all_hair_motion(
+          kg, ray, state, visibility, max_hits, num_recorded_hits, throughput);
+    }
+#      endif /* __HAIR__ */
+
+    return bvh_intersect_shadow_all_motion(
+        kg, ray, state, visibility, max_hits, num_recorded_hits, throughput);
+  }
+#    endif   /* __OBJECT_MOTION__ */
+
+#    ifdef __HAIR__
+  if (kernel_data.bvh.have_curves) {
+    return bvh_intersect_shadow_all_hair(
+        kg, ray, state, visibility, max_hits, num_recorded_hits, throughput);
+  }
+#    endif /* __HAIR__ */
+
+  return bvh_intersect_shadow_all(
+      kg, ray, state, visibility, max_hits, num_recorded_hits, throughput);
+#  endif   /* __KERNEL_OPTIX__ */
+}
+#endif /* __SHADOW_RECORD_ALL__ */
+
+#ifdef __VOLUME__
+ccl_device_intersect bool scene_intersect_volume(KernelGlobals kg,
+                                                 ccl_private const Ray *ray,
+                                                 ccl_private Intersection *isect,
+                                                 const uint visibility)
+{
+#  ifdef __KERNEL_OPTIX__
+  uint p0 = 0;
+  uint p1 = 0;
+  uint p2 = 0;
+  uint p3 = 0;
+  uint p4 = visibility;
+  uint p5 = PRIMITIVE_NONE;
+  uint p6 = ((uint64_t)ray) & 0xFFFFFFFF;
+  uint p7 = (((uint64_t)ray) >> 32) & 0xFFFFFFFF;
+
+  uint ray_mask = visibility & 0xFF;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+  }
+
+  optixTrace(scene_intersect_valid(ray) ? kernel_data.bvh.scene : 0,
+             ray->P,
+             ray->D,
+             0.0f,
+             ray->t,
+             ray->time,
+             ray_mask,
+             /* Need to always call into __anyhit__kernel_optix_volume_test. */
+             OPTIX_RAY_FLAG_ENFORCE_ANYHIT,
+             3, /* SBT offset for PG_HITV */
+             0,
+             0,
+             p0,
+             p1,
+             p2,
+             p3,
+             p4,
+             p5,
+             p6,
+             p7);
 
   isect->t = __uint_as_float(p0);
   isect->u = __uint_as_float(p1);
@@ -480,7 +740,77 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
   isect->type = p5;
 
   return p5 != PRIMITIVE_NONE;
-#  else /* __KERNEL_OPTIX__ */
+#  elif defined(__METALRT__)
+
+  if (!scene_intersect_valid(ray)) {
+    return false;
+  }
+#    if defined(__KERNEL_DEBUG__)
+  if (is_null_instance_acceleration_structure(metal_ancillaries->accel_struct)) {
+    kernel_assert(!"Invalid metal_ancillaries->accel_struct pointer");
+    return false;
+  }
+
+  if (is_null_intersection_function_table(metal_ancillaries->ift_default)) {
+    kernel_assert(!"Invalid ift_default");
+    return false;
+  }
+#    endif
+
+  metal::raytracing::ray r(ray->P, ray->D, 0.0f, ray->t);
+  metalrt_intersector_type metalrt_intersect;
+
+  metalrt_intersect.force_opacity(metal::raytracing::forced_opacity::non_opaque);
+  if (!kernel_data.bvh.have_curves) {
+    metalrt_intersect.assume_geometry_type(metal::raytracing::geometry_type::triangle);
+  }
+
+  MetalRTIntersectionPayload payload;
+  payload.self = ray->self;
+  payload.visibility = visibility;
+
+  typename metalrt_intersector_type::result_type intersection;
+
+  uint ray_mask = visibility & 0xFF;
+  if (0 == ray_mask && (visibility & ~0xFF) != 0) {
+    ray_mask = 0xFF;
+  }
+
+#    if defined(__METALRT_MOTION__)
+  payload.time = ray->time;
+  intersection = metalrt_intersect.intersect(r,
+                                             metal_ancillaries->accel_struct,
+                                             ray_mask,
+                                             ray->time,
+                                             metal_ancillaries->ift_default,
+                                             payload);
+#    else
+  intersection = metalrt_intersect.intersect(
+      r, metal_ancillaries->accel_struct, ray_mask, metal_ancillaries->ift_default, payload);
+#    endif
+
+  if (intersection.type == intersection_type::none) {
+    return false;
+  }
+
+  isect->prim = payload.prim;
+  isect->type = payload.type;
+  isect->object = intersection.user_instance_id;
+
+  isect->t = intersection.distance;
+  if (intersection.type == intersection_type::triangle) {
+    isect->u = 1.0f - intersection.triangle_barycentric_coord.y -
+               intersection.triangle_barycentric_coord.x;
+    isect->v = intersection.triangle_barycentric_coord.x;
+  }
+  else {
+    isect->u = payload.u;
+    isect->v = payload.v;
+  }
+
+  return isect->type != PRIMITIVE_NONE;
+
+#  else
   if (!scene_intersect_valid(ray)) {
     return false;
   }
@@ -497,14 +827,12 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
 #endif /* __VOLUME__ */
 
 #ifdef __VOLUME_RECORD_ALL__
-ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
-                                                     const Ray *ray,
-                                                     Intersection *isect,
+ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals kg,
+                                                     ccl_private const Ray *ray,
+                                                     ccl_private Intersection *isect,
                                                      const uint max_hits,
                                                      const uint visibility)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME_ALL);
-
   if (!scene_intersect_valid(ray)) {
     return false;
   }
@@ -515,6 +843,7 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
     ctx.isect_s = isect;
     ctx.max_hits = max_hits;
     ctx.num_hits = 0;
+    ctx.ray = ray;
     IntersectContext rtc_ctx(&ctx);
     RTCRay rtc_ray;
     kernel_embree_setup_ray(*ray, rtc_ray, visibility);
@@ -532,98 +861,5 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
   return bvh_intersect_volume_all(kg, ray, isect, max_hits, visibility);
 }
 #endif /* __VOLUME_RECORD_ALL__ */
-
-/* Ray offset to avoid self intersection.
- *
- * This function should be used to compute a modified ray start position for
- * rays leaving from a surface. */
-
-ccl_device_inline float3 ray_offset(float3 P, float3 Ng)
-{
-#ifdef __INTERSECTION_REFINE__
-  const float epsilon_f = 1e-5f;
-  /* ideally this should match epsilon_f, but instancing and motion blur
-   * precision makes it problematic */
-  const float epsilon_test = 1.0f;
-  const int epsilon_i = 32;
-
-  float3 res;
-
-  /* x component */
-  if (fabsf(P.x) < epsilon_test) {
-    res.x = P.x + Ng.x * epsilon_f;
-  }
-  else {
-    uint ix = __float_as_uint(P.x);
-    ix += ((ix ^ __float_as_uint(Ng.x)) >> 31) ? -epsilon_i : epsilon_i;
-    res.x = __uint_as_float(ix);
-  }
-
-  /* y component */
-  if (fabsf(P.y) < epsilon_test) {
-    res.y = P.y + Ng.y * epsilon_f;
-  }
-  else {
-    uint iy = __float_as_uint(P.y);
-    iy += ((iy ^ __float_as_uint(Ng.y)) >> 31) ? -epsilon_i : epsilon_i;
-    res.y = __uint_as_float(iy);
-  }
-
-  /* z component */
-  if (fabsf(P.z) < epsilon_test) {
-    res.z = P.z + Ng.z * epsilon_f;
-  }
-  else {
-    uint iz = __float_as_uint(P.z);
-    iz += ((iz ^ __float_as_uint(Ng.z)) >> 31) ? -epsilon_i : epsilon_i;
-    res.z = __uint_as_float(iz);
-  }
-
-  return res;
-#else
-  const float epsilon_f = 1e-4f;
-  return P + epsilon_f * Ng;
-#endif
-}
-
-#if defined(__VOLUME_RECORD_ALL__) || (defined(__SHADOW_RECORD_ALL__) && defined(__KERNEL_CPU__))
-/* ToDo: Move to another file? */
-ccl_device int intersections_compare(const void *a, const void *b)
-{
-  const Intersection *isect_a = (const Intersection *)a;
-  const Intersection *isect_b = (const Intersection *)b;
-
-  if (isect_a->t < isect_b->t)
-    return -1;
-  else if (isect_a->t > isect_b->t)
-    return 1;
-  else
-    return 0;
-}
-#endif
-
-#if defined(__SHADOW_RECORD_ALL__)
-ccl_device_inline void sort_intersections(Intersection *hits, uint num_hits)
-{
-#  ifdef __KERNEL_GPU__
-  /* Use bubble sort which has more friendly memory pattern on GPU. */
-  bool swapped;
-  do {
-    swapped = false;
-    for (int j = 0; j < num_hits - 1; ++j) {
-      if (hits[j].t > hits[j + 1].t) {
-        struct Intersection tmp = hits[j];
-        hits[j] = hits[j + 1];
-        hits[j + 1] = tmp;
-        swapped = true;
-      }
-    }
-    --num_hits;
-  } while (swapped);
-#  else
-  qsort(hits, num_hits, sizeof(Intersection), intersections_compare);
-#  endif
-}
-#endif /* __SHADOW_RECORD_ALL__ | __VOLUME_RECORD_ALL__ */
 
 CCL_NAMESPACE_END

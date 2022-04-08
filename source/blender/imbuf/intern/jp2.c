@@ -41,15 +41,15 @@ static const char J2K_HEAD[] = {0xFF, 0x4F, 0xFF, 0x51, 0x00};
 /* We only need this because of how the presets are set */
 /* this typedef is copied from 'openjpeg-1.5.0/applications/codec/image_to_j2k.c' */
 typedef struct img_folder {
-  /** The directory path of the folder containing input images*/
+  /** The directory path of the folder containing input images. */
   char *imgdirpath;
-  /** Output format*/
+  /** Output format. */
   char *out_format;
-  /** Enable option*/
+  /** Enable option. */
   char set_imgdir;
-  /** Enable Cod Format for output*/
+  /** Enable Cod Format for output. */
   char set_out_format;
-  /** User specified rate stored in case of cinema option*/
+  /** User specified rate stored in case of cinema option. */
   float *rates;
 } img_fol_t;
 
@@ -424,13 +424,13 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
   h = image->comps[0].h;
 
   switch (image->numcomps) {
-    case 1: /* Grayscale */
-    case 3: /* Color */
+    case 1: /* Gray-scale. */
+    case 3: /* Color. */
       planes = 24;
       use_alpha = false;
       break;
-    default:       /* 2 or 4 - Grayscale or Color + alpha */
-      planes = 32; /* grayscale + alpha */
+    default:       /* 2 or 4 - Gray-scale or Color + alpha. */
+      planes = 32; /* Gray-scale + alpha. */
       use_alpha = true;
       break;
   }
@@ -529,7 +529,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
       r = image->comps[0].data;
       a = (use_alpha) ? image->comps[1].data : NULL;
 
-      /* grayscale */
+      /* Gray-scale. */
       if (use_alpha) {
         a = image->comps[3].data;
         PIXEL_LOOPER_BEGIN (rect_uchar) {
@@ -647,10 +647,10 @@ BLI_INLINE int DOWNSAMPLE_FLOAT_TO_16BIT(const float _val)
 /* ****************************** COPIED FROM image_to_j2k.c */
 
 /* ----------------------------------------------------------------------- */
-#define CINEMA_24_CS 1302083 /*Codestream length for 24fps*/
-#define CINEMA_48_CS 651041  /*Codestream length for 48fps*/
-#define COMP_24_CS 1041666   /*Maximum size per color component for 2K & 4K @ 24fps*/
-#define COMP_48_CS 520833    /*Maximum size per color component for 2K @ 48fps*/
+#define CINEMA_24_CS 1302083 /* Codestream length for 24fps. */
+#define CINEMA_48_CS 651041  /* Codestream length for 48fps. */
+#define COMP_24_CS 1041666   /* Maximum size per color component for 2K & 4K @ 24fps. */
+#define COMP_48_CS 520833    /* Maximum size per color component for 2K @ 48fps. */
 
 static int init_4K_poc(opj_poc_t *POC, int numres)
 {
@@ -677,22 +677,22 @@ static void cinema_parameters(opj_cparameters_t *parameters)
   parameters->cp_tdx = 1;
   parameters->cp_tdy = 1;
 
-  /*Tile part*/
+  /* Tile part. */
   parameters->tp_flag = 'C';
   parameters->tp_on = 1;
 
-  /*Tile and Image shall be at (0, 0)*/
+  /* Tile and Image shall be at (0, 0). */
   parameters->cp_tx0 = 0;
   parameters->cp_ty0 = 0;
   parameters->image_offset_x0 = 0;
   parameters->image_offset_y0 = 0;
 
-  /*Codeblock size = 32 * 32*/
+  /* Codeblock size = 32 * 32. */
   parameters->cblockw_init = 32;
   parameters->cblockh_init = 32;
   parameters->csty |= 0x01;
 
-  /*The progression order shall be CPRL*/
+  /* The progression order shall be CPRL. */
   parameters->prog_order = OPJ_CPRL;
 
   /* No ROI */
@@ -848,7 +848,7 @@ static opj_image_t *ibuftoimage(ImBuf *ibuf, opj_cparameters_t *parameters)
     chanel_colormanage_cb = channel_colormanage_noop;
   }
   else {
-    /* standard linear-to-srgb conversion if float buffer wasn't managed */
+    /* standard linear-to-SRGB conversion if float buffer wasn't managed */
     chanel_colormanage_cb = linearrgb_to_srgb;
   }
 
@@ -891,8 +891,8 @@ static opj_image_t *ibuftoimage(ImBuf *ibuf, opj_cparameters_t *parameters)
       prec = 8;
     }
 
-    /* 32bit images == alpha channel */
-    /* grayscale not supported yet */
+    /* 32bit images == alpha channel. */
+    /* Gray-scale not supported yet. */
     numcomps = (ibuf->planes == 32) ? 4 : 3;
   }
 
@@ -1118,7 +1118,7 @@ static opj_image_t *ibuftoimage(ImBuf *ibuf, opj_cparameters_t *parameters)
     }
   }
   else {
-    /* just use rect*/
+    /* Just use rect. */
     switch (prec) {
       case 8:
         if (numcomps == 4) {
@@ -1223,7 +1223,7 @@ bool imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int UNUSED(fl
 
   /* compression ratio */
   /* invert range, from 10-100, 100-1
-   * where jpeg see's 1 and highest quality (lossless) and 100 is very low quality*/
+   * Where jpeg see's 1 and highest quality (lossless) and 100 is very low quality. */
   parameters.tcp_rates[0] = ((100 - quality) / 90.0f * 99.0f) + 1;
 
   parameters.tcp_numlayers = 1; /* only one resolution */

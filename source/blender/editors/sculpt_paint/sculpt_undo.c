@@ -47,6 +47,7 @@
 #include "BKE_key.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_multires.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
@@ -547,6 +548,8 @@ static void sculpt_undo_geometry_restore_data(SculptUndoNodeGeometry *geometry, 
       &geometry->pdata, &mesh->pdata, CD_MASK_MESH.pmask, CD_DUPLICATE, geometry->totpoly);
 
   BKE_mesh_update_customdata_pointers(mesh, false);
+
+  BKE_mesh_runtime_clear_cache(mesh);
 }
 
 static void sculpt_undo_geometry_free_data(SculptUndoNodeGeometry *geometry)
@@ -766,7 +769,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
       case SCULPT_UNDO_DYNTOPO_BEGIN:
       case SCULPT_UNDO_DYNTOPO_END:
       case SCULPT_UNDO_DYNTOPO_SYMMETRIZE:
-        BLI_assert(!"Dynamic topology should've already been handled");
+        BLI_assert_msg(0, "Dynamic topology should've already been handled");
         break;
     }
   }
@@ -1065,7 +1068,7 @@ static SculptUndoNode *sculpt_undo_alloc_node(Object *ob, PBVHNode *node, Sculpt
     case SCULPT_UNDO_DYNTOPO_BEGIN:
     case SCULPT_UNDO_DYNTOPO_END:
     case SCULPT_UNDO_DYNTOPO_SYMMETRIZE:
-      BLI_assert(!"Dynamic topology should've already been handled");
+      BLI_assert_msg(0, "Dynamic topology should've already been handled");
     case SCULPT_UNDO_GEOMETRY:
     case SCULPT_UNDO_FACE_SETS:
       break;
@@ -1107,10 +1110,10 @@ static void sculpt_undo_store_coords(Object *ob, SculptUndoNode *unode)
   BKE_pbvh_vertex_iter_begin (ss->pbvh, unode->node, vd, PBVH_ITER_ALL) {
     copy_v3_v3(unode->co[vd.i], vd.co);
     if (vd.no) {
-      copy_v3_v3_short(unode->no[vd.i], vd.no);
+      copy_v3_v3(unode->no[vd.i], vd.no);
     }
     else {
-      normal_float_to_short_v3(unode->no[vd.i], vd.fno);
+      copy_v3_v3(unode->no[vd.i], vd.fno);
     }
 
     if (ss->deform_modifiers_active) {
@@ -1189,9 +1192,7 @@ static SculptUndoNode *sculpt_undo_geometry_push(Object *object, SculptUndoType 
 static SculptUndoNode *sculpt_undo_face_sets_push(Object *ob, SculptUndoType type)
 {
   UndoSculpt *usculpt = sculpt_undo_get_nodes();
-  SculptUndoNode *unode = usculpt->nodes.first;
-
-  unode = MEM_callocN(sizeof(*unode), __func__);
+  SculptUndoNode *unode = MEM_callocN(sizeof(*unode), __func__);
 
   BLI_strncpy(unode->idname, ob->id.name, sizeof(unode->idname));
   unode->type = type;
@@ -1357,7 +1358,7 @@ SculptUndoNode *SCULPT_undo_push_node(Object *ob, PBVHNode *node, SculptUndoType
     case SCULPT_UNDO_DYNTOPO_BEGIN:
     case SCULPT_UNDO_DYNTOPO_END:
     case SCULPT_UNDO_DYNTOPO_SYMMETRIZE:
-      BLI_assert(!"Dynamic topology should've already been handled");
+      BLI_assert_msg(0, "Dynamic topology should've already been handled");
     case SCULPT_UNDO_GEOMETRY:
     case SCULPT_UNDO_FACE_SETS:
       break;
@@ -1434,7 +1435,7 @@ void SCULPT_undo_push_end_ex(const bool use_nested_undo)
 
 typedef struct SculptUndoStep {
   UndoStep step;
-  /* Note: will split out into list for multi-object-sculpt-mode. */
+  /* NOTE: will split out into list for multi-object-sculpt-mode. */
   UndoSculpt data;
 } SculptUndoStep;
 
@@ -1551,7 +1552,7 @@ static void sculpt_undosys_step_decode(
         ED_object_mode_generic_exit(bmain, depsgraph, scene, ob);
 
         /* Sculpt needs evaluated state.
-         * Note: needs to be done here, as #ED_object_mode_generic_exit will usually invalidate
+         * NOTE: needs to be done here, as #ED_object_mode_generic_exit will usually invalidate
          * (some) evaluated data. */
         BKE_scene_graph_evaluated_ensure(depsgraph, bmain);
 
@@ -1600,7 +1601,6 @@ void ED_sculpt_undo_geometry_end(struct Object *ob)
   SCULPT_undo_push_end();
 }
 
-/* Export for ED_undo_sys. */
 void ED_sculpt_undosys_type(UndoType *ut)
 {
   ut->name = "Sculpt";
@@ -1610,7 +1610,7 @@ void ED_sculpt_undosys_type(UndoType *ut)
   ut->step_decode = sculpt_undosys_step_decode;
   ut->step_free = sculpt_undosys_step_free;
 
-  ut->flags = 0;
+  ut->flags = UNDOTYPE_FLAG_DECODE_ACTIVE_STEP;
 
   ut->step_size = sizeof(SculptUndoStep);
 }

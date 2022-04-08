@@ -93,7 +93,6 @@ void imb_freemipmapImBuf(ImBuf *ibuf)
   ibuf->miptot = 0;
 }
 
-/* any free rect frees mipmaps to be sure, creation is in render on first request */
 void imb_freerectfloatImBuf(ImBuf *ibuf)
 {
   if (ibuf == NULL) {
@@ -111,7 +110,6 @@ void imb_freerectfloatImBuf(ImBuf *ibuf)
   ibuf->mall &= ~IB_rectfloat;
 }
 
-/* any free rect frees mipmaps to be sure, creation is in render on first request */
 void imb_freerectImBuf(ImBuf *ibuf)
 {
   if (ibuf == NULL) {
@@ -197,7 +195,6 @@ void IMB_freezbuffloatImBuf(ImBuf *ibuf)
   ibuf->mall &= ~IB_zbuffloat;
 }
 
-/** Free all pixel data (associated with image size). */
 void imb_freerectImbuf_all(ImBuf *ibuf)
 {
   imb_freerectImBuf(ibuf);
@@ -403,9 +400,10 @@ bool imb_addrectfloatImBuf(ImBuf *ibuf)
   return false;
 }
 
-/* question; why also add zbuf? */
 bool imb_addrectImBuf(ImBuf *ibuf)
 {
+  /* Question; why also add ZBUF (when `planes > 32`)? */
+
   if (ibuf == NULL) {
     return false;
   }
@@ -430,6 +428,38 @@ bool imb_addrectImBuf(ImBuf *ibuf)
   return false;
 }
 
+struct ImBuf *IMB_allocFromBufferOwn(
+    unsigned int *rect, float *rectf, unsigned int w, unsigned int h, unsigned int channels)
+{
+  ImBuf *ibuf = NULL;
+
+  if (!(rect || rectf)) {
+    return NULL;
+  }
+
+  ibuf = IMB_allocImBuf(w, h, 32, 0);
+
+  ibuf->channels = channels;
+
+  /* Avoid #MEM_dupallocN since the buffers might not be allocated using guarded-allocation. */
+  if (rectf) {
+    BLI_assert(MEM_allocN_len(rectf) == sizeof(float[4]) * w * h);
+    ibuf->rect_float = rectf;
+
+    ibuf->flags |= IB_rectfloat;
+    ibuf->mall |= IB_rectfloat;
+  }
+  if (rect) {
+    BLI_assert(MEM_allocN_len(rect) == sizeof(uchar[4]) * w * h);
+    ibuf->rect = rect;
+
+    ibuf->flags |= IB_rect;
+    ibuf->mall |= IB_rect;
+  }
+
+  return ibuf;
+}
+
 struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
                                   const float *rectf,
                                   unsigned int w,
@@ -445,13 +475,21 @@ struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
   ibuf = IMB_allocImBuf(w, h, 32, 0);
 
   ibuf->channels = channels;
+
+  /* Avoid #MEM_dupallocN since the buffers might not be allocated using guarded-allocation. */
   if (rectf) {
-    ibuf->rect_float = MEM_dupallocN(rectf);
+    const size_t size = sizeof(float[4]) * w * h;
+    ibuf->rect_float = MEM_mallocN(size, __func__);
+    memcpy(ibuf->rect_float, rectf, size);
+
     ibuf->flags |= IB_rectfloat;
     ibuf->mall |= IB_rectfloat;
   }
   if (rect) {
-    ibuf->rect = MEM_dupallocN(rect);
+    const size_t size = sizeof(uchar[4]) * w * h;
+    ibuf->rect = MEM_mallocN(size, __func__);
+    memcpy(ibuf->rect, rect, size);
+
     ibuf->flags |= IB_rect;
     ibuf->mall |= IB_rect;
   }
@@ -537,7 +575,6 @@ bool IMB_initImBuf(
   return true;
 }
 
-/* does no zbuffers? */
 ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 {
   ImBuf *ibuf2, tbuf;
@@ -624,6 +661,11 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
   *ibuf2 = tbuf;
 
   return ibuf2;
+}
+
+size_t IMB_get_rect_len(const ImBuf *ibuf)
+{
+  return (size_t)ibuf->x * (size_t)ibuf->y;
 }
 
 size_t IMB_get_size_in_memory(ImBuf *ibuf)

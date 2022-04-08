@@ -43,7 +43,9 @@ namespace blender::deg {
 /* *********** */
 /* Outer Nodes */
 
-/* Standard Component Methods ============================= */
+/* -------------------------------------------------------------------- */
+/** \name Standard Component Methods
+ * \{ */
 
 ComponentNode::OperationIDKey::OperationIDKey()
     : opcode(OperationCode::OPERATION), name(""), name_tag(-1)
@@ -86,11 +88,10 @@ ComponentNode::ComponentNode()
   operations_map = new Map<ComponentNode::OperationIDKey, OperationNode *>();
 }
 
-/* Initialize 'component' node - from pointer data given */
 void ComponentNode::init(const ID * /*id*/, const char * /*subdata*/)
 {
   /* hook up eval context? */
-  // XXX: maybe this needs a special API?
+  /* XXX: maybe this needs a special API? */
 }
 
 /* Free 'component' node */
@@ -142,7 +143,7 @@ OperationNode *ComponentNode::get_operation(OperationIDKey key) const
             "%s: find_operation(%s) failed\n",
             this->identifier().c_str(),
             key.identifier().c_str());
-    BLI_assert(!"Request for non-existing operation, should not happen");
+    BLI_assert_msg(0, "Request for non-existing operation, should not happen");
     return nullptr;
   }
   return node;
@@ -181,7 +182,7 @@ OperationNode *ComponentNode::add_operation(const DepsEvalOperationCb &op,
     OperationIDKey key(opcode, name, name_tag);
     operations_map->add(key, op_node);
 
-    /* set backlink */
+    /* Set back-link. */
     op_node->owner = this;
   }
   else {
@@ -190,7 +191,7 @@ OperationNode *ComponentNode::add_operation(const DepsEvalOperationCb &op,
             this->identifier().c_str(),
             op_node->identifier().c_str(),
             op_node);
-    BLI_assert(!"Should not happen!");
+    BLI_assert_msg(0, "Should not happen!");
   }
 
   /* attach extra data */
@@ -237,7 +238,7 @@ void ComponentNode::tag_update(Depsgraph *graph, eUpdateSource source)
   for (OperationNode *op_node : operations) {
     op_node->tag_update(graph, source);
   }
-  // It is possible that tag happens before finalization.
+  /* It is possible that tag happens before finalization. */
   if (operations_map != nullptr) {
     for (OperationNode *op_node : operations_map->values()) {
       op_node->tag_update(graph, source);
@@ -297,9 +298,12 @@ void ComponentNode::finalize_build(Depsgraph * /*graph*/)
   operations_map = nullptr;
 }
 
-/* Bone Component ========================================= */
+/** \} */
 
-/* Initialize 'bone component' node - from pointer data given */
+/* -------------------------------------------------------------------- */
+/** \name Bone Component
+ * \{ */
+
 void BoneComponentNode::init(const ID *id, const char *subdata)
 {
   /* generic component-node... */
@@ -315,7 +319,11 @@ void BoneComponentNode::init(const ID *id, const char *subdata)
   this->pchan = BKE_pose_channel_find_name(object->pose, subdata);
 }
 
-/* Register all components. =============================== */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Register All Components
+ * \{ */
 
 DEG_COMPONENT_NODE_DEFINE(Animation, ANIMATION, ID_RECALC_ANIMATION);
 /* TODO(sergey): Is this a correct tag? */
@@ -334,7 +342,6 @@ DEG_COMPONENT_NODE_DEFINE(Pose, EVAL_POSE, ID_RECALC_GEOMETRY);
 DEG_COMPONENT_NODE_DEFINE(Proxy, PROXY, ID_RECALC_GEOMETRY);
 DEG_COMPONENT_NODE_DEFINE(Sequencer, SEQUENCER, 0);
 DEG_COMPONENT_NODE_DEFINE(Shading, SHADING, ID_RECALC_SHADING);
-DEG_COMPONENT_NODE_DEFINE(ShadingParameters, SHADING_PARAMETERS, ID_RECALC_SHADING);
 DEG_COMPONENT_NODE_DEFINE(Transform, TRANSFORM, ID_RECALC_TRANSFORM);
 DEG_COMPONENT_NODE_DEFINE(ObjectFromLayer, OBJECT_FROM_LAYER, 0);
 DEG_COMPONENT_NODE_DEFINE(Dupli, DUPLI, 0);
@@ -342,9 +349,15 @@ DEG_COMPONENT_NODE_DEFINE(Synchronization, SYNCHRONIZATION, 0);
 DEG_COMPONENT_NODE_DEFINE(Audio, AUDIO, 0);
 DEG_COMPONENT_NODE_DEFINE(Armature, ARMATURE, 0);
 DEG_COMPONENT_NODE_DEFINE(GenericDatablock, GENERIC_DATABLOCK, 0);
+DEG_COMPONENT_NODE_DEFINE(Visibility, VISIBILITY, 0);
 DEG_COMPONENT_NODE_DEFINE(Simulation, SIMULATION, 0);
+DEG_COMPONENT_NODE_DEFINE(NTreeOutput, NTREE_OUTPUT, ID_RECALC_NTREE_OUTPUT);
 
-/* Node Types Register =================================== */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node Types Register
+ * \{ */
 
 void deg_register_component_depsnodes()
 {
@@ -364,7 +377,6 @@ void deg_register_component_depsnodes()
   register_node_typeinfo(&DNTI_EVAL_POSE);
   register_node_typeinfo(&DNTI_SEQUENCER);
   register_node_typeinfo(&DNTI_SHADING);
-  register_node_typeinfo(&DNTI_SHADING_PARAMETERS);
   register_node_typeinfo(&DNTI_TRANSFORM);
   register_node_typeinfo(&DNTI_OBJECT_FROM_LAYER);
   register_node_typeinfo(&DNTI_DUPLI);
@@ -372,7 +384,11 @@ void deg_register_component_depsnodes()
   register_node_typeinfo(&DNTI_AUDIO);
   register_node_typeinfo(&DNTI_ARMATURE);
   register_node_typeinfo(&DNTI_GENERIC_DATABLOCK);
+  register_node_typeinfo(&DNTI_VISIBILITY);
   register_node_typeinfo(&DNTI_SIMULATION);
+  register_node_typeinfo(&DNTI_NTREE_OUTPUT);
 }
+
+/** \} */
 
 }  // namespace blender::deg

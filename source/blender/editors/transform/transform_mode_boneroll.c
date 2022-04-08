@@ -36,8 +36,10 @@
 #include "BLT_translation.h"
 
 #include "transform.h"
-#include "transform_mode.h"
+#include "transform_convert.h"
 #include "transform_snap.h"
+
+#include "transform_mode.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Transform (EditBone Roll)
@@ -50,7 +52,7 @@ static void applyBoneRoll(TransInfo *t, const int UNUSED(mval[2]))
 
   float final;
 
-  final = t->values[0];
+  final = t->values[0] + t->values_modal_offset[0];
 
   transform_snap_increment(t, &final);
 
@@ -105,4 +107,5 @@ void initBoneRoll(TransInfo *t)
 
   t->flag |= T_NO_CONSTRAINT | T_NO_PROJECT;
 }
+
 /** \} */

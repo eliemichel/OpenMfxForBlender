@@ -33,6 +33,7 @@
 #include "BLI_listbase.h"
 
 #include "BKE_context.h"
+#include "BKE_customdata.h"
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
@@ -93,11 +94,17 @@ typedef struct BArrayCustomData {
 #endif
 
 typedef struct UndoMesh {
+  /**
+   * This undo-meshes in `um_arraystore.local_links`.
+   * Not to be confused with the next and previous undo steps.
+   */
+  struct UndoMesh *local_next, *local_prev;
+
   Mesh me;
   int selectmode;
 
   /** \note
-   * this isn't a prefect solution, if you edit keys and change shapes this works well
+   * This isn't a perfect solution, if you edit keys and change shapes this works well
    * (fixing T32442), but editing shape keys, going into object mode, removing or changing their
    * order, then go back into editmode and undo will give issues - where the old index will be
    * out of sync with the new object index.
@@ -128,7 +135,10 @@ static struct {
   struct BArrayStore_AtSize bs_stride;
   int users;
 
-  /* We could have the undo API pass in the previous state, for now store a local list */
+  /**
+   * A list of #UndoMesh items ordered from oldest to newest
+   * used to access previous undo data for a mesh.
+   */
   ListBase local_links;
 
 #  ifdef USE_ARRAY_STORE_THREAD
@@ -520,11 +530,63 @@ static void um_arraystore_free(UndoMesh *um)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name Array Store Utilities
+ * \{ */
+
+/**
+ * Create an array of #UndoMesh from `objects`.
+ *
+ * where each element in the resulting array is the most recently created
+ * undo-mesh for the object's mesh.
+ * When no undo-mesh can be found that array index is NULL.
+ *
+ * This is used for de-duplicating memory between undo steps,
+ * failure to find the undo step will store a full duplicate in memory.
+ * define `DEBUG_PRINT` to check memory is de-duplicating as expected.
+ */
+static UndoMesh **mesh_undostep_reference_elems_from_objects(Object **object, int object_len)
+{
+  /* Map: `Mesh.id.session_uuid` -> `UndoMesh`. */
+  GHash *uuid_map = BLI_ghash_ptr_new_ex(__func__, object_len);
+  UndoMesh **um_references = MEM_callocN(sizeof(UndoMesh *) * object_len, __func__);
+  for (int i = 0; i < object_len; i++) {
+    const Mesh *me = object[i]->data;
+    BLI_ghash_insert(uuid_map, POINTER_FROM_INT(me->id.session_uuid), &um_references[i]);
+  }
+  int uuid_map_len = object_len;
+
+  /* Loop backwards over all previous mesh undo data until either:
+   * - All elements have been found (where `um_references` we'll have every element set).
+   * - There are no undo steps left to look for. */
+  UndoMesh *um_iter = um_arraystore.local_links.last;
+  while (um_iter && (uuid_map_len != 0)) {
+    UndoMesh **um_p;
+    if ((um_p = BLI_ghash_popkey(uuid_map, POINTER_FROM_INT(um_iter->me.id.session_uuid), NULL))) {
+      *um_p = um_iter;
+      uuid_map_len--;
+    }
+    um_iter = um_iter->local_prev;
+  }
+  BLI_assert(uuid_map_len == BLI_ghash_len(uuid_map));
+  BLI_ghash_free(uuid_map, NULL, NULL);
+  if (uuid_map_len == object_len) {
+    MEM_freeN(um_references);
+    um_references = NULL;
+  }
+  return um_references;
+}
+
+/** \} */
+
 #endif /* USE_ARRAY_STORE */
 
 /* for callbacks */
 /* undo simply makes copies of a bmesh */
-static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
+/**
+ * \param um_ref: The reference to use for de-duplicating memory between undo-steps.
+ */
+static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key, UndoMesh *um_ref)
 {
   BLI_assert(BLI_array_is_zeroed(um, 1));
 #ifdef USE_ARRAY_STORE_THREAD
@@ -553,6 +615,7 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
           .calc_object_remap = false,
           .update_shapekey_indices = false,
           .cd_mask_extra = {.vmask = CD_MASK_SHAPE_KEYINDEX},
+          .active_shapekey_to_mvert = true,
       }));
 
   um->selectmode = em->selectmode;
@@ -560,14 +623,8 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
 
 #ifdef USE_ARRAY_STORE
   {
-    /* We could be more clever here,
-     * the previous undo state may be from a separate mesh. */
-    const UndoMesh *um_ref = um_arraystore.local_links.last ?
-                                 ((LinkData *)um_arraystore.local_links.last)->data :
-                                 NULL;
-
     /* Add ourselves. */
-    BLI_addtail(&um_arraystore.local_links, BLI_genericNodeN(um));
+    BLI_addtail(&um_arraystore.local_links, um);
 
 #  ifdef USE_ARRAY_STORE_THREAD
     if (um_arraystore.task_pool == NULL) {
@@ -583,12 +640,14 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
     um_arraystore_compact_with_info(um, um_ref);
 #  endif
   }
+#else
+  UNUSED_VARS(um_ref);
 #endif
 
   return um;
 }
 
-static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *key)
+static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em)
 {
   BMEditMesh *em_tmp;
   BMesh *bm;
@@ -614,7 +673,7 @@ static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *
 
   em->bm->shapenr = um->shapenr;
 
-  EDBM_mesh_free(em);
+  EDBM_mesh_free_data(em);
 
   bm = BM_mesh_create(&allocsize,
                       &((struct BMeshCreateParams){
@@ -624,40 +683,26 @@ static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *
   BM_mesh_bm_from_me(bm,
                      &um->me,
                      (&(struct BMeshFromMeshParams){
-                         .calc_face_normal = true,
+                         /* Handled with tessellation. */
+                         .calc_face_normal = false,
+                         .calc_vert_normal = false,
                          .active_shapekey = um->shapenr,
                      }));
 
-  em_tmp = BKE_editmesh_create(bm, true);
+  em_tmp = BKE_editmesh_create(bm);
   *em = *em_tmp;
+
+  /* Normals should not be stored in the undo mesh, so recalculate them. The edit
+   * mesh is expected to have valid normals and there is no tracked dirty state. */
+  BLI_assert(BKE_mesh_vertex_normals_are_dirty(&um->me));
+
+  /* Calculate face normals and tessellation at once since it's multi-threaded. */
+  BKE_editmesh_looptri_and_normals_calc(em);
 
   em->selectmode = um->selectmode;
   bm->selectmode = um->selectmode;
 
   bm->spacearr_dirty = BM_SPACEARR_DIRTY_ALL;
-
-  /* T35170: Restore the active key on the RealMesh. Otherwise 'fake' offset propagation happens
-   *         if the active is a basis for any other. */
-  if (key && (key->type == KEY_RELATIVE)) {
-    /* Since we can't add, remove or reorder keyblocks in editmode, it's safe to assume
-     * shapenr from restored bmesh and keyblock indices are in sync. */
-    const int kb_act_idx = ob->shapenr - 1;
-
-    /* If it is, let's patch the current mesh key block to its restored value.
-     * Else, the offsets won't be computed and it won't matter. */
-    if (BKE_keyblock_is_basis(key, kb_act_idx)) {
-      KeyBlock *kb_act = BLI_findlink(&key->block, kb_act_idx);
-
-      if (kb_act->totelem != um->me.totvert) {
-        /* The current mesh has some extra/missing verts compared to the undo, adjust. */
-        MEM_SAFE_FREE(kb_act->data);
-        kb_act->data = MEM_mallocN((size_t)(key->elemsize) * bm->totvert, __func__);
-        kb_act->totelem = um->me.totvert;
-      }
-
-      BKE_keyblock_update_from_mesh(&um->me, kb_act);
-    }
-  }
 
   ob->shapenr = um->shapenr;
 
@@ -682,20 +727,18 @@ static void undomesh_free_data(UndoMesh *um)
   /* we need to expand so any allocations in custom-data are freed with the mesh */
   um_arraystore_expand(um);
 
-  {
-    LinkData *link = BLI_findptr(&um_arraystore.local_links, um, offsetof(LinkData, data));
-    BLI_remlink(&um_arraystore.local_links, link);
-    MEM_freeN(link);
-  }
+  BLI_assert(BLI_findindex(&um_arraystore.local_links, um) != -1);
+  BLI_remlink(&um_arraystore.local_links, um);
+
   um_arraystore_free(um);
 #endif
 
   if (me->key) {
-    BKE_key_free(me->key);
+    BKE_key_free_data(me->key);
     MEM_freeN(me->key);
   }
 
-  BKE_mesh_free_data(me);
+  BKE_mesh_free_data_for_undo(me);
 }
 
 static Object *editmesh_object_from_context(bContext *C)
@@ -720,7 +763,6 @@ static Object *editmesh_object_from_context(bContext *C)
  * \{ */
 
 typedef struct MeshUndoStep_Elem {
-  struct MeshUndoStep_Elem *next, *prev;
   UndoRefID_Object obedit_ref;
   UndoMesh data;
 } MeshUndoStep_Elem;
@@ -749,6 +791,12 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *bmain, Und
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;
 
+  UndoMesh **um_references = NULL;
+
+#ifdef USE_ARRAY_STORE
+  um_references = mesh_undostep_reference_elems_from_objects(objects, objects_len);
+#endif
+
   for (uint i = 0; i < objects_len; i++) {
     Object *ob = objects[i];
     MeshUndoStep_Elem *elem = &us->elems[i];
@@ -756,11 +804,21 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *bmain, Und
     elem->obedit_ref.ptr = ob;
     Mesh *me = elem->obedit_ref.ptr->data;
     BMEditMesh *em = me->edit_mesh;
-    undomesh_from_editmesh(&elem->data, me->edit_mesh, me->key);
+    undomesh_from_editmesh(
+        &elem->data, me->edit_mesh, me->key, um_references ? um_references[i] : NULL);
     em->needs_flush_to_id = 1;
     us->step.data_size += elem->data.undo_size;
+
+#ifdef USE_ARRAY_STORE
+    /** As this is only data storage it is safe to set the session ID here. */
+    elem->data.me.id.session_uuid = me->id.session_uuid;
+#endif
   }
   MEM_freeN(objects);
+
+  if (um_references != NULL) {
+    MEM_freeN(um_references);
+  }
 
   bmain->is_memfile_undo_flush_needed = true;
 
@@ -793,9 +851,9 @@ static void mesh_undosys_step_decode(struct bContext *C,
       continue;
     }
     BMEditMesh *em = me->edit_mesh;
-    undomesh_to_editmesh(&elem->data, obedit, em, me->key);
+    undomesh_to_editmesh(&elem->data, obedit, em);
     em->needs_flush_to_id = 1;
-    DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
+    DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
   }
 
   /* The first element is always active */
@@ -836,7 +894,6 @@ static void mesh_undosys_foreach_ID_ref(UndoStep *us_p,
   }
 }
 
-/* Export for ED_undo_sys. */
 void ED_mesh_undosys_type(UndoType *ut)
 {
   ut->name = "Edit Mesh";

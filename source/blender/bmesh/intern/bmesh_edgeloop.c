@@ -50,7 +50,7 @@ typedef struct BMEdgeLoopStore {
 #define EDGELOOP_EPS 1e-10f
 
 /* -------------------------------------------------------------------- */
-/* BM_mesh_edgeloops_find & Util Functions  */
+/* BM_mesh_edgeloops_find & Util Functions. */
 
 static int bm_vert_other_tag(BMVert *v, BMVert *v_prev, BMEdge **r_e)
 {
@@ -121,9 +121,6 @@ static bool bm_loop_build(BMEdgeLoopStore *el_store, BMVert *v_prev, BMVert *v, 
   return true;
 }
 
-/**
- * \return listbase of listbases, each linking to a vertex.
- */
 int BM_mesh_edgeloops_find(BMesh *bm,
                            ListBase *r_eloops,
                            bool (*test_fn)(BMEdge *, void *user_data),
@@ -187,7 +184,7 @@ int BM_mesh_edgeloops_find(BMesh *bm,
 }
 
 /* -------------------------------------------------------------------- */
-/* BM_mesh_edgeloops_find_path & Util Functions  */
+/* BM_mesh_edgeloops_find_path & Util Functions. */
 
 /**
  * Find s single, open edge loop - given 2 vertices.
@@ -209,8 +206,7 @@ static void vs_add(
   /* This edge stores a direct path back to the original vertex so we can
    * backtrack without having to store an array of previous verts. */
 
-  /* WARNING - setting the edge is not common practice
-   * but currently harmless, take care. */
+  /* WARNING: Setting the edge is not common practice but currently harmless, take care. */
   BLI_assert(BM_vert_in_edge(e_prev, v));
   v->e = e_prev;
 
@@ -507,7 +503,6 @@ void BM_mesh_edgeloops_calc_order(BMesh *UNUSED(bm), ListBase *eloops, const boo
 /* -------------------------------------------------------------------- */
 /* BM_edgeloop_*** functions */
 
-/* return new edgeloops */
 BMEdgeLoopStore *BM_edgeloop_copy(BMEdgeLoopStore *el_store)
 {
   BMEdgeLoopStore *el_store_copy = MEM_mallocN(sizeof(*el_store), __func__);
@@ -566,9 +561,6 @@ const float *BM_edgeloop_center_get(struct BMEdgeLoopStore *el_store)
 #define NODE_AS_V(n) ((BMVert *)((LinkData *)n)->data)
 #define NODE_AS_CO(n) ((BMVert *)((LinkData *)n)->data)->co
 
-/**
- * edges are assigned to one vert -> the next.
- */
 void BM_edgeloop_edges_get(struct BMEdgeLoopStore *el_store, BMEdge **e_arr)
 {
   LinkData *node;
@@ -654,12 +646,6 @@ bool BM_edgeloop_calc_normal(BMesh *UNUSED(bm), BMEdgeLoopStore *el_store)
   return true;
 }
 
-/**
- * For open loops that are straight lines,
- * calculating the normal as if it were a polygon is meaningless.
- *
- * Instead use an alignment vector and calculate the normal based on that.
- */
 bool BM_edgeloop_calc_normal_aligned(BMesh *UNUSED(bm),
                                      BMEdgeLoopStore *el_store,
                                      const float no_align[3])

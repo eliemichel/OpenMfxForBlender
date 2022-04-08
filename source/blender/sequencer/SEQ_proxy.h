@@ -34,15 +34,16 @@ struct ListBase;
 struct Main;
 struct Scene;
 struct SeqIndexBuildContext;
-struct Sequence;
 struct SeqRenderData;
+struct Sequence;
 
 bool SEQ_proxy_rebuild_context(struct Main *bmain,
                                struct Depsgraph *depsgraph,
                                struct Scene *scene,
                                struct Sequence *seq,
                                struct GSet *file_list,
-                               struct ListBase *queue);
+                               struct ListBase *queue,
+                               bool build_only_on_bad_performance);
 void SEQ_proxy_rebuild(struct SeqIndexBuildContext *context,
                        short *stop,
                        short *do_update,

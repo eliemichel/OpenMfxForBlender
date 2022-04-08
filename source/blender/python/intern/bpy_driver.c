@@ -57,19 +57,12 @@
 #  include <opcode.h>
 #endif
 
-/**
- * For PyDrivers
- * (drivers using one-line Python expressions to express relationships between targets).
- */
 PyObject *bpy_pydriver_Dict = NULL;
 
 #ifdef USE_BYTECODE_WHITELIST
 static PyObject *bpy_pydriver_Dict__whitelist = NULL;
 #endif
 
-/* For faster execution we keep a special dictionary for pydrivers, with
- * the needed modules and aliases.
- */
 int bpy_pydriver_create_dict(void)
 {
   PyObject *d, *mod;
@@ -86,7 +79,7 @@ int bpy_pydriver_create_dict(void)
 
   bpy_pydriver_Dict = d;
 
-  /* import some modules: builtins, bpy, math, (Blender.noise)*/
+  /* Import some modules: builtins, bpy, math, `Blender.noise`. */
   PyDict_SetItemString(d, "__builtins__", PyEval_GetBuiltins());
 
   mod = PyImport_ImportModule("math");
@@ -175,7 +168,7 @@ int bpy_pydriver_create_dict(void)
   return 0;
 }
 
-/* note, this function should do nothing most runs, only when changing frame */
+/* NOTE: this function should do nothing most runs, only when changing frame. */
 /* not thread safe but neither is python */
 static struct {
   float evaltime;
@@ -220,11 +213,6 @@ static void bpy_pydriver_namespace_clear_self(void)
   }
 }
 
-/* Update function, it gets rid of pydrivers global dictionary, forcing
- * BPY_driver_exec to recreate it. This function is used to force
- * reloading the Blender text module "pydrivers.py", if available, so
- * updates in it reach pydriver evaluation.
- */
 void BPY_driver_reset(void)
 {
   PyGILState_STATE gilstate;
@@ -266,7 +254,7 @@ static void pydriver_error(ChannelDriver *driver)
           "\nError in Driver: The following Python expression failed:\n\t'%s'\n\n",
           driver->expression);
 
-  // BPy_errors_to_report(NULL); /* TODO - reports */
+  // BPy_errors_to_report(NULL); /* TODO: reports. */
   PyErr_Print();
   PyErr_Clear();
 }
@@ -427,30 +415,27 @@ static void bpy_pydriver_namespace_add_depsgraph(PyObject *driver_vars,
     PyErr_Print();
     PyErr_Clear();
   }
+  Py_DECREF(py_depsgraph);
 }
 
-/**
- * This evaluates Python driver expressions, `driver_orig->expression`
- * is a Python expression that should evaluate to a float number, which is returned.
- *
- * (old)note: PyGILState_Ensure() isn't always called because python can call
- * the bake operator which intern starts a thread which calls scene update
- * which does a driver update. to avoid a deadlock check #PyC_IsInterpreterActive()
- * if #PyGILState_Ensure() is needed, see T27683.
- *
- * (new)note: checking if python is running is not thread-safe T28114
- * now release the GIL on python operator execution instead, using
- * #PyEval_SaveThread() / #PyEval_RestoreThread() so we don't lock up blender.
- *
- * For copy-on-write we always cache expressions and write errors in the
- * original driver, otherwise these would get freed while editing. Due to
- * the GIL this is thread-safe.
- */
 float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
                       ChannelDriver *driver,
                       ChannelDriver *driver_orig,
                       const AnimationEvalContext *anim_eval_context)
 {
+  /* (old) NOTE: PyGILState_Ensure() isn't always called because python can call
+   * the bake operator which intern starts a thread which calls scene update
+   * which does a driver update. to avoid a deadlock check #PyC_IsInterpreterActive()
+   * if #PyGILState_Ensure() is needed, see T27683.
+   *
+   * (new) NOTE: checking if python is running is not thread-safe T28114
+   * now release the GIL on python operator execution instead, using
+   * #PyEval_SaveThread() / #PyEval_RestoreThread() so we don't lock up blender.
+   *
+   * For copy-on-write we always cache expressions and write errors in the
+   * original driver, otherwise these would get freed while editing.
+   * Due to the GIL this is thread-safe. */
+
   PyObject *driver_vars = NULL;
   PyObject *retval = NULL;
 
@@ -613,7 +598,7 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
 
       fprintf(
           stderr, "\tBPY_driver_eval() - couldn't add variable '%s' to namespace\n", dvar->name);
-      // BPy_errors_to_report(NULL); /* TODO - reports */
+      // BPy_errors_to_report(NULL); /* TODO: reports. */
       PyErr_Print();
       PyErr_Clear();
     }
@@ -654,7 +639,7 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
   }
 #endif
 
-  /* decref the driver vars first...  */
+  /* decref the driver vars first. */
   Py_DECREF(driver_vars);
 
   /* process the result */

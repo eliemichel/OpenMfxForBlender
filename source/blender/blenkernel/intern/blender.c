@@ -71,7 +71,6 @@ UserDef U;
 /** \name Blender Free on Exit
  * \{ */
 
-/* only to be called on exit blender */
 void BKE_blender_free(void)
 {
   /* samples are in a global list..., also sets G_MAIN->sound->sample NULL */
@@ -90,7 +89,6 @@ void BKE_blender_free(void)
 
   IMB_exit();
   BKE_cachefiles_exit();
-  BKE_images_exit();
   DEG_free_node_types();
 
   BKE_brush_system_exit();
@@ -127,12 +125,12 @@ static void blender_version_init(void)
     version_cycle = "";
   }
   else {
-    BLI_assert(!"Invalid Blender version cycle");
+    BLI_assert_msg(0, "Invalid Blender version cycle");
   }
 
   BLI_snprintf(blender_version_string,
                ARRAY_SIZE(blender_version_string),
-               "%d.%02d.%d%s",
+               "%d.%01d.%d%s",
                BLENDER_VERSION / 100,
                BLENDER_VERSION % 100,
                BLENDER_VERSION_PATCH,
@@ -273,10 +271,6 @@ static void userdef_free_addons(UserDef *userdef)
   BLI_listbase_clear(&userdef->addons);
 }
 
-/**
- * When loading a new userdef from file,
- * or when exiting Blender.
- */
 void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
 {
 #define U BLI_STATIC_ASSERT(false, "Global 'U' not allowed, only use arguments passed in!")
@@ -311,10 +305,6 @@ void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
 /** \name Blender Preferences (Application Templates)
  * \{ */
 
-/**
- * Write U from userdef.
- * This function defines which settings a template will override for the user preferences.
- */
 void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *userdef_b)
 {
   /* TODO:
@@ -362,7 +352,9 @@ void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *use
   DATA_SWAP(app_flag);
 
   /* We could add others. */
-  FLAG_SWAP(uiflag, int, USER_SAVE_PROMPT);
+  FLAG_SWAP(uiflag, int, USER_SAVE_PROMPT | USER_SPLASH_DISABLE | USER_SHOW_GIZMO_NAVIGATE);
+
+  DATA_SWAP(ui_scale);
 
 #undef SWAP_TYPELESS
 #undef DATA_SWAP

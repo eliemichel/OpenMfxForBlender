@@ -129,34 +129,34 @@ static void light_foreach_id(ID *id, LibraryForeachIDData *data)
   Light *lamp = (Light *)id;
   if (lamp->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
-    BKE_library_foreach_ID_embedded(data, (ID **)&lamp->nodetree);
+    BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+        data, BKE_library_foreach_ID_embedded(data, (ID **)&lamp->nodetree));
   }
 }
 
 static void light_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Light *la = (Light *)id;
-  if (la->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* write LibData */
-    BLO_write_id_struct(writer, Light, id_address, &la->id);
-    BKE_id_blend_write(writer, &la->id);
 
-    if (la->adt) {
-      BKE_animdata_blend_write(writer, la->adt);
-    }
+  /* write LibData */
+  BLO_write_id_struct(writer, Light, id_address, &la->id);
+  BKE_id_blend_write(writer, &la->id);
 
-    if (la->curfalloff) {
-      BKE_curvemapping_blend_write(writer, la->curfalloff);
-    }
-
-    /* Node-tree is integral part of lights, no libdata. */
-    if (la->nodetree) {
-      BLO_write_struct(writer, bNodeTree, la->nodetree);
-      ntreeBlendWrite(writer, la->nodetree);
-    }
-
-    BKE_previewimg_blend_write(writer, la->preview);
+  if (la->adt) {
+    BKE_animdata_blend_write(writer, la->adt);
   }
+
+  if (la->curfalloff) {
+    BKE_curvemapping_blend_write(writer, la->curfalloff);
+  }
+
+  /* Node-tree is integral part of lights, no libdata. */
+  if (la->nodetree) {
+    BLO_write_struct(writer, bNodeTree, la->nodetree);
+    ntreeBlendWrite(writer, la->nodetree);
+  }
+
+  BKE_previewimg_blend_write(writer, la->preview);
 }
 
 static void light_blend_read_data(BlendDataReader *reader, ID *id)
@@ -194,7 +194,8 @@ IDTypeInfo IDType_ID_LA = {
     .name = "Light",
     .name_plural = "lights",
     .translation_context = BLT_I18NCONTEXT_ID_LIGHT,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
+    .asset_type_info = NULL,
 
     .init_data = light_init_data,
     .copy_data = light_copy_data,
@@ -202,6 +203,7 @@ IDTypeInfo IDType_ID_LA = {
     .make_local = NULL,
     .foreach_id = light_foreach_id,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = light_blend_write,

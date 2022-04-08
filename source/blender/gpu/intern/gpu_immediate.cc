@@ -89,7 +89,6 @@ void immUnbindProgram()
   imm->shader = nullptr;
 }
 
-/* XXX do not use it. Special hack to use OCIO with batch API. */
 GPUShader *immGetShader()
 {
   return imm->shader;
@@ -313,7 +312,7 @@ void immAttr1f(uint attr_id, float x)
   setAttrValueBit(attr_id);
 
   float *data = (float *)(imm->vertex_data + attr->offset);
-  /*  printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data);
 
   data[0] = x;
 }
@@ -329,7 +328,7 @@ void immAttr2f(uint attr_id, float x, float y)
   setAttrValueBit(attr_id);
 
   float *data = (float *)(imm->vertex_data + attr->offset);
-  /*  printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data);
 
   data[0] = x;
   data[1] = y;
@@ -346,7 +345,7 @@ void immAttr3f(uint attr_id, float x, float y, float z)
   setAttrValueBit(attr_id);
 
   float *data = (float *)(imm->vertex_data + attr->offset);
-  /*  printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data);
 
   data[0] = x;
   data[1] = y;
@@ -364,7 +363,7 @@ void immAttr4f(uint attr_id, float x, float y, float z, float w)
   setAttrValueBit(attr_id);
 
   float *data = (float *)(imm->vertex_data + attr->offset);
-  /*  printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, (GLubyte*)data - imm->buffer_data, data);
 
   data[0] = x;
   data[1] = y;
@@ -445,7 +444,7 @@ void immAttr3ub(uint attr_id, uchar r, uchar g, uchar b)
   setAttrValueBit(attr_id);
 
   uchar *data = imm->vertex_data + attr->offset;
-  /*  printf("%s %td %p\n", __FUNCTION__, data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, data - imm->buffer_data, data);
 
   data[0] = r;
   data[1] = g;
@@ -463,7 +462,7 @@ void immAttr4ub(uint attr_id, uchar r, uchar g, uchar b, uchar a)
   setAttrValueBit(attr_id);
 
   uchar *data = imm->vertex_data + attr->offset;
-  /*  printf("%s %td %p\n", __FUNCTION__, data - imm->buffer_data, data); */
+  // printf("%s %td %p\n", __FUNCTION__, data - imm->buffer_data, data);
 
   data[0] = r;
   data[1] = g;
@@ -603,7 +602,6 @@ void immUniform4fv(const char *name, const float data[4])
   GPU_shader_uniform_4fv(imm->shader, name, data);
 }
 
-/* Note array index is not supported for name (i.e: "array[0]"). */
 void immUniformArray4fv(const char *name, const float *data, int count)
 {
   GPU_shader_uniform_4fv_array(imm->shader, name, count, (const float(*)[4])data);
@@ -629,6 +627,12 @@ void immBindTextureSampler(const char *name, GPUTexture *tex, eGPUSamplerState s
 {
   int binding = GPU_shader_get_texture_binding(imm->shader, name);
   GPU_texture_bind_ex(tex, state, binding, true);
+}
+
+void immBindUniformBuf(const char *name, GPUUniformBuf *ubo)
+{
+  int binding = GPU_shader_get_uniform_block_binding(imm->shader, name);
+  GPU_uniformbuf_bind(ubo, binding);
 }
 
 /* --- convenience functions for setting "uniform vec4 color" --- */

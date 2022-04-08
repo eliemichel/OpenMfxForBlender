@@ -22,6 +22,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ARegion;
 struct DRWTextStore;
 struct Object;
@@ -34,7 +38,7 @@ void DRW_text_cache_destroy(struct DRWTextStore *dt);
 void DRW_text_cache_add(struct DRWTextStore *dt,
                         const float co[3],
                         const char *str,
-                        const int str_len,
+                        int str_len,
                         short xoffs,
                         short yoffs,
                         short flag,
@@ -48,7 +52,7 @@ void DRW_text_edit_mesh_measure_stats(struct ARegion *region,
                                       const struct UnitSettings *unit);
 
 enum {
-  DRW_TEXT_CACHE_ASCII = (1 << 0),
+  // DRW_UNUSED_1 = (1 << 0),  /* dirty */
   DRW_TEXT_CACHE_GLOBALSPACE = (1 << 1),
   DRW_TEXT_CACHE_LOCALCLIP = (1 << 2),
   /* reference the string by pointer */
@@ -56,4 +60,9 @@ enum {
 };
 
 /* draw_manager.c */
+
 struct DRWTextStore *DRW_text_cache_ensure(void);
+
+#ifdef __cplusplus
+}
+#endif

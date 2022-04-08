@@ -48,6 +48,7 @@
 #include "ED_anim_api.h"
 #include "ED_keyframes_draw.h"
 #include "ED_keyframes_edit.h"
+#include "ED_keyframes_keylist.h"
 
 #include "RNA_access.h"
 
@@ -62,7 +63,6 @@
 /* *************************************************** */
 /* CURRENT FRAME DRAWING */
 
-/* General call for drawing current frame indicator in animation editor */
 void ANIM_draw_cfra(const bContext *C, View2D *v2d, short flag)
 {
   Scene *scene = CTX_data_scene(C);
@@ -89,9 +89,8 @@ void ANIM_draw_cfra(const bContext *C, View2D *v2d, short flag)
 
 /* *************************************************** */
 /* PREVIEW RANGE 'CURTAINS' */
-/* Note: 'Preview Range' tools are defined in anim_ops.c */
+/* NOTE: 'Preview Range' tools are defined in `anim_ops.c`. */
 
-/* Draw preview range 'curtains' for highlighting where the animation data is */
 void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 {
   Scene *scene = CTX_data_scene(C);
@@ -126,11 +125,6 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 /* *************************************************** */
 /* SCENE FRAME RANGE */
 
-/**
- * Draw frame range guides (for scene frame range) in background.
- *
- * TODO: Should we still show these when preview range is enabled?
- */
 void ANIM_draw_framerange(Scene *scene, View2D *v2d)
 {
   /* draw darkened area outside of active timeline frame range */
@@ -167,14 +161,73 @@ void ANIM_draw_framerange(Scene *scene, View2D *v2d)
   immUnbindProgram();
 }
 
-/* *************************************************** */
-/* NLA-MAPPING UTILITIES (required for drawing and also editing keyframes)  */
+void ANIM_draw_action_framerange(
+    AnimData *adt, bAction *action, View2D *v2d, float ymin, float ymax)
+{
+  if ((action->flag & ACT_FRAME_RANGE) == 0) {
+    return;
+  }
 
-/**
- * Obtain the AnimData block providing NLA-mapping for the given channel (if applicable).
- *
- * TODO: do not supply return this if the animdata tells us that there is no mapping to perform.
- */
+  /* Compute the dimensions. */
+  CLAMP_MIN(ymin, v2d->cur.ymin);
+  CLAMP_MAX(ymax, v2d->cur.ymax);
+
+  if (ymin > ymax) {
+    return;
+  }
+
+  const float sfra = BKE_nla_tweakedit_remap(adt, action->frame_start, NLATIME_CONVERT_MAP);
+  const float efra = BKE_nla_tweakedit_remap(adt, action->frame_end, NLATIME_CONVERT_MAP);
+
+  /* Diagonal stripe filled area outside of the frame range. */
+  GPU_blend(GPU_BLEND_ALPHA);
+
+  GPUVertFormat *format = immVertexFormat();
+  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+  immBindBuiltinProgram(GPU_SHADER_2D_DIAG_STRIPES);
+
+  float color[4];
+  UI_GetThemeColorShadeAlpha4fv(TH_BACK, -40, -50, color);
+
+  immUniform4f("color1", color[0], color[1], color[2], color[3]);
+  immUniform4f("color2", 0.0f, 0.0f, 0.0f, 0.0f);
+  immUniform1i("size1", 2 * U.dpi_fac);
+  immUniform1i("size2", 4 * U.dpi_fac);
+
+  if (sfra < efra) {
+    immRectf(pos, v2d->cur.xmin, ymin, sfra, ymax);
+    immRectf(pos, efra, ymin, v2d->cur.xmax, ymax);
+  }
+  else {
+    immRectf(pos, v2d->cur.xmin, ymin, v2d->cur.xmax, ymax);
+  }
+
+  immUnbindProgram();
+
+  GPU_blend(GPU_BLEND_NONE);
+
+  /* Thin lines where the actual frames are. */
+  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immUniformThemeColorShade(TH_BACK, -60);
+
+  GPU_line_width(1.0f);
+
+  immBegin(GPU_PRIM_LINES, 4);
+
+  immVertex2f(pos, sfra, ymin);
+  immVertex2f(pos, sfra, ymax);
+
+  immVertex2f(pos, efra, ymin);
+  immVertex2f(pos, efra, ymax);
+
+  immEnd();
+  immUnbindProgram();
+}
+
+/* *************************************************** */
+/* NLA-MAPPING UTILITIES (required for drawing and also editing keyframes). */
+
 AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
 {
   /* sanity checks */
@@ -250,10 +303,6 @@ static short bezt_nlamapping_apply(KeyframeEditData *ked, BezTriple *bezt)
   return 0;
 }
 
-/* Apply/Unapply NLA mapping to all keyframes in the nominated F-Curve
- * - restore = whether to map points back to non-mapped time
- * - only_keys = whether to only adjust the location of the center point of beztriples
- */
 void ANIM_nla_mapping_apply_fcurve(AnimData *adt, FCurve *fcu, bool restore, bool only_keys)
 {
   KeyframeEditData ked = {{NULL}};
@@ -281,7 +330,6 @@ void ANIM_nla_mapping_apply_fcurve(AnimData *adt, FCurve *fcu, bool restore, boo
 /* *************************************************** */
 /* UNITS CONVERSION MAPPING (required for drawing and editing keyframes) */
 
-/* Get flags used for normalization in ANIM_unit_mapping_get_factor. */
 short ANIM_get_normalization_flags(bAnimContext *ac)
 {
   if (ac->sl->spacetype == SPACE_GRAPH) {
@@ -413,7 +461,7 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
             else {
               /* Calculate min/max using full fcurve evaluation.
                * [slower than bezier forward differencing but evaluates Back/Elastic interpolation
-               * as well].*/
+               * as well]. */
               float step_size = (bezt->vec[1][0] - prev_bezt->vec[1][0]) / resol;
               for (int j = 0; j <= resol; j++) {
                 float eval_time = prev_bezt->vec[1][0] + step_size * j;
@@ -449,7 +497,6 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
   return factor;
 }
 
-/* Get unit conversion factor for given ID + F-Curve */
 float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag, float *r_offset)
 {
   if (flag & ANIM_UNITCONV_NORMALIZE) {
@@ -493,16 +540,13 @@ static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_
   Object *ob = CTX_data_active_object(C);
   Mask *mask = CTX_data_edit_mask(C);
   bDopeSheet ads = {NULL};
-  DLRBT_Tree keys;
-  ActKeyColumn *aknext, *akprev;
+  struct AnimKeylist *keylist = ED_keylist_create();
+  const ActKeyColumn *aknext, *akprev;
   float cfranext, cfraprev;
   bool donenext = false, doneprev = false;
   int nextcount = 0, prevcount = 0;
 
   cfranext = cfraprev = (float)(CFRA);
-
-  /* init binarytree-list for getting keyframes */
-  BLI_dlrbTree_init(&keys);
 
   /* seed up dummy dopesheet context with flags to perform necessary filtering */
   if ((scene->flag & SCE_KEYS_NO_SELONLY) == 0) {
@@ -511,22 +555,24 @@ static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_
   }
 
   /* populate tree with keyframe nodes */
-  scene_to_keylist(&ads, scene, &keys, 0);
-  gpencil_to_keylist(&ads, scene->gpd, &keys, false);
+  scene_to_keylist(&ads, scene, keylist, 0);
+  gpencil_to_keylist(&ads, scene->gpd, keylist, false);
 
   if (ob) {
-    ob_to_keylist(&ads, ob, &keys, 0);
-    gpencil_to_keylist(&ads, ob->data, &keys, false);
+    ob_to_keylist(&ads, ob, keylist, 0);
+    gpencil_to_keylist(&ads, ob->data, keylist, false);
   }
 
   if (mask) {
     MaskLayer *masklay = BKE_mask_layer_active(mask);
-    mask_to_keylist(&ads, masklay, &keys);
+    mask_to_keylist(&ads, masklay, keylist);
   }
+  ED_keylist_prepare_for_direct_access(keylist);
 
+  /* TODO(jbakker): Keylists are ordered, no need to do any searching at all. */
   /* find matching keyframe in the right direction */
   do {
-    aknext = (ActKeyColumn *)BLI_dlrbTree_search_next(&keys, compare_ak_cfraPtr, &cfranext);
+    aknext = ED_keylist_find_next(keylist, cfranext);
 
     if (aknext) {
       if (CFRA == (int)aknext->cfra) {
@@ -544,7 +590,7 @@ static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_
   } while ((aknext != NULL) && (donenext == false));
 
   do {
-    akprev = (ActKeyColumn *)BLI_dlrbTree_search_prev(&keys, compare_ak_cfraPtr, &cfraprev);
+    akprev = ED_keylist_find_prev(keylist, cfraprev);
 
     if (akprev) {
       if (CFRA == (int)akprev->cfra) {
@@ -561,7 +607,7 @@ static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_
   } while ((akprev != NULL) && (doneprev == false));
 
   /* free temp stuff */
-  BLI_dlrbTree_free(&keys);
+  ED_keylist_free(keylist);
 
   /* any success? */
   if (doneprev || donenext) {

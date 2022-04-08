@@ -29,6 +29,8 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
+#include "BKE_customdata.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_material.h"
@@ -497,7 +499,12 @@ static int similar_face_select_exec(bContext *C, wmOperator *op)
 
     if (changed) {
       EDBM_selectmode_flush(em);
-      EDBM_update_generic(ob->data, false, false);
+      EDBM_update(ob->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
 
@@ -519,7 +526,12 @@ static int similar_face_select_exec(bContext *C, wmOperator *op)
         }
       }
       EDBM_selectmode_flush(em);
-      EDBM_update_generic(ob->data, false, false);
+      EDBM_update(ob->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
 
@@ -549,7 +561,7 @@ static int similar_face_select_exec(bContext *C, wmOperator *op)
  * \{ */
 
 /**
- * Note: This is not normal, but the edge direction itself and always in
+ * NOTE: This is not normal, but the edge direction itself and always in
  * a positive quadrant (tries z, y then x).
  * Therefore we need to use the entire object transformation matrix.
  */
@@ -917,7 +929,12 @@ static int similar_edge_select_exec(bContext *C, wmOperator *op)
 
     if (changed) {
       EDBM_selectmode_flush(em);
-      EDBM_update_generic(ob->data, false, false);
+      EDBM_update(ob->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
 
@@ -939,7 +956,12 @@ static int similar_edge_select_exec(bContext *C, wmOperator *op)
         }
       }
       EDBM_selectmode_flush(em);
-      EDBM_update_generic(ob->data, false, false);
+      EDBM_update(ob->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
 
@@ -952,6 +974,7 @@ static int similar_edge_select_exec(bContext *C, wmOperator *op)
 
   return OPERATOR_FINISHED;
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -1021,7 +1044,7 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
       if (cd_dvert_offset == -1) {
         continue;
       }
-      defbase_len = BLI_listbase_count(&ob->defbase);
+      defbase_len = BKE_object_defgroup_count(ob);
       if (defbase_len == 0) {
         continue;
       }
@@ -1070,8 +1093,10 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
       /* We store the names of the vertex groups, so we can select
        * vertex groups with the same name in different objects. */
 
+      const ListBase *defbase = BKE_object_defgroup_list(ob);
+
       int i = 0;
-      LISTBASE_FOREACH (bDeformGroup *, dg, &ob->defbase) {
+      LISTBASE_FOREACH (bDeformGroup *, dg, defbase) {
         if (BLI_BITMAP_TEST(defbase_selected, i)) {
           BLI_gset_add(gset, dg->name);
         }
@@ -1108,7 +1133,8 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
       if (cd_dvert_offset == -1) {
         continue;
       }
-      defbase_len = BLI_listbase_count(&ob->defbase);
+      const ListBase *defbase = BKE_object_defgroup_list(ob);
+      defbase_len = BLI_listbase_count(defbase);
       if (defbase_len == 0) {
         continue;
       }
@@ -1121,7 +1147,7 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
       GSetIterator gs_iter;
       GSET_ITER (gs_iter, gset) {
         const char *name = BLI_gsetIterator_getKey(&gs_iter);
-        int vgroup_id = BLI_findstringindex(&ob->defbase, name, offsetof(bDeformGroup, name));
+        int vgroup_id = BLI_findstringindex(defbase, name, offsetof(bDeformGroup, name));
         if (vgroup_id != -1) {
           BLI_BITMAP_ENABLE(defbase_selected, vgroup_id);
           found_any = true;
@@ -1213,7 +1239,12 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
 
     if (changed) {
       EDBM_selectmode_flush(em);
-      EDBM_update_generic(ob->data, false, false);
+      EDBM_update(ob->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
 
@@ -1225,6 +1256,7 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
 
   return OPERATOR_FINISHED;
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -1302,6 +1334,33 @@ static const EnumPropertyItem *select_similar_type_itemf(bContext *C,
   return prop_similar_types;
 }
 
+static bool edbm_select_similar_poll_property(const bContext *UNUSED(C),
+                                              wmOperator *op,
+                                              const PropertyRNA *prop)
+{
+  const char *prop_id = RNA_property_identifier(prop);
+  const int type = RNA_enum_get(op->ptr, "type");
+
+  /* Only show threshold when it is used. */
+  if (STREQ(prop_id, "threshold")) {
+    if (!ELEM(type,
+              SIMVERT_NORMAL,
+              SIMEDGE_BEVEL,
+              SIMEDGE_CREASE,
+              SIMEDGE_DIR,
+              SIMEDGE_LENGTH,
+              SIMEDGE_FACE_ANGLE,
+              SIMFACE_AREA,
+              SIMFACE_PERIMETER,
+              SIMFACE_NORMAL,
+              SIMFACE_COPLANAR)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void MESH_OT_select_similar(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -1315,6 +1374,7 @@ void MESH_OT_select_similar(wmOperatorType *ot)
   ot->invoke = WM_menu_invoke;
   ot->exec = edbm_select_similar_exec;
   ot->poll = ED_operator_editmesh;
+  ot->poll_property = edbm_select_similar_poll_property;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

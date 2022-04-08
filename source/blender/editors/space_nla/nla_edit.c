@@ -65,13 +65,12 @@
 #include "UI_view2d.h"
 
 #include "nla_intern.h"  /* own include */
-#include "nla_private.h" /* FIXME... maybe this shouldn't be included? */
+#include "nla_private.h" /* FIXME: maybe this shouldn't be included? */
 
 /* -------------------------------------------------------------------- */
 /** \name Public Utilities
  * \{ */
 
-/* Perform validation for blending/extend settings */
 void ED_nla_postop_refresh(bAnimContext *ac)
 {
   ListBase anim_data = {NULL, NULL};
@@ -135,7 +134,7 @@ static int nlaedit_enable_tweakmode_exec(bContext *C, wmOperator *op)
   for (ale = anim_data.first; ale; ale = ale->next) {
     AnimData *adt = ale->data;
 
-    /* try entering tweakmode if valid */
+    /* Try entering tweak-mode if valid. */
     ok |= BKE_nla_tweakmode_enter(adt);
 
     /* mark the active track as being "solo"? */
@@ -154,9 +153,8 @@ static int nlaedit_enable_tweakmode_exec(bContext *C, wmOperator *op)
   ANIM_animdata_update(&ac, &anim_data);
   ANIM_animdata_freelist(&anim_data);
 
-  /* if we managed to enter tweakmode on at least one AnimData block,
-   * set the flag for this in the active scene and send notifiers
-   */
+  /* If we managed to enter tweak-mode on at least one AnimData block,
+   * set the flag for this in the active scene and send notifiers. */
   if (ac.scene && ok) {
     /* set editing flag */
     ac.scene->flag |= SCE_NLA_EDIT_ON;
@@ -206,7 +204,6 @@ void NLA_OT_tweakmode_enter(wmOperatorType *ot)
 /** \name Disable Tweak-Mode Operator
  * \{ */
 
-/* NLA Editor internal API function for exiting tweakmode */
 bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
 {
   ListBase anim_data = {NULL, NULL};
@@ -232,7 +229,7 @@ bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
       BKE_nlatrack_solo_toggle(adt, NULL);
     }
 
-    /* to be sure that we're doing everything right, just exit tweakmode... */
+    /* To be sure that we're doing everything right, just exit tweak-mode. */
     BKE_nla_tweakmode_exit(adt);
 
     ale->update |= ANIM_UPDATE_DEPS;
@@ -242,9 +239,7 @@ bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
   ANIM_animdata_update(ac, &anim_data);
   ANIM_animdata_freelist(&anim_data);
 
-  /* if we managed to enter tweakmode on at least one AnimData block,
-   * set the flag for this in the active scene and send notifiers
-   */
+  /* Clear the tweak-mode flag in the active scene and send notifiers. */
   if (ac->scene) {
     /* clear editing flag */
     ac->scene->flag &= ~SCE_NLA_EDIT_ON;
@@ -257,7 +252,7 @@ bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
   return true;
 }
 
-/* exit tweakmode operator callback */
+/* Exit tweak-mode operator callback. */
 static int nlaedit_disable_tweakmode_exec(bContext *C, wmOperator *op)
 {
   bAnimContext ac;
@@ -405,9 +400,9 @@ static int nlaedit_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
 void NLA_OT_previewrange_set(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Auto-Set Preview Range";
+  ot->name = "Set Preview Range to Selected";
   ot->idname = "NLA_OT_previewrange_set";
-  ot->description = "Automatically set Preview Range based on range of keyframes";
+  ot->description = "Set Preview Range based on extends of selected strips";
 
   /* api callbacks */
   ot->exec = nlaedit_previewrange_exec;
@@ -1157,7 +1152,7 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
     NlaStrip *strip, *nstrip, *next;
     NlaTrack *track;
 
-    /* Note: We allow this operator in override context because it is almost always (from possible
+    /* NOTE: We allow this operator in override context because it is almost always (from possible
      * default user interactions) paired with the transform one, which will ensure that the new
      * strip ends up in a valid (local) track. */
 
@@ -1397,7 +1392,7 @@ static void nlaedit_split_strip_actclip(
   nstrip->start = splitframe;
 
   if ((splitaframe > strip->actstart) && (splitaframe < strip->actend)) {
-    /* only do this if we're splitting down the middle...  */
+    /* only do this if we're splitting down the middle... */
     strip->actend = splitaframe;
     nstrip->actstart = splitaframe;
   }
@@ -1412,7 +1407,7 @@ static void nlaedit_split_strip_actclip(
 /* split a given Meta strip */
 static void nlaedit_split_strip_meta(NlaTrack *nlt, NlaStrip *strip)
 {
-  /* simply ungroup it for now...  */
+  /* simply ungroup it for now... */
   BKE_nlastrips_clear_metastrip(&nlt->strips, strip);
 }
 
@@ -1528,7 +1523,7 @@ static int nlaedit_toggle_mute_exec(bContext *C, wmOperator *UNUSED(op))
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip;
 
-    /* for every selected strip, toggle muting  */
+    /* For every selected strip, toggle muting. */
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       if (strip->flag & NLASTRIP_FLAG_SELECT) {
         /* just flip the mute flag for now */
@@ -2196,8 +2191,19 @@ static int nlaedit_apply_scale_exec(bContext *C, wmOperator *UNUSED(op))
          * and recalculate the extents of the action now that it has been scaled
          * but leave everything else alone
          */
+        const float start = nlastrip_get_frame(strip, strip->actstart, NLATIME_CONVERT_MAP);
+        const float end = nlastrip_get_frame(strip, strip->actend, NLATIME_CONVERT_MAP);
+
+        if (strip->act->flag & ACT_FRAME_RANGE) {
+          strip->act->frame_start = nlastrip_get_frame(
+              strip, strip->act->frame_start, NLATIME_CONVERT_MAP);
+          strip->act->frame_end = nlastrip_get_frame(
+              strip, strip->act->frame_end, NLATIME_CONVERT_MAP);
+        }
+
         strip->scale = 1.0f;
-        calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
+        strip->actstart = start;
+        strip->actend = end;
 
         ale->update |= ANIM_UPDATE_DEPS;
       }

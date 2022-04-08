@@ -25,6 +25,7 @@
 #include "BLI_assert.h"
 #include "BLI_math_vector.h"
 
+#include "BKE_attribute.h"
 #include "BKE_customdata.h"
 #include "BKE_lib_id.h"
 #include "BKE_material.h"
@@ -75,10 +76,13 @@ static void get_topology(struct Mesh *mesh,
                          std::vector<int32_t> &poly_verts,
                          std::vector<int32_t> &loop_counts,
                          bool &r_has_flat_shaded_poly);
-static void get_creases(struct Mesh *mesh,
-                        std::vector<int32_t> &indices,
-                        std::vector<int32_t> &lengths,
-                        std::vector<float> &sharpnesses);
+static void get_edge_creases(struct Mesh *mesh,
+                             std::vector<int32_t> &indices,
+                             std::vector<int32_t> &lengths,
+                             std::vector<float> &sharpnesses);
+static void get_vert_creases(struct Mesh *mesh,
+                             std::vector<int32_t> &indices,
+                             std::vector<float> &sharpnesses);
 static void get_loop_normals(struct Mesh *mesh,
                              std::vector<Imath::V3f> &normals,
                              bool has_flat_shaded_poly);
@@ -108,9 +112,6 @@ void ABCGenericMeshWriter::create_alembic_objects(const HierarchyContext *contex
     OBoolProperty type(typeContainer, "meshtype");
     type.set(subsurf_modifier_ == nullptr);
   }
-
-  Scene *scene_eval = DEG_get_evaluated_scene(args_.depsgraph);
-  liquid_sim_modifier_ = get_liquid_sim_modifier(scene_eval, context->object);
 }
 
 Alembic::Abc::OObject ABCGenericMeshWriter::get_alembic_object() const
@@ -144,21 +145,6 @@ bool ABCGenericMeshWriter::export_as_subdivision_surface(Object *ob_eval) const
   return false;
 }
 
-ModifierData *ABCGenericMeshWriter::get_liquid_sim_modifier(Scene *scene, Object *ob)
-{
-  ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Fluidsim);
-
-  if (md && (BKE_modifier_is_enabled(scene, md, eModifierMode_Render))) {
-    FluidsimModifierData *fsmd = reinterpret_cast<FluidsimModifierData *>(md);
-
-    if (fsmd->fss && fsmd->fss->type == OB_FLUIDSIM_DOMAIN) {
-      return md;
-    }
-  }
-
-  return nullptr;
-}
-
 bool ABCGenericMeshWriter::is_supported(const HierarchyContext *context) const
 {
   if (args_.export_params->visible_objects_only) {
@@ -183,9 +169,11 @@ void ABCGenericMeshWriter::do_write(HierarchyContext &context)
     const int quad_method = args_.export_params->quad_method;
     const int ngon_method = args_.export_params->ngon_method;
 
-    struct BMeshCreateParams bmcp = {false};
-    struct BMeshFromMeshParams bmfmp = {true, false, false, 0};
-    BMesh *bm = BKE_mesh_to_bmesh_ex(mesh, &bmcp, &bmfmp);
+    BMeshCreateParams bmesh_create_params{};
+    BMeshFromMeshParams bmesh_from_mesh_params{};
+    bmesh_from_mesh_params.calc_face_normal = true;
+    bmesh_from_mesh_params.calc_vert_normal = true;
+    BMesh *bm = BKE_mesh_to_bmesh_ex(mesh, &bmesh_create_params, &bmesh_from_mesh_params);
 
     BM_mesh_triangulate(bm, quad_method, ngon_method, 4, tag_only, nullptr, nullptr, nullptr);
 
@@ -200,11 +188,13 @@ void ABCGenericMeshWriter::do_write(HierarchyContext &context)
   }
 
   m_custom_data_config.pack_uvs = args_.export_params->packuv;
+  m_custom_data_config.mesh = mesh;
   m_custom_data_config.mpoly = mesh->mpoly;
   m_custom_data_config.mloop = mesh->mloop;
   m_custom_data_config.totpoly = mesh->totpoly;
   m_custom_data_config.totloop = mesh->totloop;
   m_custom_data_config.totvert = mesh->totvert;
+  m_custom_data_config.timesample_index = timesample_index_;
 
   try {
     if (is_subd_) {
@@ -250,7 +240,7 @@ void ABCGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
 
   UVSample uvs_and_indices;
 
-  if (!frame_has_been_written_ && args_.export_params->uvs) {
+  if (args_.export_params->uvs) {
     const char *name = get_uv_sample(uvs_and_indices, m_custom_data_config, &mesh->ldata);
 
     if (!uvs_and_indices.indices.empty() && !uvs_and_indices.uvs.empty()) {
@@ -279,8 +269,11 @@ void ABCGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
     mesh_sample.setNormals(normals_sample);
   }
 
-  if (liquid_sim_modifier_ != nullptr) {
-    get_velocities(mesh, velocities);
+  if (args_.export_params->orcos) {
+    write_generated_coordinates(abc_poly_mesh_schema_.getArbGeomParams(), m_custom_data_config);
+  }
+
+  if (get_velocities(mesh, velocities)) {
     mesh_sample.setVelocities(V3fArraySample(velocities));
   }
 
@@ -294,15 +287,16 @@ void ABCGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
 
 void ABCGenericMeshWriter::write_subd(HierarchyContext &context, struct Mesh *mesh)
 {
-  std::vector<float> crease_sharpness;
+  std::vector<float> edge_crease_sharpness, vert_crease_sharpness;
   std::vector<Imath::V3f> points;
   std::vector<int32_t> poly_verts, loop_counts;
-  std::vector<int32_t> crease_indices, crease_lengths;
+  std::vector<int32_t> edge_crease_indices, edge_crease_lengths, vert_crease_indices;
   bool has_flat_poly = false;
 
   get_vertices(mesh, points);
   get_topology(mesh, poly_verts, loop_counts, has_flat_poly);
-  get_creases(mesh, crease_indices, crease_lengths, crease_sharpness);
+  get_edge_creases(mesh, edge_crease_indices, edge_crease_lengths, edge_crease_sharpness);
+  get_vert_creases(mesh, vert_crease_indices, vert_crease_sharpness);
 
   if (!frame_has_been_written_ && args_.export_params->face_sets) {
     write_face_sets(context.object, mesh, abc_subdiv_schema_);
@@ -312,7 +306,7 @@ void ABCGenericMeshWriter::write_subd(HierarchyContext &context, struct Mesh *me
       V3fArraySample(points), Int32ArraySample(poly_verts), Int32ArraySample(loop_counts));
 
   UVSample sample;
-  if (!frame_has_been_written_ && args_.export_params->uvs) {
+  if (args_.export_params->uvs) {
     const char *name = get_uv_sample(sample, m_custom_data_config, &mesh->ldata);
 
     if (!sample.indices.empty() && !sample.uvs.empty()) {
@@ -329,10 +323,19 @@ void ABCGenericMeshWriter::write_subd(HierarchyContext &context, struct Mesh *me
         abc_subdiv_schema_.getArbGeomParams(), m_custom_data_config, &mesh->ldata, CD_MLOOPUV);
   }
 
-  if (!crease_indices.empty()) {
-    subdiv_sample.setCreaseIndices(Int32ArraySample(crease_indices));
-    subdiv_sample.setCreaseLengths(Int32ArraySample(crease_lengths));
-    subdiv_sample.setCreaseSharpnesses(FloatArraySample(crease_sharpness));
+  if (args_.export_params->orcos) {
+    write_generated_coordinates(abc_subdiv_schema_.getArbGeomParams(), m_custom_data_config);
+  }
+
+  if (!edge_crease_indices.empty()) {
+    subdiv_sample.setCreaseIndices(Int32ArraySample(edge_crease_indices));
+    subdiv_sample.setCreaseLengths(Int32ArraySample(edge_crease_lengths));
+    subdiv_sample.setCreaseSharpnesses(FloatArraySample(edge_crease_sharpness));
+  }
+
+  if (!vert_crease_indices.empty()) {
+    subdiv_sample.setCornerIndices(Int32ArraySample(vert_crease_indices));
+    subdiv_sample.setCornerSharpnesses(FloatArraySample(vert_crease_sharpness));
   }
 
   update_bounding_box(context.object);
@@ -359,12 +362,7 @@ void ABCGenericMeshWriter::write_face_sets(Object *object, struct Mesh *mesh, Sc
 
 void ABCGenericMeshWriter::write_arb_geo_params(struct Mesh *me)
 {
-  if (liquid_sim_modifier_ != nullptr) {
-    /* We don't need anything more for liquid meshes. */
-    return;
-  }
-
-  if (frame_has_been_written_ || !args_.export_params->vcolors) {
+  if (!args_.export_params->vcolors) {
     return;
   }
 
@@ -378,27 +376,28 @@ void ABCGenericMeshWriter::write_arb_geo_params(struct Mesh *me)
   write_custom_data(arb_geom_params, m_custom_data_config, &me->ldata, CD_MLOOPCOL);
 }
 
-void ABCGenericMeshWriter::get_velocities(struct Mesh *mesh, std::vector<Imath::V3f> &vels)
+bool ABCGenericMeshWriter::get_velocities(struct Mesh *mesh, std::vector<Imath::V3f> &vels)
 {
+  /* Export velocity attribute output by fluid sim, sequence cache modifier
+   * and geometry nodes. */
+  CustomDataLayer *velocity_layer = BKE_id_attribute_find(
+      &mesh->id, "velocity", CD_PROP_FLOAT3, ATTR_DOMAIN_POINT);
+
+  if (velocity_layer == nullptr) {
+    return false;
+  }
+
   const int totverts = mesh->totvert;
+  const float(*mesh_velocities)[3] = reinterpret_cast<float(*)[3]>(velocity_layer->data);
 
   vels.clear();
   vels.resize(totverts);
 
-  FluidsimModifierData *fmd = reinterpret_cast<FluidsimModifierData *>(liquid_sim_modifier_);
-  FluidsimSettings *fss = fmd->fss;
-
-  if (fss->meshVelocities) {
-    float *mesh_vels = reinterpret_cast<float *>(fss->meshVelocities);
-
-    for (int i = 0; i < totverts; i++) {
-      copy_yup_from_zup(vels[i].getValue(), mesh_vels);
-      mesh_vels += 3;
-    }
+  for (int i = 0; i < totverts; i++) {
+    copy_yup_from_zup(vels[i].getValue(), mesh_velocities[i]);
   }
-  else {
-    std::fill(vels.begin(), vels.end(), Imath::V3f(0.0f));
-  }
+
+  return true;
 }
 
 void ABCGenericMeshWriter::get_geo_groups(Object *object,
@@ -488,10 +487,10 @@ static void get_topology(struct Mesh *mesh,
   }
 }
 
-static void get_creases(struct Mesh *mesh,
-                        std::vector<int32_t> &indices,
-                        std::vector<int32_t> &lengths,
-                        std::vector<float> &sharpnesses)
+static void get_edge_creases(struct Mesh *mesh,
+                             std::vector<int32_t> &indices,
+                             std::vector<int32_t> &lengths,
+                             std::vector<float> &sharpnesses)
 {
   const float factor = 1.0f / 255.0f;
 
@@ -514,6 +513,29 @@ static void get_creases(struct Mesh *mesh,
   lengths.resize(sharpnesses.size(), 2);
 }
 
+static void get_vert_creases(struct Mesh *mesh,
+                             std::vector<int32_t> &indices,
+                             std::vector<float> &sharpnesses)
+{
+  indices.clear();
+  sharpnesses.clear();
+
+  const float *creases = static_cast<const float *>(CustomData_get_layer(&mesh->vdata, CD_CREASE));
+
+  if (!creases) {
+    return;
+  }
+
+  for (int i = 0, v = mesh->totvert; i < v; i++) {
+    const float sharpness = creases[i];
+
+    if (sharpness != 0.0f) {
+      indices.push_back(i);
+      sharpnesses.push_back(sharpness);
+    }
+  }
+}
+
 static void get_loop_normals(struct Mesh *mesh,
                              std::vector<Imath::V3f> &normals,
                              bool has_flat_shaded_poly)
@@ -529,7 +551,7 @@ static void get_loop_normals(struct Mesh *mesh,
 
   BKE_mesh_calc_normals_split(mesh);
   const float(*lnors)[3] = static_cast<float(*)[3]>(CustomData_get_layer(&mesh->ldata, CD_NORMAL));
-  BLI_assert(lnors != nullptr || !"BKE_mesh_calc_normals_split() should have computed CD_NORMAL");
+  BLI_assert_msg(lnors != nullptr, "BKE_mesh_calc_normals_split() should have computed CD_NORMAL");
 
   normals.resize(mesh->totloop);
 

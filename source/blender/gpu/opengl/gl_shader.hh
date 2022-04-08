@@ -27,6 +27,7 @@
 
 #include "glew-mx.h"
 
+#include "gpu_shader_create_info.hh"
 #include "gpu_shader_private.hh"
 
 namespace blender {
@@ -36,6 +37,9 @@ namespace gpu {
  * Implementation of shader compilation and uniforms handling using OpenGL.
  */
 class GLShader : public Shader {
+  friend shader::ShaderCreateInfo;
+  friend shader::StageInterfaceInfo;
+
  private:
   /** Handle for full program (links shader stages below). */
   GLuint shader_program_ = 0;
@@ -43,6 +47,7 @@ class GLShader : public Shader {
   GLuint vert_shader_ = 0;
   GLuint geom_shader_ = 0;
   GLuint frag_shader_ = 0;
+  GLuint compute_shader_ = 0;
   /** True if any shader failed to compile. */
   bool compilation_failed_ = false;
 
@@ -52,34 +57,55 @@ class GLShader : public Shader {
   GLShader(const char *name);
   ~GLShader();
 
-  /* Return true on success. */
+  /** Return true on success. */
   void vertex_shader_from_glsl(MutableSpan<const char *> sources) override;
   void geometry_shader_from_glsl(MutableSpan<const char *> sources) override;
   void fragment_shader_from_glsl(MutableSpan<const char *> sources) override;
-  bool finalize(void) override;
+  void compute_shader_from_glsl(MutableSpan<const char *> sources) override;
+  bool finalize(const shader::ShaderCreateInfo *info = nullptr) override;
 
+  std::string resources_declare(const shader::ShaderCreateInfo &info) const override;
+  std::string vertex_interface_declare(const shader::ShaderCreateInfo &info) const override;
+  std::string fragment_interface_declare(const shader::ShaderCreateInfo &info) const override;
+  std::string geometry_interface_declare(const shader::ShaderCreateInfo &info) const override;
+  std::string geometry_layout_declare(const shader::ShaderCreateInfo &info) const override;
+  std::string compute_layout_declare(const shader::ShaderCreateInfo &info) const override;
+
+  /** Should be called before linking. */
   void transform_feedback_names_set(Span<const char *> name_list,
-                                    const eGPUShaderTFBType geom_type) override;
+                                    eGPUShaderTFBType geom_type) override;
   bool transform_feedback_enable(GPUVertBuf *buf) override;
-  void transform_feedback_disable(void) override;
+  void transform_feedback_disable() override;
 
-  void bind(void) override;
-  void unbind(void) override;
+  void bind() override;
+  void unbind() override;
 
   void uniform_float(int location, int comp_len, int array_size, const float *data) override;
   void uniform_int(int location, int comp_len, int array_size, const int *data) override;
 
   void vertformat_from_shader(GPUVertFormat *format) const override;
 
-  /* DEPRECATED: Kept only because of BGL API. */
-  int program_handle_get(void) const override;
+  /** DEPRECATED: Kept only because of BGL API. */
+  int program_handle_get() const override;
 
  private:
-  char *glsl_patch_get(void);
+  char *glsl_patch_get(GLenum gl_stage);
 
+  /** Create, compile and attach the shader stage to the shader program. */
   GLuint create_shader_stage(GLenum gl_stage, MutableSpan<const char *> sources);
 
   MEM_CXX_CLASS_ALLOC_FUNCS("GLShader");
+};
+
+class GLLogParser : public GPULogParser {
+ public:
+  char *parse_line(char *log_line, GPULogItem &log_item) override;
+
+ protected:
+  char *skip_severity_prefix(char *log_line, GPULogItem &log_item);
+  char *skip_severity_keyword(char *log_line, GPULogItem &log_item);
+
+  MEM_CXX_CLASS_ALLOC_FUNCS("GLLogParser");
 };
 
 }  // namespace gpu

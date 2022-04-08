@@ -114,11 +114,11 @@ static void buffer_from_list_inputs_sort(ListBase *inputs)
 
     if (input->type == GPU_MAT3) {
       /* Alignment for mat3 is not handled currently, so not supported */
-      BLI_assert(!"mat3 not supported in UBO");
+      BLI_assert_msg(0, "mat3 not supported in UBO");
       continue;
     }
     if (input->type > MAX_UBO_GPU_TYPE) {
-      BLI_assert(!"GPU type not supported in UBO");
+      BLI_assert_msg(0, "GPU type not supported in UBO");
       continue;
     }
 
@@ -201,12 +201,6 @@ GPUUniformBuf *GPU_uniformbuf_create_ex(size_t size, const void *data, const cha
   return wrap(ubo);
 }
 
-/**
- * Create UBO from inputs list.
- * Return NULL if failed to create or if \param inputs: is empty.
- *
- * \param inputs: ListBase of #BLI_genericNodeN(#GPUInput).
- */
 GPUUniformBuf *GPU_uniformbuf_create_from_list(ListBase *inputs, const char *name)
 {
   /* There is no point on creating an UBO if there is no arguments. */
@@ -245,7 +239,7 @@ void GPU_uniformbuf_unbind(GPUUniformBuf *ubo)
   unwrap(ubo)->unbind();
 }
 
-void GPU_uniformbuf_unbind_all(void)
+void GPU_uniformbuf_unbind_all()
 {
   /* FIXME */
 }

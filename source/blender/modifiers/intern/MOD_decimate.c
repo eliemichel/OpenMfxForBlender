@@ -106,6 +106,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   DecimateModifierData *dmd = (DecimateModifierData *)md;
   Mesh *mesh = meshData, *result = NULL;
   BMesh *bm;
+  bool calc_vert_normal;
   bool calc_face_normal;
   float *vweights = NULL;
 
@@ -122,18 +123,21 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
         return mesh;
       }
       calc_face_normal = true;
+      calc_vert_normal = true;
       break;
     case MOD_DECIM_MODE_UNSUBDIV:
       if (dmd->iter == 0) {
         return mesh;
       }
       calc_face_normal = false;
+      calc_vert_normal = false;
       break;
     case MOD_DECIM_MODE_DISSOLVE:
       if (dmd->angle == 0.0f) {
         return mesh;
       }
       calc_face_normal = true;
+      calc_vert_normal = false;
       break;
     default:
       return mesh;
@@ -175,6 +179,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
                             &(struct BMeshCreateParams){0},
                             &(struct BMeshFromMeshParams){
                                 .calc_face_normal = calc_face_normal,
+                                .calc_vert_normal = calc_vert_normal,
                                 .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX,
                                                   .emask = CD_MASK_ORIGINDEX,
                                                   .pmask = CD_MASK_ORIGINDEX},
@@ -222,7 +227,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   TIMEIT_END(decim);
 #endif
 
-  result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+  BKE_mesh_normals_tag_dirty(result);
 
   return result;
 }
@@ -236,8 +241,8 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   int decimate_type = RNA_enum_get(ptr, "decimate_type");
-  char count_info[32];
-  snprintf(count_info, 32, "%s: %d", IFACE_("Face Count"), RNA_int_get(ptr, "face_count"));
+  char count_info[64];
+  snprintf(count_info, 32, TIP_("Face Count: %d"), RNA_int_get(ptr, "face_count"));
 
   uiItemR(layout, ptr, "decimate_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
@@ -300,7 +305,6 @@ ModifierTypeInfo modifierType_Decimate = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

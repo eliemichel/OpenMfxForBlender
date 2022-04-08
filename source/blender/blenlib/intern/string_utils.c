@@ -38,20 +38,6 @@
 #  pragma GCC diagnostic error "-Wsign-conversion"
 #endif
 
-/**
- * Looks for a numeric suffix preceded by delim character on the end of
- * name, puts preceding part into *left and value of suffix into *nr.
- * Returns the length of *left.
- *
- * Foo.001 -> "Foo", 1
- * Returning the length of "Foo"
- *
- * \param left: Where to return copy of part preceding delim
- * \param nr: Where to return value of numeric suffix
- * \param name: String to split
- * \param delim: Delimiter character
- * \return  Length of \a left
- */
 size_t BLI_split_name_num(char *left, int *nr, const char *name, const char delim)
 {
   const size_t name_len = strlen(name);
@@ -102,10 +88,6 @@ static bool is_char_sep(const char c)
   return ELEM(c, '.', ' ', '-', '_');
 }
 
-/**
- * based on `BLI_split_dirfile()` / `os.path.splitext()`,
- * `"a.b.c"` -> (`"a.b"`, `".c"`).
- */
 void BLI_string_split_suffix(const char *string, char *r_body, char *r_suf, const size_t str_len)
 {
   size_t len = BLI_strnlen(string, str_len);
@@ -124,9 +106,6 @@ void BLI_string_split_suffix(const char *string, char *r_body, char *r_suf, cons
   memcpy(r_body, string, len + 1);
 }
 
-/**
- * `"a.b.c"` -> (`"a."`, `"b.c"`)
- */
 void BLI_string_split_prefix(const char *string, char *r_pre, char *r_body, const size_t str_len)
 {
   size_t len = BLI_strnlen(string, str_len);
@@ -146,20 +125,10 @@ void BLI_string_split_prefix(const char *string, char *r_pre, char *r_body, cons
   BLI_strncpy(r_body, string, len);
 }
 
-/**
- * Finds the best possible flipped (left/right) name.
- * For renaming; check for unique names afterwards.
- *
- * \param r_name: flipped name,
- * assumed to be a pointer to a string of at least \a name_len size.
- * \param from_name: original name,
- * assumed to be a pointer to a string of at least \a name_len size.
- * \param strip_number: If set, remove number extensions.
- */
-void BLI_string_flip_side_name(char *r_name,
-                               const char *from_name,
-                               const bool strip_number,
-                               const size_t name_len)
+size_t BLI_string_flip_side_name(char *r_name,
+                                 const char *from_name,
+                                 const bool strip_number,
+                                 const size_t name_len)
 {
   size_t len;
   char *prefix = alloca(name_len);  /* The part before the facing */
@@ -172,18 +141,16 @@ void BLI_string_flip_side_name(char *r_name,
   *prefix = *suffix = *replace = *number = '\0';
 
   /* always copy the name, since this can be called with an uninitialized string */
-  BLI_strncpy(r_name, from_name, name_len);
-
-  len = BLI_strnlen(from_name, name_len);
+  len = BLI_strncpy_rlen(r_name, from_name, name_len);
   if (len < 3) {
     /* we don't do names like .R or .L */
-    return;
+    return len;
   }
 
   /* We first check the case with a .### extension, let's find the last period */
   if (isdigit(r_name[len - 1])) {
-    index = strrchr(r_name, '.');     /* last occurrence. */
-    if (index && isdigit(index[1])) { /* doesn't handle case bone.1abc2 correct..., whatever! */
+    index = strrchr(r_name, '.');     /* Last occurrence. */
+    if (index && isdigit(index[1])) { /* Doesn't handle case `bone.1abc2` correct..., whatever! */
       if (strip_number == false) {
         BLI_strncpy(number, index, name_len);
       }
@@ -194,7 +161,7 @@ void BLI_string_flip_side_name(char *r_name,
 
   BLI_strncpy(prefix, r_name, name_len);
 
-  /* first case; separator . - _ with extensions r R l L  */
+  /* First case; separator (`.` or `_`) with extensions in `r R l L`. */
   if ((len > 1) && is_char_sep(r_name[len - 2])) {
     is_set = true;
     switch (r_name[len - 1]) {
@@ -274,23 +241,11 @@ void BLI_string_flip_side_name(char *r_name,
     }
   }
 
-  BLI_snprintf(r_name, name_len, "%s%s%s%s", prefix, replace, suffix, number);
+  return BLI_snprintf_rlen(r_name, name_len, "%s%s%s%s", prefix, replace, suffix, number);
 }
 
 /* Unique name utils. */
 
-/**
- * Ensures name is unique (according to criteria specified by caller in unique_check callback),
- * incrementing its numeric suffix as necessary. Returns true if name had to be adjusted.
- *
- * \param unique_check: Return true if name is not unique
- * \param arg: Additional arg to unique_check--meaning is up to caller
- * \param defname: To initialize name if latter is empty
- * \param delim: Delimits numeric suffix in name
- * \param name: Name to be ensured unique
- * \param name_len: Maximum length of name area
- * \return true if there if the name was changed
- */
 bool BLI_uniquename_cb(UniquenameCheckCallback unique_check,
                        void *arg,
                        const char *defname,
@@ -367,17 +322,6 @@ static bool uniquename_unique_check(void *arg, const char *name)
   return uniquename_find_dupe(data->lb, data->vlink, name, data->name_offset);
 }
 
-/**
- * Ensures that the specified block has a unique name within the containing list,
- * incrementing its numeric suffix as necessary. Returns true if name had to be adjusted.
- *
- * \param list: List containing the block
- * \param vlink: The block to check the name for
- * \param defname: To initialize block name if latter is empty
- * \param delim: Delimits numeric suffix in name
- * \param name_offset: Offset of name within block structure
- * \param name_len: Maximum length of name area
- */
 bool BLI_uniquename(
     ListBase *list, void *vlink, const char *defname, char delim, int name_offset, size_t name_len)
 {
@@ -433,9 +377,6 @@ char *BLI_string_join_array(char *result,
   return c;
 }
 
-/**
- * A version of #BLI_string_join that takes a separator which can be any character including '\0'.
- */
 char *BLI_string_join_array_by_sep_char(
     char *result, size_t result_len, char sep, const char *strings[], uint strings_len)
 {
@@ -456,9 +397,6 @@ char *BLI_string_join_array_by_sep_char(
   return c;
 }
 
-/**
- * Join an array of strings into a newly allocated, null terminated string.
- */
 char *BLI_string_join_arrayN(const char *strings[], uint strings_len)
 {
   uint total_len = 1;
@@ -470,12 +408,11 @@ char *BLI_string_join_arrayN(const char *strings[], uint strings_len)
   for (uint i = 0; i < strings_len; i++) {
     c += BLI_strcpy_rlen(c, strings[i]);
   }
+  /* Only needed when `strings_len == 0`. */
+  *c = '\0';
   return result;
 }
 
-/**
- * A version of #BLI_string_joinN that takes a separator which can be any character including '\0'.
- */
 char *BLI_string_join_array_by_sep_charN(char sep, const char *strings[], uint strings_len)
 {
   uint total_len = 0;
@@ -500,10 +437,6 @@ char *BLI_string_join_array_by_sep_charN(char sep, const char *strings[], uint s
   return result;
 }
 
-/**
- * A version of #BLI_string_join_array_by_sep_charN that takes a table array.
- * The new location of each string is written into this array.
- */
 char *BLI_string_join_array_by_sep_char_with_tableN(char sep,
                                                     char *table[],
                                                     const char *strings[],

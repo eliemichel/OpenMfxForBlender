@@ -6,6 +6,7 @@ from bpy.props import (
     FloatProperty,
 )
 
+
 def add_box(width, height, depth):
     """
     This function takes inputs and returns vertex and face arrays.
@@ -96,7 +97,7 @@ class AddBox(bpy.types.Operator, AddObjectHelper):
 def menu_func(self, context):
     self.layout.operator(AddBox.bl_idname, icon='MESH_CUBE')
 
-
+# Register and add to the "add mesh" menu (required to use F3 search "Add Box" for quick access)
 def register():
     bpy.utils.register_class(AddBox)
     bpy.types.VIEW3D_MT_mesh_add.append(menu_func)

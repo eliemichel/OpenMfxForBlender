@@ -81,9 +81,11 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
     return;
   }
 
-  if (TRIM_NVIDIA_BUFFER_INFO &&
-      GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_OFFICIAL) &&
-      STRPREFIX(message, "Buffer detailed info")) {
+  /* NOTE: callback function can be triggered during before the platform is initialized.
+   *       In this case invoking `GPU_type_matches` would fail and
+   *       therefore the message is checked before the platform matching. */
+  if (TRIM_NVIDIA_BUFFER_INFO && STRPREFIX(message, "Buffer detailed info") &&
+      GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_OFFICIAL)) {
     /** Suppress buffer infos flooding the output. */
     return;
   }
@@ -106,6 +108,11 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
     GPU_debug_get_groups_names(sizeof(debug_groups), debug_groups);
     CLG_Severity clog_severity;
 
+    if (GPU_debug_group_match(GPU_DEBUG_SHADER_COMPILATION_GROUP)) {
+      /** Do not duplicate shader compilation error/warnings. */
+      return;
+    }
+
     switch (type) {
       case GL_DEBUG_TYPE_ERROR:
       case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
@@ -121,7 +128,7 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
         break;
     }
 
-    if (((LOG.type->flag & CLG_FLAG_USE) && (LOG.type->level >= clog_severity))) {
+    if (((LOG.type->flag & CLG_FLAG_USE) && (LOG.type->level <= clog_severity))) {
       CLG_logf(LOG.type, clog_severity, debug_groups, "", "%s", message);
       if (severity == GL_DEBUG_SEVERITY_HIGH) {
         /* Focus on error message. */
@@ -140,7 +147,6 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
 
 #undef APIENTRY
 
-/* This function needs to be called once per context. */
 void init_gl_callbacks()
 {
   CLOG_ENSURE(&LOG);
@@ -190,6 +196,9 @@ void init_gl_callbacks()
 
 void check_gl_error(const char *info)
 {
+  if (!(G.debug & G_DEBUG_GPU)) {
+    return;
+  }
   GLenum error = glGetError();
 
 #define ERROR_CASE(err) \
@@ -338,7 +347,7 @@ void object_label(GLenum type, GLuint object, const char *name)
     char label[64];
     SNPRINTF(label, "%s%s%s", to_str_prefix(type), name, to_str_suffix(type));
     /* Small convenience for caller. */
-    if (ELEM(type, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_VERTEX_SHADER)) {
+    if (ELEM(type, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_VERTEX_SHADER, GL_COMPUTE_SHADER)) {
       type = GL_SHADER;
     }
     if (ELEM(type, GL_UNIFORM_BUFFER)) {

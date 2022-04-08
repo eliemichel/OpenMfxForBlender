@@ -16,8 +16,9 @@
 
 #pragma once
 
-#include "BLI_float3.hh"
 #include "BLI_math_matrix.h"
+#include "BLI_math_vec_types.hh"
+#include "BLI_math_vector.h"
 
 namespace blender {
 
@@ -45,6 +46,50 @@ struct float4x4 {
     return mat;
   }
 
+  static float4x4 from_location(const float3 location)
+  {
+    float4x4 mat = float4x4::identity();
+    copy_v3_v3(mat.values[3], location);
+    return mat;
+  }
+
+  static float4x4 from_normalized_axis_data(const float3 location,
+                                            const float3 forward,
+                                            const float3 up)
+  {
+    BLI_ASSERT_UNIT_V3(forward);
+    BLI_ASSERT_UNIT_V3(up);
+
+    /* Negate the cross product so that the resulting matrix has determinant 1 (instead of -1).
+     * Without the negation, the result would be a so called improper rotation. That means it
+     * contains a reflection. Such an improper rotation matrix could not be converted to another
+     * representation of a rotation such as euler angles. */
+    const float3 cross = -math::cross(forward, up);
+
+    float4x4 matrix;
+    matrix.values[0][0] = forward.x;
+    matrix.values[1][0] = cross.x;
+    matrix.values[2][0] = up.x;
+    matrix.values[3][0] = location.x;
+
+    matrix.values[0][1] = forward.y;
+    matrix.values[1][1] = cross.y;
+    matrix.values[2][1] = up.y;
+    matrix.values[3][1] = location.y;
+
+    matrix.values[0][2] = forward.z;
+    matrix.values[1][2] = cross.z;
+    matrix.values[2][2] = up.z;
+    matrix.values[3][2] = location.z;
+
+    matrix.values[0][3] = 0.0f;
+    matrix.values[1][3] = 0.0f;
+    matrix.values[2][3] = 0.0f;
+    matrix.values[3][3] = 1.0f;
+
+    return matrix;
+  }
+
   static float4x4 identity()
   {
     float4x4 mat;
@@ -60,6 +105,20 @@ struct float4x4 {
   operator const float *() const
   {
     return &values[0][0];
+  }
+
+  float *operator[](const int64_t index)
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < 4);
+    return &values[index][0];
+  }
+
+  const float *operator[](const int64_t index) const
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < 4);
+    return &values[index][0];
   }
 
   using c_style_float4x4 = float[4][4];
@@ -78,6 +137,11 @@ struct float4x4 {
     float4x4 result;
     mul_m4_m4m4(result.values, a.values, b.values);
     return result;
+  }
+
+  void operator*=(const float4x4 &other)
+  {
+    mul_m4_m4_post(values, other.values);
   }
 
   /**
@@ -114,6 +178,19 @@ struct float4x4 {
     float3 scale;
     mat4_to_size(scale, values);
     return scale;
+  }
+
+  void apply_scale(const float scale)
+  {
+    values[0][0] *= scale;
+    values[0][1] *= scale;
+    values[0][2] *= scale;
+    values[1][0] *= scale;
+    values[1][1] *= scale;
+    values[1][2] *= scale;
+    values[2][0] *= scale;
+    values[2][1] *= scale;
+    values[2][2] *= scale;
   }
 
   float4x4 inverted() const
@@ -166,6 +243,11 @@ struct float4x4 {
     float result[4][4];
     interp_m4_m4m4(result, a.values, b.values, t);
     return result;
+  }
+
+  bool is_negative() const
+  {
+    return is_negative_m4(ptr());
   }
 
   uint64_t hash() const

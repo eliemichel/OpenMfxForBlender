@@ -62,7 +62,7 @@ class UnitConverter {
 
   float getLinearMeter(void);
 
-  /* TODO need also for angle conversion, time conversion... */
+  /* TODO: need also for angle conversion, time conversion... */
 
   static void dae_matrix_to_mat4_(float out[4][4], const COLLADABU::Math::Matrix4 &in);
   static void mat4_to_dae(float out[4][4], float in[4][4]);
@@ -76,6 +76,7 @@ class UnitConverter {
 extern void clear_global_id_map();
 /** Look at documentation of translate_map */
 extern std::string translate_id(const std::string &id);
+/** Look at documentation of translate_map */
 extern std::string translate_id(const char *idString);
 
 extern std::string id_name(void *id);

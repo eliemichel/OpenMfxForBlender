@@ -102,7 +102,7 @@ int info_report_mask(const SpaceInfo *UNUSED(sinfo))
 
 static int report_replay_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  /* TODO, get this working again! */
+  /* TODO: get this working again! */
 #if 0
   SpaceInfo *sc = CTX_wm_space_info(C);
   ReportList *reports = CTX_wm_reports(C);
@@ -299,6 +299,7 @@ static int box_select_exec(bContext *C, wmOperator *op)
 }
 
 /* ****** Box Select ****** */
+
 void INFO_OT_select_box(wmOperatorType *ot)
 {
   /* identifiers */
@@ -360,7 +361,7 @@ void INFO_OT_report_delete(wmOperatorType *ot)
   ot->exec = report_delete_exec;
 
   /* flags */
-  /*ot->flag = OPTYPE_REGISTER;*/
+  // ot->flag = OPTYPE_REGISTER;
 
   /* properties */
 }
@@ -404,7 +405,7 @@ void INFO_OT_report_copy(wmOperatorType *ot)
   ot->exec = report_copy_exec;
 
   /* flags */
-  /*ot->flag = OPTYPE_REGISTER;*/
+  // ot->flag = OPTYPE_REGISTER;
 
   /* properties */
 }

@@ -128,25 +128,20 @@ if(WITH_CODEC_SNDFILE)
 endif()
 
 if(WITH_PYTHON)
-  # we use precompiled libraries for py 3.9 and up by default
-  set(PYTHON_VERSION 3.9)
+  # Use precompiled libraries by default.
+  set(PYTHON_VERSION 3.10)
   if(NOT WITH_PYTHON_MODULE AND NOT WITH_PYTHON_FRAMEWORK)
-    # normally cached but not since we include them with blender
+    # Normally cached but not since we include them with blender.
     set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}")
     set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}")
     set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}.a)
     set(PYTHON_LIBPATH "${LIBDIR}/python/lib/python${PYTHON_VERSION}")
-    # set(PYTHON_LINKFLAGS "-u _PyMac_Error")  # won't  build with this enabled
   else()
-    # module must be compiled against Python framework
+    # Module must be compiled against Python framework.
     set(_py_framework "/Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}")
-
     set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}")
     set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}")
     set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}")
-    # set(PYTHON_LIBRARY python${PYTHON_VERSION})
-    # set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
-
     unset(_py_framework)
   endif()
 
@@ -166,13 +161,18 @@ if(WITH_FFTW3)
   find_package(Fftw3)
 endif()
 
+# FreeType compiled with Brotli compression for woff2.
 find_package(Freetype REQUIRED)
+list(APPEND FREETYPE_LIBRARIES
+  ${LIBDIR}/brotli/lib/libbrotlicommon-static.a
+  ${LIBDIR}/brotli/lib/libbrotlidec-static.a)
 
 if(WITH_IMAGE_OPENEXR)
   find_package(OpenEXR)
 endif()
 
 if(WITH_CODEC_FFMPEG)
+  set(FFMPEG_ROOT_DIR ${LIBDIR}/ffmpeg)
   set(FFMPEG_FIND_COMPONENTS
     avcodec avdevice avformat avutil
     mp3lame ogg opus swresample swscale
@@ -257,9 +257,6 @@ if(WITH_BOOST)
   if(WITH_INTERNATIONAL)
     list(APPEND _boost_FIND_COMPONENTS locale)
   endif()
-  if(WITH_CYCLES_NETWORK)
-    list(APPEND _boost_FIND_COMPONENTS serialization)
-  endif()
   if(WITH_OPENVDB)
     list(APPEND _boost_FIND_COMPONENTS iostreams)
   endif()
@@ -339,7 +336,7 @@ if(WITH_LLVM)
 
 endif()
 
-if(WITH_CYCLES_OSL)
+if(WITH_CYCLES AND WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl)
 
   find_library(OSL_LIB_EXEC NAMES oslexec PATHS ${CYCLES_OSL}/lib)
@@ -359,7 +356,7 @@ if(WITH_CYCLES_OSL)
   endif()
 endif()
 
-if(WITH_CYCLES_EMBREE)
+if(WITH_CYCLES AND WITH_CYCLES_EMBREE)
   find_package(Embree 3.8.0 REQUIRED)
   # Increase stack size for Embree, only works for executables.
   if(NOT WITH_PYTHON_MODULE)
@@ -388,6 +385,10 @@ endif()
 
 if(WITH_TBB)
   find_package(TBB)
+  if(NOT TBB_FOUND)
+    message(WARNING "TBB not found, disabling WITH_TBB")
+    set(WITH_TBB OFF)
+  endif()
 endif()
 
 if(WITH_POTRACE)
@@ -400,32 +401,16 @@ endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
 if(WITH_OPENMP)
-  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # Use OpenMP from our precompiled libraries.
     message(STATUS "Using ${LIBDIR}/openmp for OpenMP")
     set(OPENMP_CUSTOM ON)
     set(OPENMP_FOUND ON)
     set(OpenMP_C_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
-    set(OpenMP_LINKER_FLAGS "-L'${LIBDIR}/openmp/lib' -lomp")
-
-    # Copy libomp.dylib to allow executables like datatoc and tests to work.
-    # `@executable_path/../Resources/lib/` `LC_ID_DYLIB` is added by the deps builder.
-    # For single config generator datatoc, tests etc.
-    execute_process(
-      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
-      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib
-    )
-    # For multi-config generator datatoc, etc.
-    execute_process(
-      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
-      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib
-    )
-    # For multi-config generator tests.
-    execute_process(
-      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/tests/Resources/lib
-      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/tests/Resources/lib/libomp.dylib
-    )
+    set(OpenMP_LIBRARY_DIR "${LIBDIR}/openmp/lib/")
+    set(OpenMP_LINKER_FLAGS "-L'${OpenMP_LIBRARY_DIR}' -lomp")
+    set(OpenMP_LIBRARY "${OpenMP_LIBRARY_DIR}/libomp.dylib")
   endif()
 endif()
 
@@ -453,6 +438,9 @@ if(WITH_HARU)
   endif()
 endif()
 
+set(ZSTD_ROOT_DIR ${LIBDIR}/zstd)
+find_package(Zstd REQUIRED)
+
 if(EXISTS ${LIBDIR})
   without_system_libs_end()
 endif()
@@ -476,10 +464,8 @@ else()
   set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
 endif()
 
-if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
-  # Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
-  string(APPEND CMAKE_CXX_FLAGS " -ftemplate-depth=1024")
-endif()
+# Clang has too low template depth of 128 for libmv.
+string(APPEND CMAKE_CXX_FLAGS " -ftemplate-depth=1024")
 
 # Avoid conflicts with Luxrender, and other plug-ins that may use the same
 # libraries as Blender with a different version or build options.
@@ -493,8 +479,11 @@ string(APPEND PLATFORM_LINKFLAGS " -stdlib=libc++")
 # Suppress ranlib "has no symbols" warnings (workaround for T48250)
 set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
 set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
-set(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
-set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+# llvm-ranlib doesn't support this flag. Xcode's libtool does.
+if(NOT ${CMAKE_RANLIB} MATCHES ".*llvm-ranlib$")
+  set(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+  set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+endif()
 
 if(WITH_COMPILER_CCACHE)
   if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
@@ -509,3 +498,18 @@ if(WITH_COMPILER_CCACHE)
     endif()
   endif()
 endif()
+
+# For binaries that are built but not installed (also not distributed) (datatoc,
+# makesdna, tests, etc.), we add an rpath to the OpenMP library dir through
+# CMAKE_BUILD_RPATH. This avoids having to make many copies of the dylib next to each binary.
+#
+# For the installed Python module and installed Blender executable, CMAKE_INSTALL_RPATH
+# is modified to find the dylib in an adjacent folder. Install step puts the libraries there.
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+list(APPEND CMAKE_BUILD_RPATH "${OpenMP_LIBRARY_DIR}")
+
+set(CMAKE_SKIP_INSTALL_RPATH FALSE)
+list(APPEND CMAKE_INSTALL_RPATH "@loader_path/../Resources/${BLENDER_VERSION}/lib")
+
+# Same as `CFBundleIdentifier` in Info.plist.
+set(CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.blenderfoundation.blender")

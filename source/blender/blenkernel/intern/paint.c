@@ -108,14 +108,13 @@ static void palette_free_data(ID *id)
 static void palette_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Palette *palette = (Palette *)id;
-  if (palette->id.us > 0 || BLO_write_is_undo(writer)) {
-    PaletteColor *color;
-    BLO_write_id_struct(writer, Palette, id_address, &palette->id);
-    BKE_id_blend_write(writer, &palette->id);
 
-    for (color = palette->colors.first; color; color = color->next) {
-      BLO_write_struct(writer, PaletteColor, color);
-    }
+  PaletteColor *color;
+  BLO_write_id_struct(writer, Palette, id_address, &palette->id);
+  BKE_id_blend_write(writer, &palette->id);
+
+  for (color = palette->colors.first; color; color = color->next) {
+    BLO_write_struct(writer, PaletteColor, color);
   }
 }
 
@@ -128,8 +127,8 @@ static void palette_blend_read_data(BlendDataReader *reader, ID *id)
 static void palette_undo_preserve(BlendLibReader *UNUSED(reader), ID *id_new, ID *id_old)
 {
   /* Whole Palette is preserved across undo-steps, and it has no extra pointer, simple. */
-  /* Note: We do not care about potential internal references to self here, Palette has none. */
-  /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
+  /* NOTE: We do not care about potential internal references to self here, Palette has none. */
+  /* NOTE: We do not swap IDProperties, as dealing with potential ID pointers in those would be
    *       fairly delicate. */
   BKE_lib_id_swap(NULL, id_new, id_old);
   SWAP(IDProperty *, id_new->properties, id_old->properties);
@@ -144,6 +143,7 @@ IDTypeInfo IDType_ID_PAL = {
     .name_plural = "palettes",
     .translation_context = BLT_I18NCONTEXT_ID_PALETTE,
     .flags = IDTYPE_FLAGS_NO_ANIMDATA,
+    .asset_type_info = NULL,
 
     .init_data = palette_init_data,
     .copy_data = palette_copy_data,
@@ -151,6 +151,7 @@ IDTypeInfo IDType_ID_PAL = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = palette_blend_write,
@@ -187,12 +188,11 @@ static void paint_curve_free_data(ID *id)
 static void paint_curve_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   PaintCurve *pc = (PaintCurve *)id;
-  if (pc->id.us > 0 || BLO_write_is_undo(writer)) {
-    BLO_write_id_struct(writer, PaintCurve, id_address, &pc->id);
-    BKE_id_blend_write(writer, &pc->id);
 
-    BLO_write_struct_array(writer, PaintCurvePoint, pc->tot_points, pc->points);
-  }
+  BLO_write_id_struct(writer, PaintCurve, id_address, &pc->id);
+  BKE_id_blend_write(writer, &pc->id);
+
+  BLO_write_struct_array(writer, PaintCurvePoint, pc->tot_points, pc->points);
 }
 
 static void paint_curve_blend_read_data(BlendDataReader *reader, ID *id)
@@ -210,6 +210,7 @@ IDTypeInfo IDType_ID_PC = {
     .name_plural = "paint_curves",
     .translation_context = BLT_I18NCONTEXT_ID_PAINTCURVE,
     .flags = IDTYPE_FLAGS_NO_ANIMDATA,
+    .asset_type_info = NULL,
 
     .init_data = NULL,
     .copy_data = paint_curve_copy_data,
@@ -217,6 +218,7 @@ IDTypeInfo IDType_ID_PC = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = paint_curve_blend_write,
@@ -725,7 +727,6 @@ void BKE_paint_curve_clamp_endpoint_add_index(PaintCurve *pc, const int add_inde
   pc->add_index = (add_index || pc->tot_points == 1) ? (add_index + 1) : 0;
 }
 
-/** Remove color from palette. Must be certain color is inside the palette! */
 void BKE_palette_color_remove(Palette *palette, PaletteColor *color)
 {
   if (BLI_listbase_count_at_most(&palette->colors, palette->active_color) ==
@@ -880,7 +881,7 @@ static int palettecolor_compare_luminance(const void *a1, const void *a2)
 
 void BKE_palette_sort_hsv(tPaletteColorHSV *color_array, const int totcol)
 {
-  /* Sort by Hue , Saturation and Value. */
+  /* Sort by Hue, Saturation and Value. */
   qsort(color_array, totcol, sizeof(tPaletteColorHSV), palettecolor_compare_hsv);
 }
 
@@ -964,7 +965,6 @@ bool BKE_palette_from_hash(Main *bmain, GHash *color_table, const char *name, co
   return done;
 }
 
-/* are we in vertex paint or weight paint face select mode? */
 bool BKE_paint_select_face_test(Object *ob)
 {
   return ((ob != NULL) && (ob->type == OB_MESH) && (ob->data != NULL) &&
@@ -972,7 +972,6 @@ bool BKE_paint_select_face_test(Object *ob)
           (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)));
 }
 
-/* are we in weight paint vertex select mode? */
 bool BKE_paint_select_vert_test(Object *ob)
 {
   return ((ob != NULL) && (ob->type == OB_MESH) && (ob->data != NULL) &&
@@ -980,10 +979,6 @@ bool BKE_paint_select_vert_test(Object *ob)
           (ob->mode & OB_MODE_WEIGHT_PAINT || ob->mode & OB_MODE_VERTEX_PAINT));
 }
 
-/**
- * used to check if selection is possible
- * (when we don't care if its face or vert)
- */
 bool BKE_paint_select_elem_test(Object *ob)
 {
   return (BKE_paint_select_vert_test(ob) || BKE_paint_select_face_test(ob));
@@ -1026,9 +1021,6 @@ eObjectMode BKE_paint_object_mode_from_paintmode(ePaintMode mode)
   }
 }
 
-/**
- * Call when entering each respective paint mode.
- */
 bool BKE_paint_ensure(ToolSettings *ts, struct Paint **r_paint)
 {
   Paint *paint = NULL;
@@ -1149,10 +1141,6 @@ void BKE_paint_free(Paint *paint)
   MEM_SAFE_FREE(paint->tool_slots);
 }
 
-/* called when copying scene settings, so even if 'src' and 'tar' are the same
- * still do a id_us_plus(), rather than if we were copying between 2 existing
- * scenes where a matching value should decrease the existing user count as
- * with paint_brush_set() */
 void BKE_paint_copy(Paint *src, Paint *tar, const int flag)
 {
   tar->brush = src->brush;
@@ -1232,8 +1220,6 @@ void BKE_paint_blend_read_lib(BlendLibReader *reader, Scene *sce, Paint *p)
   }
 }
 
-/* returns non-zero if any of the face's vertices
- * are hidden, zero otherwise */
 bool paint_is_face_hidden(const MLoopTri *lt, const MVert *mvert, const MLoop *mloop)
 {
   return ((mvert[mloop[lt->tri[0]].v].flag & ME_HIDE) ||
@@ -1241,9 +1227,6 @@ bool paint_is_face_hidden(const MLoopTri *lt, const MVert *mvert, const MLoop *m
           (mvert[mloop[lt->tri[2]].v].flag & ME_HIDE));
 }
 
-/* returns non-zero if any of the corners of the grid
- * face whose inner corner is at (x, y) are hidden,
- * zero otherwise */
 bool paint_is_grid_face_hidden(const uint *grid_hidden, int gridsize, int x, int y)
 {
   /* skip face if any of its corners are hidden */
@@ -1253,7 +1236,6 @@ bool paint_is_grid_face_hidden(const uint *grid_hidden, int gridsize, int x, int
           BLI_BITMAP_TEST(grid_hidden, (y + 1) * gridsize + x));
 }
 
-/* Return true if all vertices in the face are visible, false otherwise */
 bool paint_is_bmesh_face_hidden(BMFace *f)
 {
   BMLoop *l_iter;
@@ -1522,8 +1504,6 @@ void BKE_sculptsession_free(Object *ob)
   }
 }
 
-/* Sculpt mode handles multires differently from regular meshes, but only if
- * it's the last modifier on the stack and it is not on the first level */
 MultiresModifierData *BKE_sculpt_multires_active(Scene *scene, Object *ob)
 {
   Mesh *me = (Mesh *)ob->data;
@@ -1810,10 +1790,9 @@ void BKE_sculpt_color_layer_create_if_needed(struct Object *object)
 
   CustomData_add_layer(&orig_me->vdata, CD_PROP_COLOR, CD_DEFAULT, NULL, orig_me->totvert);
   BKE_mesh_update_customdata_pointers(orig_me, true);
-  DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
+  DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY_ALL_MODES);
 }
 
-/** \warning Expects a fully evaluated depsgraph. */
 void BKE_sculpt_update_object_for_edit(
     Depsgraph *depsgraph, Object *ob_orig, bool need_pmap, bool need_mask, bool need_colors)
 {
@@ -1943,10 +1922,6 @@ static bool check_sculpt_object_deformed(Object *object, const bool for_construc
   return deformed;
 }
 
-/**
- * Ensures that a Face Set data-layers exists. If it does not, it creates one respecting the
- * visibility stored in the vertices of the mesh. If it does, it copies the visibility from the
- * mesh to the Face Sets. */
 void BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(Mesh *mesh)
 {
   const int face_sets_default_visible_id = 1;
@@ -2048,12 +2023,6 @@ void BKE_sculpt_sync_face_set_visibility(struct Mesh *mesh, struct SubdivCCG *su
   BKE_sculpt_sync_face_sets_visibility_to_grids(mesh, subdiv_ccg);
 }
 
-/**
- * Ensures we do have expected mesh data in original mesh for the sculpt mode.
- *
- * \note IDs are expected to be original ones here, and calling code should ensure it updates its
- * depsgraph properly after calling this function if it needs up-to-date evaluated data.
- */
 void BKE_sculpt_ensure_orig_mesh_data(Scene *scene, Object *object)
 {
   Mesh *mesh = BKE_mesh_from_object(object);
@@ -2067,7 +2036,7 @@ void BKE_sculpt_ensure_orig_mesh_data(Scene *scene, Object *object)
     /* If a sculpt session is active, ensure we have its faceset data porperly up-to-date. */
     object->sculpt->face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
 
-    /* Note: In theory we could add that on the fly when required by sculpt code.
+    /* NOTE: In theory we could add that on the fly when required by sculpt code.
      * But this then requires proper update of depsgraph etc. For now we play safe, optimization is
      * always possible later if it's worth it. */
     BKE_sculpt_mask_layers_ensure(object, mmd);
@@ -2225,8 +2194,6 @@ void BKE_sculpt_bvh_update_from_ccg(PBVH *pbvh, SubdivCCG *subdiv_ccg)
                         subdiv_ccg->grid_hidden);
 }
 
-/* Test if PBVH can be used directly for drawing, which is faster than
- * drawing the mesh and all updates that come with it. */
 bool BKE_sculptsession_use_pbvh_draw(const Object *ob, const View3D *v3d)
 {
   SculptSession *ss = ob->sculpt;

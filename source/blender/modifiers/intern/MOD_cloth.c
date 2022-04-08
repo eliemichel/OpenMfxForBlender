@@ -194,19 +194,16 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   }
 
   BKE_ptcache_free_list(&tclmd->ptcaches);
-  if (flag & LIB_ID_CREATE_NO_MAIN) {
+  if (flag & LIB_ID_COPY_SET_COPIED_ON_WRITE) {
     /* Share the cache with the original object's modifier. */
     tclmd->modifier.flag |= eModifierFlag_SharedCaches;
     tclmd->ptcaches = clmd->ptcaches;
     tclmd->point_cache = clmd->point_cache;
   }
   else {
-    tclmd->point_cache = BKE_ptcache_add(&tclmd->ptcaches);
-    if (clmd->point_cache != NULL) {
-      tclmd->point_cache->step = clmd->point_cache->step;
-      tclmd->point_cache->startframe = clmd->point_cache->startframe;
-      tclmd->point_cache->endframe = clmd->point_cache->endframe;
-    }
+    const int clmd_point_cache_index = BLI_findindex(&clmd->ptcaches, clmd->point_cache);
+    BKE_ptcache_copy_list(&tclmd->ptcaches, &clmd->ptcaches, flag);
+    tclmd->point_cache = BLI_findlink(&tclmd->ptcaches, clmd_point_cache_index);
   }
 
   tclmd->sim_parms = MEM_dupallocN(clmd->sim_parms);
@@ -219,7 +216,9 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   tclmd->solver_result = NULL;
 }
 
-static bool dependsOnTime(ModifierData *UNUSED(md))
+static bool dependsOnTime(struct Scene *UNUSED(scene),
+                          ModifierData *UNUSED(md),
+                          const int UNUSED(dag_eval_mode))
 {
   return true;
 }
@@ -282,7 +281,7 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
+  uiItemL(layout, TIP_("Settings are inside the Physics tab"), ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }
@@ -311,7 +310,6 @@ ModifierTypeInfo modifierType_Cloth = {
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

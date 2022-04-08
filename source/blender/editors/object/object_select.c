@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "MEM_guardedalloc.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_collection_types.h"
@@ -87,14 +89,6 @@
 /** \name Public Object Selection API
  * \{ */
 
-/**
- * Simple API for object selection, rather than just using the flag
- * this takes into account the 'restrict selection in 3d view' flag.
- * deselect works always, the restriction just prevents selection
- *
- * \note Caller must send a `NC_SCENE | ND_OB_SELECT` notifier
- * (or a `NC_SCENE | ND_OB_VISIBLE` in case of visibility toggling).
- */
 void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
 {
   if (mode == BA_INVERT) {
@@ -119,9 +113,6 @@ void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
   }
 }
 
-/**
- * Call when the active base has changed.
- */
 void ED_object_base_active_refresh(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
   WM_main_add_notifier(NC_SCENE | ND_OB_ACTIVE, scene);
@@ -132,9 +123,6 @@ void ED_object_base_active_refresh(Main *bmain, Scene *scene, ViewLayer *view_la
   }
 }
 
-/**
- * Change active base, it includes the notifier
- */
 void ED_object_base_activate(bContext *C, Base *base)
 {
   Scene *scene = CTX_data_scene(C);
@@ -240,10 +228,6 @@ static int get_base_select_priority(Base *base)
   return 1;
 }
 
-/**
- * If id is not already an Object, try to find an object that uses it as data.
- * Prefers active, then selected, then visible/selectable.
- */
 Base *ED_object_find_first_by_data_id(ViewLayer *view_layer, ID *id)
 {
   BLI_assert(OB_DATA_SUPPORT_ID(GS(id->name)));
@@ -277,12 +261,6 @@ Base *ED_object_find_first_by_data_id(ViewLayer *view_layer, ID *id)
   return base_best;
 }
 
-/**
- * Select and make the target object active in the view layer.
- * If already selected, selection isn't changed.
- *
- * \returns false if not found in current view layer
- */
 bool ED_object_jump_to_object(bContext *C, Object *ob, const bool UNUSED(reveal_hidden))
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -293,7 +271,7 @@ bool ED_object_jump_to_object(bContext *C, Object *ob, const bool UNUSED(reveal_
     return false;
   }
 
-  /* TODO, use 'reveal_hidden', as is done with bones. */
+  /* TODO: use 'reveal_hidden', as is done with bones. */
 
   if (view_layer->basact != base || !(base->flag & BASE_SELECTED)) {
     /* Select if not selected. */
@@ -314,13 +292,6 @@ bool ED_object_jump_to_object(bContext *C, Object *ob, const bool UNUSED(reveal_
   return true;
 }
 
-/**
- * Select and make the target object and bone active.
- * Switches to Pose mode if in Object mode so the selection is visible.
- * Un-hides the target bone and bone layer if necessary.
- *
- * \returns false if object not in layer, bone not found, or other error
- */
 bool ED_object_jump_to_bone(bContext *C,
                             Object *ob,
                             const char *bone_name,
@@ -579,7 +550,7 @@ static bool object_select_all_by_particle(bContext *C, Object *ob)
 
   CTX_DATA_BEGIN (C, Base *, base, visible_bases) {
     if (((base->flag & BASE_SELECTED) == 0) && ((base->flag & BASE_SELECTABLE) != 0)) {
-      /* loop through other particles*/
+      /* Loop through other particles. */
       ParticleSystem *psys;
 
       for (psys = base->object->particlesystem.first; psys; psys = psys->next) {
@@ -1454,20 +1425,28 @@ void OBJECT_OT_select_less(wmOperatorType *ot)
 
 static int object_select_random_exec(bContext *C, wmOperator *op)
 {
+  const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
   const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
-  const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
 
-  RNG *rng = BLI_rng_new_srandom(seed);
+  ListBase ctx_data_list;
+  CTX_data_selectable_bases(C, &ctx_data_list);
+  const int tot = BLI_listbase_count(&ctx_data_list);
+  int elem_map_len = 0;
+  Base **elem_map = MEM_mallocN(sizeof(*elem_map) * tot, __func__);
 
-  CTX_DATA_BEGIN (C, Base *, base, selectable_bases) {
-    if (BLI_rng_get_float(rng) < randfac) {
-      ED_object_base_select(base, select);
-    }
+  CollectionPointerLink *ctx_link;
+  for (ctx_link = ctx_data_list.first; ctx_link; ctx_link = ctx_link->next) {
+    elem_map[elem_map_len++] = ctx_link->ptr.data;
   }
-  CTX_DATA_END;
+  BLI_freelistN(&ctx_data_list);
 
-  BLI_rng_free(rng);
+  BLI_array_randomize(elem_map, sizeof(*elem_map), elem_map_len, seed);
+  const int count_select = elem_map_len * randfac;
+  for (int i = 0; i < count_select; i++) {
+    ED_object_base_select(elem_map[i], select);
+  }
+  MEM_freeN(elem_map);
 
   Scene *scene = CTX_data_scene(C);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
@@ -1486,7 +1465,7 @@ void OBJECT_OT_select_random(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_select_random";
 
   /* api callbacks */
-  /*ot->invoke = object_select_random_invoke XXX - need a number popup ;*/
+  /*ot->invoke = object_select_random_invoke XXX: need a number popup ;*/
   ot->exec = object_select_random_exec;
   ot->poll = objects_selectable_poll;
 

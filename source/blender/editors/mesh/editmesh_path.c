@@ -29,6 +29,7 @@
 #include "DNA_windowmanager_types.h"
 
 #ifdef WITH_FREESTYLE
+#  include "BKE_customdata.h"
 #  include "DNA_meshdata_types.h"
 #endif
 
@@ -270,7 +271,12 @@ static void mouse_mesh_shortest_path_vert(Scene *UNUSED(scene),
     }
   }
 
-  EDBM_update_generic(obedit->data, false, false);
+  EDBM_update(obedit->data,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = false,
+                  .calc_normals = false,
+                  .is_destructive = false,
+              });
 }
 
 /** \} */
@@ -371,7 +377,7 @@ static void edgetag_ensure_cd_flag(Mesh *me, const char edge_mode)
   }
 }
 
-/* mesh shortest path select, uses prev-selected edge */
+/* Mesh shortest path select, uses previously-selected edge. */
 
 /* since you want to create paths with multiple selects, it doesn't have extend option */
 static void mouse_mesh_shortest_path_edge(Scene *scene,
@@ -474,7 +480,12 @@ static void mouse_mesh_shortest_path_edge(Scene *scene,
     }
   }
 
-  EDBM_update_generic(obedit->data, false, false);
+  EDBM_update(obedit->data,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = false,
+                  .calc_normals = false,
+                  .is_destructive = false,
+              });
 
   if (op_params->edge_mode == EDGE_MODE_TAG_SEAM) {
     ED_uvedit_live_unwrap(scene, &obedit, 1);
@@ -591,7 +602,12 @@ static void mouse_mesh_shortest_path_face(Scene *UNUSED(scene),
     BM_mesh_active_face_set(bm, f_dst_last);
   }
 
-  EDBM_update_generic(obedit->data, false, false);
+  EDBM_update(obedit->data,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = false,
+                  .calc_normals = false,
+                  .is_destructive = false,
+              });
 }
 
 /** \} */

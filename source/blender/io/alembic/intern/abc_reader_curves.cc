@@ -94,7 +94,7 @@ void AbcCurveReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 {
   Curve *cu = BKE_curve_add(bmain, m_data_name.c_str(), OB_CURVE);
 
-  cu->flag |= CU_DEFORM_FILL | CU_3D;
+  cu->flag |= CU_3D;
   cu->actvert = CU_ACT_NONE;
   cu->resolu = 1;
 
@@ -112,7 +112,7 @@ void AbcCurveReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 
   read_curve_sample(cu, m_curves_schema, sample_sel);
 
-  if (has_animations(m_curves_schema, m_settings)) {
+  if (m_settings->always_add_cache_reader || has_animations(m_curves_schema, m_settings)) {
     addCacheModifier();
   }
 }
@@ -274,15 +274,11 @@ void AbcCurveReader::read_curve_sample(Curve *cu,
   }
 }
 
-/* NOTE: Alembic only stores data about control points, but the Mesh
- * passed from the cache modifier contains the displist, which has more data
- * than the control points, so to avoid corrupting the displist we modify the
- * object directly and create a new Mesh from that. Also we might need to
- * create new or delete existing NURBS in the curve.
- */
 Mesh *AbcCurveReader::read_mesh(Mesh *existing_mesh,
                                 const ISampleSelector &sample_sel,
                                 int /*read_flag*/,
+                                const char * /*velocity_name*/,
+                                const float /*velocity_scale*/,
                                 const char **err_str)
 {
   ICurvesSchema::Sample sample;

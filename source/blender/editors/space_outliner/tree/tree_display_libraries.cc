@@ -25,15 +25,17 @@
 #include "BKE_main.h"
 
 #include "DNA_collection_types.h"
+#include "DNA_space_types.h"
 
 #include "BLT_translation.h"
 
-#include "../outliner_intern.h"
+#include "../outliner_intern.hh"
+#include "common.hh"
 #include "tree_display.hh"
+#include "tree_element.hh"
 
 namespace blender::ed::outliner {
 
-/* Convenience/readability. */
 template<typename T> using List = ListBaseWrapper<T>;
 
 TreeDisplayLibraries::TreeDisplayLibraries(SpaceOutliner &space_outliner)
@@ -105,9 +107,7 @@ ListBase TreeDisplayLibraries::buildTree(const TreeSourceData &source_data)
   return tree;
 }
 
-TreeElement *TreeDisplayLibraries::add_library_contents(Main &mainvar,
-                                                        ListBase &lb,
-                                                        Library *lib) const
+TreeElement *TreeDisplayLibraries::add_library_contents(Main &mainvar, ListBase &lb, Library *lib)
 {
   const short filter_id_type = id_filter_get();
 
@@ -138,8 +138,8 @@ TreeElement *TreeDisplayLibraries::add_library_contents(Main &mainvar,
       }
     }
 
-    /* We always want to create an entry for libraries, even if/when we have no more IDs from
-     * them. This invalid state is important to show to user as well.*/
+    /* We always want to create an entry for libraries, even if/when we have no more IDs from them.
+     * This invalid state is important to show to user as well. */
     if (id != nullptr || is_library) {
       if (!tenlib) {
         /* Create library tree element on demand, depending if there are any data-blocks. */
@@ -149,6 +149,9 @@ TreeElement *TreeDisplayLibraries::add_library_contents(Main &mainvar,
         else {
           tenlib = outliner_add_element(&space_outliner_, &lb, &mainvar, nullptr, TSE_ID_BASE, 0);
           tenlib->name = IFACE_("Current File");
+        }
+        if (tenlib->flag & TE_HAS_WARNING) {
+          has_warnings = true;
         }
       }
 
@@ -186,7 +189,7 @@ short TreeDisplayLibraries::id_filter_get() const
   return 0;
 }
 
-bool TreeDisplayLibraries::library_id_filter_poll(Library *lib, ID *id) const
+bool TreeDisplayLibraries::library_id_filter_poll(const Library *lib, ID *id) const
 {
   if (id->lib != lib) {
     return false;

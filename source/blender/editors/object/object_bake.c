@@ -108,8 +108,10 @@ typedef struct {
   ListBase data;
   /** Clear the images before baking */
   bool bake_clear;
-  /** Bake-filter, aka margin */
-  int bake_filter;
+  /** Margin size in pixels. */
+  int bake_margin;
+  /** margin type */
+  char bake_margin_type;
   /** mode of baking (displacement, normals, AO) */
   short mode;
   /** Use low-resolution mesh when baking displacement maps */
@@ -198,7 +200,7 @@ static bool multiresbake_check(bContext *C, wmOperator *op)
               ok = false;
             }
 
-            if (ibuf->rect_float && !(ibuf->channels == 0 || ibuf->channels == 4)) {
+            if (ibuf->rect_float && !(ELEM(ibuf->channels, 0, 4))) {
               ok = false;
             }
 
@@ -372,7 +374,8 @@ static int multiresbake_image_exec_locked(bContext *C, wmOperator *op)
 
     /* copy data stored in job descriptor */
     bkr.scene = scene;
-    bkr.bake_filter = scene->r.bake_filter;
+    bkr.bake_margin = scene->r.bake_margin;
+    bkr.bake_margin_type = scene->r.bake_margin_type;
     bkr.mode = scene->r.bake_mode;
     bkr.use_lores_mesh = scene->r.bake_flag & R_BAKE_LORES_MESH;
     bkr.bias = scene->r.bake_biasdist;
@@ -416,7 +419,8 @@ static void init_multiresbake_job(bContext *C, MultiresBakeJob *bkj)
 
   /* backup scene settings, so their changing in UI would take no effect on baker */
   bkj->scene = scene;
-  bkj->bake_filter = scene->r.bake_filter;
+  bkj->bake_margin = scene->r.bake_margin;
+  bkj->bake_margin_type = scene->r.bake_margin_type;
   bkj->mode = scene->r.bake_mode;
   bkj->use_lores_mesh = scene->r.bake_flag & R_BAKE_LORES_MESH;
   bkj->bake_clear = scene->r.bake_flag & R_BAKE_CLEAR;
@@ -477,7 +481,8 @@ static void multiresbake_startjob(void *bkv, short *stop, short *do_update, floa
 
     /* copy data stored in job descriptor */
     bkr.scene = bkj->scene;
-    bkr.bake_filter = bkj->bake_filter;
+    bkr.bake_margin = bkj->bake_margin;
+    bkr.bake_margin_type = bkj->bake_margin_type;
     bkr.mode = bkj->mode;
     bkr.use_lores_mesh = bkj->use_lores_mesh;
     bkr.user_scale = bkj->user_scale;
@@ -526,7 +531,7 @@ static void multiresbake_freejob(void *bkv)
     /* delete here, since this delete will be called from main thread */
     for (link = data->images.first; link; link = link->next) {
       Image *ima = (Image *)link->data;
-      BKE_image_free_gputextures(ima);
+      BKE_image_partial_update_mark_full_update(ima);
     }
 
     MEM_freeN(data->ob_image.array);
@@ -566,7 +571,7 @@ static int multiresbake_image_exec(bContext *C, wmOperator *op)
                        WM_JOB_EXCL_RENDER | WM_JOB_PRIORITY | WM_JOB_PROGRESS,
                        WM_JOB_TYPE_OBJECT_BAKE_TEXTURE);
   WM_jobs_customdata_set(wm_job, bkr, multiresbake_freejob);
-  WM_jobs_timer(wm_job, 0.5, NC_IMAGE, 0); /* TODO - only draw bake image, can we enforce this */
+  WM_jobs_timer(wm_job, 0.5, NC_IMAGE, 0); /* TODO: only draw bake image, can we enforce this. */
   WM_jobs_callbacks(wm_job, multiresbake_startjob, NULL, NULL, NULL);
 
   G.is_break = false;

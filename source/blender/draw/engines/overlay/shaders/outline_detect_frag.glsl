@@ -241,9 +241,6 @@ void main()
   else if (color_id == 1u) {
     fragColor = colorSelect;
   }
-  else if (color_id == 2u) {
-    fragColor = colorDupliSelect;
-  }
   else if (color_id == 3u) {
     fragColor = colorActive;
   }
@@ -279,7 +276,7 @@ void main()
   vec2 line_start, line_end;
   vec2 line_ofs;
   bvec4 extra_edges, extra_edges2;
-  /* TODO simplify this branching hell. */
+  /* TODO: simplify this branching hell. */
   switch (edge_case) {
       /* Straight lines. */
     case YPOS:

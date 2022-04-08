@@ -46,7 +46,6 @@ inline static uint colorDistance(Color32 c0, Color32 c1)
 }
 #endif
 
-/** Init the color block from an array of colors. */
 ColorBlock::ColorBlock(const uint *linearImage)
 {
   for (uint i = 0; i < 16; i++) {
@@ -54,7 +53,6 @@ ColorBlock::ColorBlock(const uint *linearImage)
   }
 }
 
-/** Init the color block with the contents of the given block. */
 ColorBlock::ColorBlock(const ColorBlock &block)
 {
   for (uint i = 0; i < 16; i++) {
@@ -62,7 +60,6 @@ ColorBlock::ColorBlock(const ColorBlock &block)
   }
 }
 
-/** Initialize this color block. */
 ColorBlock::ColorBlock(const Image *img, uint x, uint y)
 {
   init(img, x, y);
@@ -113,9 +110,8 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
       const uint idx = ((y + by) * w + x + bx);
 
       Color32 &c = color(e, i);
-      c.r = uint8(255 * CLAMP(data[idx + 0 * srcPlane],
-                              0.0f,
-                              1.0f)); /* @@ Is this the right way to quantize floats to bytes? */
+      /* @@ Is this the right way to quantize floats to bytes? */
+      c.r = uint8(255 * CLAMP(data[idx + 0 * srcPlane], 0.0f, 1.0f));
       c.g = uint8(255 * CLAMP(data[idx + 1 * srcPlane], 0.0f, 1.0f));
       c.b = uint8(255 * CLAMP(data[idx + 2 * srcPlane], 0.0f, 1.0f));
       c.a = uint8(255 * CLAMP(data[idx + 3 * srcPlane], 0.0f, 1.0f));
@@ -154,8 +150,7 @@ void ColorBlock::swizzle(uint x, uint y, uint z, uint w)
   }
 }
 
-/** Returns true if the block has a single color. */
-bool ColorBlock::isSingleColor(Color32 mask /*= Color32(0xFF, 0xFF, 0xFF, 0x00)*/) const
+bool ColorBlock::isSingleColor(Color32 mask /*= Color32(0xFF, 0xFF, 0xFF, 0x00) */) const
 {
   uint u = m_color[0].u & mask.u;
 
@@ -235,7 +230,6 @@ Color32 ColorBlock::averageColor() const
 }
 #endif
 
-/** Return true if the block is not fully opaque. */
 bool ColorBlock::hasAlpha() const
 {
   for (const auto &i : m_color) {

@@ -24,6 +24,10 @@
 #include "BLI_string_utf8.h"
 #include "BLI_timeit.hh"
 
+/* Right arrow, keep in sync with #UI_MENU_ARROW_SEP in `UI_interface.h`. */
+#define UI_MENU_ARROW_SEP "\xe2\x96\xb6"
+#define UI_MENU_ARROW_SEP_UNICODE 0x25b6
+
 namespace blender::string_search {
 
 static int64_t count_utf8_code_points(StringRef str)
@@ -31,14 +35,6 @@ static int64_t count_utf8_code_points(StringRef str)
   return static_cast<int64_t>(BLI_strnlen_utf8(str.data(), static_cast<size_t>(str.size())));
 }
 
-/**
- * Computes the cost of transforming string a into b. The cost/distance is the minimal number of
- * operations that need to be executed. Valid operations are deletion, insertion, substitution and
- * transposition.
- *
- * This function is utf8 aware in the sense that it works at the level of individual code points
- * (1-4 bytes long) instead of on individual bytes.
- */
 int damerau_levenshtein_distance(StringRef a, StringRef b)
 {
   constexpr int deletion_cost = 1;
@@ -71,12 +67,12 @@ int damerau_levenshtein_distance(StringRef a, StringRef b)
   for (const int i : IndexRange(size_a)) {
     v2[0] = (i + 1) * deletion_cost;
 
-    const uint32_t unicode_a = BLI_str_utf8_as_unicode_and_size(a.data() + offset_a, &offset_a);
+    const uint32_t unicode_a = BLI_str_utf8_as_unicode_step(a.data(), a.size(), &offset_a);
 
     uint32_t prev_unicode_b;
     size_t offset_b = 0;
     for (const int j : IndexRange(size_b)) {
-      const uint32_t unicode_b = BLI_str_utf8_as_unicode_and_size(b.data() + offset_b, &offset_b);
+      const uint32_t unicode_b = BLI_str_utf8_as_unicode_step(b.data(), b.size(), &offset_b);
 
       /* Check how costly the different operations would be and pick the cheapest - the one with
        * minimal cost. */
@@ -102,10 +98,6 @@ int damerau_levenshtein_distance(StringRef a, StringRef b)
   return v1.last();
 }
 
-/**
- * Returns -1 when this is no reasonably good match.
- * Otherwise returns the number of errors in the match.
- */
 int get_fuzzy_match_errors(StringRef query, StringRef full)
 {
   /* If it is a perfect partial match, return immediately. */
@@ -202,8 +194,8 @@ static bool match_word_initials(StringRef query,
   int first_found_word_index = -1;
 
   while (query_index < query.size()) {
-    const uint query_unicode = BLI_str_utf8_as_unicode_and_size(query.data() + query_index,
-                                                                &query_index);
+    const uint query_unicode = BLI_str_utf8_as_unicode_step(
+        query.data(), query.size(), &query_index);
     while (true) {
       /* We are at the end of words, no complete match has been found yet. */
       if (word_index >= words.size()) {
@@ -226,8 +218,8 @@ static bool match_word_initials(StringRef query,
       StringRef word = words[word_index];
       /* Try to match the current character with the current word. */
       if (static_cast<int>(char_index) < word.size()) {
-        const uint32_t char_unicode = BLI_str_utf8_as_unicode_and_size(word.data() + char_index,
-                                                                       &char_index);
+        const uint32_t char_unicode = BLI_str_utf8_as_unicode_step(
+            word.data(), word.size(), &char_index);
         if (query_unicode == char_unicode) {
           r_word_is_matched[word_index] = true;
           if (first_found_word_index == -1) {
@@ -342,16 +334,15 @@ static int score_query_against_words(Span<StringRef> query_words, Span<StringRef
   return total_match_score;
 }
 
-/**
- * Splits a string into words and normalizes them (currently that just means converting to lower
- * case). The returned strings are allocated in the given allocator.
- */
 void extract_normalized_words(StringRef str,
                               LinearAllocator<> &allocator,
                               Vector<StringRef, 64> &r_words)
 {
-  const uint32_t unicode_space = BLI_str_utf8_as_unicode(" ");
-  const uint32_t unicode_right_triangle = BLI_str_utf8_as_unicode("▶");
+  const uint32_t unicode_space = (uint32_t)' ';
+  const uint32_t unicode_right_triangle = UI_MENU_ARROW_SEP_UNICODE;
+
+  BLI_assert(unicode_space == BLI_str_utf8_as_unicode(" "));
+  BLI_assert(unicode_right_triangle == BLI_str_utf8_as_unicode(UI_MENU_ARROW_SEP));
 
   auto is_separator = [&](uint32_t unicode) {
     return ELEM(unicode, unicode_space, unicode_right_triangle);
@@ -368,8 +359,9 @@ void extract_normalized_words(StringRef str,
   size_t word_start = 0;
   size_t offset = 0;
   while (offset < str_size_in_bytes) {
-    size_t size = 0;
-    uint32_t unicode = BLI_str_utf8_as_unicode_and_size(str.data() + offset, &size);
+    size_t size = offset;
+    uint32_t unicode = BLI_str_utf8_as_unicode_step(str.data(), str.size(), &size);
+    size -= offset;
     if (is_separator(unicode)) {
       if (is_in_word) {
         r_words.append(
@@ -397,6 +389,7 @@ struct SearchItem {
   blender::Span<blender::StringRef> normalized_words;
   int length;
   void *user_data;
+  int weight;
 };
 
 struct StringSearch {
@@ -409,25 +402,21 @@ StringSearch *BLI_string_search_new()
   return new StringSearch();
 }
 
-/**
- * Add a new possible result to the search.
- * The caller keeps ownership of all parameters.
- */
-void BLI_string_search_add(StringSearch *search, const char *str, void *user_data)
+void BLI_string_search_add(StringSearch *search,
+                           const char *str,
+                           void *user_data,
+                           const int weight)
 {
   using namespace blender;
   Vector<StringRef, 64> words;
   StringRef str_ref{str};
   string_search::extract_normalized_words(str_ref, search->allocator, words);
-  search->items.append(
-      {search->allocator.construct_array_copy(words.as_span()), (int)str_ref.size(), user_data});
+  search->items.append({search->allocator.construct_array_copy(words.as_span()),
+                        (int)str_ref.size(),
+                        user_data,
+                        weight});
 }
 
-/**
- * Filter and sort all previously added search items.
- * Returns an array containing the filtered user data.
- * The caller has to free the returned array.
- */
 int BLI_string_search_query(StringSearch *search, const char *query, void ***r_data)
 {
   using namespace blender;
@@ -465,6 +454,11 @@ int BLI_string_search_query(StringSearch *search, const char *query, void ***r_d
        * a substring of another item. */
       std::sort(indices.begin(), indices.end(), [&](int a, int b) {
         return search->items[a].length < search->items[b].length;
+      });
+      /* Prefer items with larger weights. Use `stable_sort` so that if the weights are the same,
+       * the order won't be changed. */
+      std::stable_sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return search->items[a].weight > search->items[b].weight;
       });
     }
     sorted_result_indices.extend(indices);

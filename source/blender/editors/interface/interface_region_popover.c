@@ -90,7 +90,7 @@ struct uiPopover {
 #endif
 };
 
-static void ui_popover_create_block(bContext *C, uiPopover *pup, int opcontext)
+static void ui_popover_create_block(bContext *C, uiPopover *pup, wmOperatorCallContext opcontext)
 {
   BLI_assert(pup->ui_size_x != 0);
 
@@ -188,7 +188,7 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
       }
     }
 
-    /* Estimated a maximum size so we don't go offscreen for low height
+    /* Estimated a maximum size so we don't go off-screen for low height
      * areas near the bottom of the window on refreshes. */
     handle->max_size_y = UI_UNIT_Y * 16.0f;
   }
@@ -340,12 +340,6 @@ int UI_popover_panel_invoke(bContext *C, const char *idname, bool keep_open, Rep
 /** \name Popup Menu API with begin & end
  * \{ */
 
-/**
- * Only return handler, and set optional title.
- *
- * \param from_active_button: Use the active button for positioning,
- * use when the popover is activated from an operator instead of directly from the button.
- */
 uiPopover *UI_popover_begin(bContext *C, int ui_menu_width, bool from_active_button)
 {
   uiPopover *pup = MEM_callocN(sizeof(uiPopover), "popover menu");
@@ -383,7 +377,6 @@ static void popover_keymap_fn(wmKeyMap *UNUSED(keymap), wmKeyMapItem *UNUSED(kmi
   pup->block->handle->menuretval = UI_RETURN_OK;
 }
 
-/* set the whole structure to work */
 void UI_popover_end(bContext *C, uiPopover *pup, wmKeyMap *keymap)
 {
   wmWindow *window = CTX_wm_window(C);
@@ -420,7 +413,7 @@ void UI_popover_end(bContext *C, uiPopover *pup, wmKeyMap *keymap)
    * For now close this style of popovers when accessed. */
   UI_block_flag_disable(pup->block, UI_BLOCK_KEEP_OPEN);
 
-  /* panels are created flipped (from event handling pov) */
+  /* Panels are created flipped (from event handling POV). */
   pup->block->flag ^= UI_BLOCK_IS_FLIP;
 }
 

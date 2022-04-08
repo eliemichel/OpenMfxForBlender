@@ -37,7 +37,7 @@
 #include "BKE_global.h" /* G.background only */
 #include "BKE_report.h"
 
-const char *BKE_report_type_str(ReportType type)
+const char *BKE_report_type_str(eReportType type)
 {
   switch (type) {
     case RPT_DEBUG:
@@ -76,11 +76,6 @@ void BKE_reports_init(ReportList *reports, int flag)
   reports->flag = flag;
 }
 
-/**
- * Only frees the list \a reports.
- * To make displayed reports disappear, either remove window-manager reports
- * (wmWindowManager.reports, or CTX_wm_reports()), or use #WM_report_banners_cancel().
- */
 void BKE_reports_clear(ReportList *reports)
 {
   Report *report, *report_next;
@@ -101,13 +96,13 @@ void BKE_reports_clear(ReportList *reports)
   BLI_listbase_clear(&reports->list);
 }
 
-void BKE_report(ReportList *reports, ReportType type, const char *_message)
+void BKE_report(ReportList *reports, eReportType type, const char *_message)
 {
   Report *report;
   int len;
   const char *message = TIP_(_message);
 
-  /* in background mode always print otherwise there are cases the errors wont be displayed,
+  /* in background mode always print otherwise there are cases the errors won't be displayed,
    * but still add to the report list since this is used for python exception handling */
   if (G.background || !reports || ((reports->flag & RPT_PRINT) && (type >= reports->printlevel))) {
     printf("%s: %s\n", BKE_report_type_str(type), message);
@@ -129,7 +124,7 @@ void BKE_report(ReportList *reports, ReportType type, const char *_message)
   }
 }
 
-void BKE_reportf(ReportList *reports, ReportType type, const char *_format, ...)
+void BKE_reportf(ReportList *reports, eReportType type, const char *_format, ...)
 {
   DynStr *ds;
   Report *report;
@@ -215,7 +210,7 @@ void BKE_reports_prependf(ReportList *reports, const char *_prepend, ...)
   }
 }
 
-ReportType BKE_report_print_level(ReportList *reports)
+eReportType BKE_report_print_level(ReportList *reports)
 {
   if (!reports) {
     return RPT_ERROR;
@@ -224,7 +219,7 @@ ReportType BKE_report_print_level(ReportList *reports)
   return reports->printlevel;
 }
 
-void BKE_report_print_level_set(ReportList *reports, ReportType level)
+void BKE_report_print_level_set(ReportList *reports, eReportType level)
 {
   if (!reports) {
     return;
@@ -233,7 +228,7 @@ void BKE_report_print_level_set(ReportList *reports, ReportType level)
   reports->printlevel = level;
 }
 
-ReportType BKE_report_store_level(ReportList *reports)
+eReportType BKE_report_store_level(ReportList *reports)
 {
   if (!reports) {
     return RPT_ERROR;
@@ -242,7 +237,7 @@ ReportType BKE_report_store_level(ReportList *reports)
   return reports->storelevel;
 }
 
-void BKE_report_store_level_set(ReportList *reports, ReportType level)
+void BKE_report_store_level_set(ReportList *reports, eReportType level)
 {
   if (!reports) {
     return;
@@ -251,7 +246,7 @@ void BKE_report_store_level_set(ReportList *reports, ReportType level)
   reports->storelevel = level;
 }
 
-char *BKE_reports_string(ReportList *reports, ReportType level)
+char *BKE_reports_string(ReportList *reports, eReportType level)
 {
   Report *report;
   DynStr *ds;
@@ -279,7 +274,7 @@ char *BKE_reports_string(ReportList *reports, ReportType level)
   return cstring;
 }
 
-void BKE_reports_print(ReportList *reports, ReportType level)
+void BKE_reports_print(ReportList *reports, eReportType level)
 {
   char *cstring = BKE_reports_string(reports, level);
 
@@ -305,7 +300,7 @@ Report *BKE_reports_last_displayable(ReportList *reports)
   return NULL;
 }
 
-bool BKE_reports_contain(ReportList *reports, ReportType level)
+bool BKE_reports_contain(ReportList *reports, eReportType level)
 {
   Report *report;
   if (reports != NULL) {

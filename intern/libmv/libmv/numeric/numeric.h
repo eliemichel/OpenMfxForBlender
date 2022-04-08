@@ -43,7 +43,7 @@ inline void sincos(double x, double* sinx, double* cosx) {
 #  endif
 #endif  // !__MINGW64__
 
-#if (defined(WIN32) || defined(WIN64)) && !defined(__MINGW32__)
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(__MINGW32__)
 inline long lround(double d) {
   return (long)(d > 0 ? d + 0.5 : ceil(d - 0.5));
 }
@@ -261,7 +261,7 @@ Mat3 RotationRodrigues(const Vec3& axis);
 // positive z-axis, and y is oriented close to up.
 Mat3 LookAt(Vec3 center);
 
-// Return a diagonal matrix from a vector containg the diagonal values.
+// Return a diagonal matrix from a vector containing the diagonal values.
 template <typename TVec>
 inline Mat Diag(const TVec& x) {
   return x.asDiagonal();

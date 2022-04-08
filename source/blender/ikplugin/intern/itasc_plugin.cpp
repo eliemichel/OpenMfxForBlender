@@ -284,7 +284,7 @@ static int initialize_chain(Object *ob, bPoseChannel *pchan_tip, bConstraint *co
 
   /* setup the chain data */
   /* create a target */
-  target = (PoseTarget *)MEM_callocN(sizeof(PoseTarget), "posetarget");
+  target = MEM_cnew<PoseTarget>("posetarget");
   target->con = con;
   /* by construction there can be only one tree per channel
    * and each channel can be part of at most one tree. */
@@ -292,7 +292,7 @@ static int initialize_chain(Object *ob, bPoseChannel *pchan_tip, bConstraint *co
 
   if (tree == nullptr) {
     /* make new tree */
-    tree = (PoseTree *)MEM_callocN(sizeof(PoseTree), "posetree");
+    tree = MEM_cnew<PoseTree>("posetree");
 
     tree->iterations = data->iterations;
     tree->totchannel = segcount;
@@ -315,7 +315,7 @@ static int initialize_chain(Object *ob, bPoseChannel *pchan_tip, bConstraint *co
     tree->iterations = MAX2(data->iterations, tree->iterations);
     tree->stretch = tree->stretch && !(data->flag & CONSTRAINT_IK_STRETCH);
 
-    /* skip common pose channels and add remaining*/
+    /* Skip common pose channels and add remaining. */
     size = MIN2(segcount, tree->totchannel);
     a = t = 0;
     while (a < size && t < tree->totchannel) {
@@ -644,7 +644,7 @@ static bool base_callback(const iTaSC::Timestamp &timestamp,
     ikscene->baseFrame = iTaSC::F_identity;
   }
   next.setValue(&rootmat[0][0]);
-  /* if there is a polar target (only during solving otherwise we don't have end efffector) */
+  /* If there is a polar target (only during solving otherwise we don't have end effector). */
   if (ikscene->polarConstraint && timestamp.update) {
     /* compute additional rotation of base frame so that armature follows the polar target */
     float imat[4][4];    /* IK tree base inverse matrix */
@@ -1876,9 +1876,10 @@ static void execute_scene(struct Depsgraph *depsgraph,
   }
 }
 
-/*---------------------------------------------------
- * plugin interface
- */
+/* -------------------------------------------------------------------- */
+/** \name Plugin Interface
+ * \{ */
+
 void itasc_initialize_tree(struct Depsgraph *depsgraph,
                            struct Scene *scene,
                            Object *ob,
@@ -2012,3 +2013,5 @@ void itasc_test_constraint(struct Object *ob, struct bConstraint *cons)
       break;
   }
 }
+
+/** \} */

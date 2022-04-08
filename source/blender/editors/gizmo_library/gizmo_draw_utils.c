@@ -44,14 +44,11 @@
 /* own includes */
 #include "gizmo_library_intern.h"
 
-/**
- * Main draw call for GizmoGeomInfo data
- */
 void wm_gizmo_geometryinfo_draw(const GizmoGeomInfo *info,
                                 const bool UNUSED(select),
                                 const float color[4])
 {
-  /* TODO store the Batches inside the GizmoGeomInfo and updated it when geom changes
+  /* TODO: store the Batches inside the GizmoGeomInfo and updated it when geom changes
    * So we don't need to re-created and discard it every time */
 
   GPUVertBuf *vbo;

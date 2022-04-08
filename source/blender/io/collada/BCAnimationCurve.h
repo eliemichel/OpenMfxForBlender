@@ -59,8 +59,8 @@ class BCCurveKey {
   BCCurveKey();
   BCCurveKey(const BC_animation_type type,
              const std::string path,
-             const int array_index,
-             const int subindex = -1);
+             int array_index,
+             int subindex = -1);
   void operator=(const BCCurveKey &other);
   std::string get_full_path() const;
   std::string get_path() const;
@@ -116,7 +116,7 @@ class BCAnimationCurve {
   bool is_keyframe(int frame);
   void adjust_range(int frame);
 
-  std::string get_animation_name(Object *ob) const; /* xxx: this is collada specific */
+  std::string get_animation_name(Object *ob) const; /* XXX: this is COLLADA specific. */
   std::string get_channel_target() const;
   std::string get_channel_type() const;
   std::string get_channel_posebone() const; /* returns "" if channel is not a bone channel */
@@ -127,7 +127,7 @@ class BCAnimationCurve {
   FCurve *get_fcurve() const;
   int sample_count() const;
 
-  float get_value(const float frame);
+  float get_value(float frame);
   void get_values(BCValues &values) const;
   void get_value_map(BCValueMap &value_map);
 
@@ -135,14 +135,14 @@ class BCAnimationCurve {
 
   /* Curve edit functions create a copy of the underlying #FCurve. */
   FCurve *get_edit_fcurve();
-  bool add_value_from_rna(const int frame);
-  bool add_value_from_matrix(const BCSample &sample, const int frame);
-  void add_value(const float val, const int frame);
+  bool add_value_from_rna(int frame);
+  bool add_value_from_matrix(const BCSample &sample, int frame);
+  void add_value(float val, int frame);
   void clean_handles();
 
   /* experimental stuff */
-  int closest_index_above(const float sample_frame, const int start_at) const;
-  int closest_index_below(const float sample_frame) const;
+  int closest_index_above(float sample_frame, int start_at) const;
+  int closest_index_below(float sample_frame) const;
 };
 
 typedef std::map<BCCurveKey, BCAnimationCurve *> BCAnimationCurveMap;

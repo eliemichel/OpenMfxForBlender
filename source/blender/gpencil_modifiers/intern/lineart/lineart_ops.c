@@ -88,7 +88,12 @@ static void clear_strokes(Object *ob, GpencilModifierData *md, int frame)
   BKE_gpencil_layer_frame_delete(gpl, gpf);
 }
 
-static bool bake_strokes(Object *ob, Depsgraph *dg, GpencilModifierData *md, int frame)
+static bool bake_strokes(Object *ob,
+                         Depsgraph *dg,
+                         LineartCache **lc,
+                         GpencilModifierData *md,
+                         int frame,
+                         bool is_first)
 {
   /* Modifier data sanity check. */
   if (lineart_mod_is_disabled(md)) {
@@ -111,11 +116,22 @@ static bool bake_strokes(Object *ob, Depsgraph *dg, GpencilModifierData *md, int
     /* No greasepencil frame created or found. */
     return false;
   }
-
-  MOD_lineart_compute_feature_lines(dg, lmd);
+  LineartCache *local_lc = *lc;
+  if (!(*lc)) {
+    MOD_lineart_compute_feature_lines(dg, lmd, lc, (!(ob->dtx & OB_DRAW_IN_FRONT)));
+    MOD_lineart_destroy_render_data(lmd);
+  }
+  else {
+    if (is_first || (!(lmd->flags & LRT_GPENCIL_USE_CACHE))) {
+      MOD_lineart_compute_feature_lines(dg, lmd, &local_lc, (!(ob->dtx & OB_DRAW_IN_FRONT)));
+      MOD_lineart_destroy_render_data(lmd);
+    }
+    MOD_lineart_chain_clear_picked_flag(local_lc);
+    lmd->cache = local_lc;
+  }
 
   MOD_lineart_gpencil_generate(
-      lmd->render_buffer,
+      lmd->cache,
       dg,
       ob,
       gpl,
@@ -127,15 +143,24 @@ static bool bake_strokes(Object *ob, Depsgraph *dg, GpencilModifierData *md, int
       lmd->use_multiple_levels ? lmd->level_end : lmd->level_start,
       lmd->target_material ? BKE_gpencil_object_material_index_get(ob, lmd->target_material) : 0,
       lmd->edge_types,
-      lmd->transparency_flags,
-      lmd->transparency_mask,
+      lmd->mask_switches,
+      lmd->material_mask_bits,
+      lmd->intersection_mask,
       lmd->thickness,
       lmd->opacity,
       lmd->source_vertex_group,
       lmd->vgname,
       lmd->flags);
 
-  MOD_lineart_destroy_render_data(lmd);
+  if (!(lmd->flags & LRT_GPENCIL_USE_CACHE)) {
+    /* Clear local cache. */
+    if (!is_first) {
+      MOD_lineart_clear_cache(&local_lc);
+    }
+    /* Restore the original cache pointer so the modifiers below still have access to the
+     * "global" cache. */
+    lmd->cache = gpd->runtime.lineart_cache;
+  }
 
   return true;
 }
@@ -174,14 +199,21 @@ static bool lineart_gpencil_bake_single_target(LineartBakeJob *bj, Object *ob, i
     }
   }
 
+  GpencilLineartLimitInfo info = BKE_gpencil_get_lineart_modifier_limits(ob);
+
+  LineartCache *lc = NULL;
+  bool is_first = true;
   LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
     if (md->type != eGpencilModifierType_Lineart) {
       continue;
     }
-    if (bake_strokes(ob, bj->dg, md, frame)) {
+    BKE_gpencil_set_lineart_modifier_limits(md, &info, is_first);
+    if (bake_strokes(ob, bj->dg, &lc, md, frame, is_first)) {
       touched = true;
+      is_first = false;
     }
   }
+  MOD_lineart_clear_cache(&lc);
 
   return touched;
 }
@@ -412,7 +444,6 @@ static int lineart_gpencil_clear_strokes_all_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/* Bake all line art modifiers on the current object. */
 void OBJECT_OT_lineart_bake_strokes(wmOperatorType *ot)
 {
   ot->name = "Bake Line Art";
@@ -424,7 +455,6 @@ void OBJECT_OT_lineart_bake_strokes(wmOperatorType *ot)
   ot->modal = lineart_gpencil_bake_strokes_commom_modal;
 }
 
-/* Bake all lineart objects in the scene. */
 void OBJECT_OT_lineart_bake_strokes_all(wmOperatorType *ot)
 {
   ot->name = "Bake Line Art (All)";
@@ -436,7 +466,6 @@ void OBJECT_OT_lineart_bake_strokes_all(wmOperatorType *ot)
   ot->modal = lineart_gpencil_bake_strokes_commom_modal;
 }
 
-/* clear all line art modifiers on the current object. */
 void OBJECT_OT_lineart_clear(wmOperatorType *ot)
 {
   ot->name = "Clear Baked Line Art";
@@ -446,7 +475,6 @@ void OBJECT_OT_lineart_clear(wmOperatorType *ot)
   ot->exec = lineart_gpencil_clear_strokes_exec;
 }
 
-/* clear all lineart objects in the scene. */
 void OBJECT_OT_lineart_clear_all(wmOperatorType *ot)
 {
   ot->name = "Clear Baked Line Art (All)";

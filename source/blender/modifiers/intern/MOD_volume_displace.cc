@@ -18,6 +18,7 @@
  * \ingroup modifiers
  */
 
+#include "BKE_geometry_set.hh"
 #include "BKE_lib_query.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
@@ -94,7 +95,9 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
   walk(userData, ob, md, "texture");
 }
 
-static bool dependsOnTime(ModifierData *md)
+static bool dependsOnTime(struct Scene *UNUSED(scene),
+                          ModifierData *md,
+                          const int UNUSED(dag_eval_mode))
 {
   VolumeDisplaceModifierData *vdmd = reinterpret_cast<VolumeDisplaceModifierData *>(md);
   if (vdmd->texture) {
@@ -180,7 +183,7 @@ template<typename GridType> struct DisplaceOp {
     TexResult texture_result = {0};
     BKE_texture_get_value(
         nullptr, this->texture, const_cast<float *>(pos.asV()), &texture_result, false);
-    return {texture_result.tr, texture_result.tg, texture_result.tb};
+    return {texture_result.trgba[0], texture_result.trgba[1], texture_result.trgba[2]};
   }
 };
 
@@ -200,9 +203,8 @@ struct DisplaceGridOp {
 
   template<typename GridType> void operator()()
   {
-    if constexpr (std::is_same_v<GridType, openvdb::points::PointDataGrid> ||
-                  std::is_same_v<GridType, openvdb::StringGrid> ||
-                  std::is_same_v<GridType, openvdb::MaskGrid>) {
+    if constexpr (blender::
+                      is_same_any_v<GridType, openvdb::points::PointDataGrid, openvdb::MaskGrid>) {
       /* We don't support displacing these grid types yet. */
       return;
     }
@@ -284,7 +286,7 @@ struct DisplaceGridOp {
 
 #endif
 
-static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Volume *volume)
+static void displace_volume(ModifierData *md, const ModifierEvalContext *ctx, Volume *volume)
 {
 #ifdef WITH_OPENVDB
   VolumeDisplaceModifierData *vdmd = reinterpret_cast<VolumeDisplaceModifierData *>(md);
@@ -303,12 +305,20 @@ static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Vo
     BKE_volume_grid_type_operation(grid_type, displace_grid_op);
   }
 
-  return volume;
 #else
-  UNUSED_VARS(md, ctx);
+  UNUSED_VARS(md, volume, ctx);
   BKE_modifier_set_error(ctx->object, md, "Compiled without OpenVDB");
-  return volume;
 #endif
+}
+
+static void modifyGeometrySet(ModifierData *md,
+                              const ModifierEvalContext *ctx,
+                              GeometrySet *geometry_set)
+{
+  Volume *input_volume = geometry_set->get_volume_for_write();
+  if (input_volume != nullptr) {
+    displace_volume(md, ctx, input_volume);
+  }
 }
 
 ModifierTypeInfo modifierType_VolumeDisplace = {
@@ -328,8 +338,7 @@ ModifierTypeInfo modifierType_VolumeDisplace = {
     /* deformMatricesEM */ nullptr,
     /* modifyMesh */ nullptr,
     /* modifyHair */ nullptr,
-    /* modifyGeometrySet */ nullptr,
-    /* modifyVolume */ modifyVolume,
+    /* modifyGeometrySet */ modifyGeometrySet,
 
     /* initData */ initData,
     /* requiredDataMask */ nullptr,

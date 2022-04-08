@@ -106,7 +106,7 @@ enum {
   LIGHTPROBE_DISP_REFLECTIVE = 3,
 };
 
-/* Probe->parallax && Probe->attenuation_type*/
+/* Probe->parallax && Probe->attenuation_type. */
 enum {
   LIGHTPROBE_SHAPE_ELIPSOID = 0,
   LIGHTPROBE_SHAPE_BOX = 1,
@@ -149,7 +149,7 @@ BLI_STATIC_ASSERT_ALIGN(LightGridCache, 16)
 
 typedef struct LightCacheTexture {
   struct GPUTexture *tex;
-  /** Copy of GPU datas to create GPUTextures on file read. */
+  /** Copy of GPU data to create GPUTextures on file read. */
   char *data;
   int tex_size[3];
   char data_type;

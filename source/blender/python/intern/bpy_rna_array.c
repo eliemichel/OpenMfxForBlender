@@ -126,7 +126,7 @@ static int validate_array_type(PyObject *seq,
         ok = 0;
       }
       else if ((item_seq_size = PySequence_Size(item)) == -1) {
-        /* BLI_snprintf(error_str, error_str_size, "expected a sequence of %s", item_type_str); */
+        // BLI_snprintf(error_str, error_str_size, "expected a sequence of %s", item_type_str);
         PyErr_Format(PyExc_TypeError,
                      "%s expected a sequence of %s, not %s",
                      error_prefix,
@@ -334,7 +334,7 @@ static int validate_array_length(PyObject *rvalue,
     }
 
     if (tot != len) {
-      /* BLI_snprintf(error_str, error_str_size, "sequence must have length of %d", len); */
+      // BLI_snprintf(error_str, error_str_size, "sequence must have length of %d", len);
       PyErr_Format(PyExc_ValueError,
                    "%s %.200s.%.200s, sequence must have %d items total, not %d",
                    error_prefix,
@@ -536,11 +536,11 @@ static int py_to_array(PyObject *seq,
                        RNA_SetArrayFunc rna_set_array,
                        const char *error_prefix)
 {
-  /*int totdim, dim_size[MAX_ARRAY_DIMENSION];*/
+  // int totdim, dim_size[MAX_ARRAY_DIMENSION];
   int totitem;
   char *data = NULL;
 
-  /*totdim = RNA_property_array_dimension(ptr, prop, dim_size);*/ /*UNUSED*/
+  // totdim = RNA_property_array_dimension(ptr, prop, dim_size); /* UNUSED */
 
   if (validate_array(seq, ptr, prop, 0, check_item_type, item_type_str, &totitem, error_prefix) ==
       -1) {
@@ -548,7 +548,7 @@ static int py_to_array(PyObject *seq,
   }
 
   if (totitem) {
-    /* note: this code is confusing */
+    /* NOTE: this code is confusing. */
     if (param_data && RNA_property_flag(prop) & PROP_DYNAMIC) {
       /* not freeing allocated mem, RNA_parameter_list_free() will do this */
       ParameterDynAlloc *param_alloc = (ParameterDynAlloc *)param_data;
@@ -990,9 +990,10 @@ PyObject *pyrna_py_from_array(PointerRNA *ptr, PropertyRNA *prop)
   return pyrna_prop_CreatePyObject(ptr, prop);
 }
 
-/* TODO, multi-dimensional arrays */
 int pyrna_array_contains_py(PointerRNA *ptr, PropertyRNA *prop, PyObject *value)
 {
+  /* TODO: multi-dimensional arrays. */
+
   const int len = RNA_property_array_length(ptr, prop);
   int type;
   int i;

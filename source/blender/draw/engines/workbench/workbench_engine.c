@@ -28,6 +28,7 @@
 
 #include "BLI_alloca.h"
 
+#include "BKE_editmesh.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
@@ -50,8 +51,6 @@ void workbench_engine_init(void *ved)
   WORKBENCH_Data *vedata = ved;
   WORKBENCH_StorageList *stl = vedata->stl;
   WORKBENCH_TextureList *txl = vedata->txl;
-
-  workbench_shader_library_ensure();
 
   workbench_private_data_alloc(stl);
   WORKBENCH_PrivateData *wpd = stl->wpd;
@@ -128,7 +127,7 @@ static void workbench_cache_sculpt_populate(WORKBENCH_PrivateData *wpd,
 BLI_INLINE void workbench_object_drawcall(DRWShadingGroup *grp, struct GPUBatch *geom, Object *ob)
 {
   if (ob->type == OB_POINTCLOUD) {
-    /* Draw range to avoid drawcall batching messing up the instance attrib. */
+    /* Draw range to avoid drawcall batching messing up the instance attribute. */
     DRW_shgroup_call_instance_range(grp, ob, geom, 0, 0);
   }
   else {
@@ -238,7 +237,27 @@ static void workbench_cache_hair_populate(WORKBENCH_PrivateData *wpd,
                              workbench_image_hair_setup(wpd, ob, matnr, ima, NULL, state) :
                              workbench_material_hair_setup(wpd, ob, matnr, color_type);
 
-  DRW_shgroup_hair_create_sub(ob, psys, md, grp);
+  DRW_shgroup_hair_create_sub(ob, psys, md, grp, NULL);
+}
+
+static const CustomData *workbench_mesh_get_loop_custom_data(const Mesh *mesh)
+{
+  if (mesh->runtime.wrapper_type == ME_WRAPPER_TYPE_BMESH) {
+    BLI_assert(mesh->edit_mesh != NULL);
+    BLI_assert(mesh->edit_mesh->bm != NULL);
+    return &mesh->edit_mesh->bm->ldata;
+  }
+  return &mesh->ldata;
+}
+
+static const CustomData *workbench_mesh_get_vert_custom_data(const Mesh *mesh)
+{
+  if (mesh->runtime.wrapper_type == ME_WRAPPER_TYPE_BMESH) {
+    BLI_assert(mesh->edit_mesh != NULL);
+    BLI_assert(mesh->edit_mesh->bm != NULL);
+    return &mesh->edit_mesh->bm->vdata;
+  }
+  return &mesh->vdata;
 }
 
 /**
@@ -253,6 +272,8 @@ static eV3DShadingColorType workbench_color_type_get(WORKBENCH_PrivateData *wpd,
 {
   eV3DShadingColorType color_type = wpd->shading.color_type;
   const Mesh *me = (ob->type == OB_MESH) ? ob->data : NULL;
+  const CustomData *ldata = (me == NULL) ? NULL : workbench_mesh_get_loop_custom_data(me);
+  const CustomData *vdata = (me == NULL) ? NULL : workbench_mesh_get_vert_custom_data(me);
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool is_active = (ob == draw_ctx->obact);
@@ -266,19 +287,19 @@ static eV3DShadingColorType workbench_color_type_get(WORKBENCH_PrivateData *wpd,
     if (ob->dt < OB_TEXTURE) {
       color_type = V3D_SHADING_MATERIAL_COLOR;
     }
-    else if ((me == NULL) || (me->mloopuv == NULL)) {
+    else if ((me == NULL) || !CustomData_has_layer(ldata, CD_MLOOPUV)) {
       /* Disable color mode if data layer is unavailable. */
       color_type = V3D_SHADING_MATERIAL_COLOR;
     }
   }
   else if (color_type == V3D_SHADING_VERTEX_COLOR) {
     if (U.experimental.use_sculpt_vertex_colors) {
-      if ((me == NULL) || !CustomData_has_layer(&me->vdata, CD_PROP_COLOR)) {
+      if ((me == NULL) || !CustomData_has_layer(vdata, CD_PROP_COLOR)) {
         color_type = V3D_SHADING_OBJECT_COLOR;
       }
     }
     else {
-      if ((me == NULL) || !CustomData_has_layer(&me->ldata, CD_MLOOPCOL)) {
+      if ((me == NULL) || !CustomData_has_layer(ldata, CD_MLOOPCOL)) {
         color_type = V3D_SHADING_OBJECT_COLOR;
       }
     }
@@ -293,13 +314,13 @@ static eV3DShadingColorType workbench_color_type_get(WORKBENCH_PrivateData *wpd,
 
   if (!is_sculpt_pbvh && !is_render) {
     /* Force texture or vertex mode if object is in paint mode. */
-    if (is_texpaint_mode && me && me->mloopuv) {
+    if (is_texpaint_mode && me && CustomData_has_layer(ldata, CD_MLOOPUV)) {
       color_type = V3D_SHADING_TEXTURE_COLOR;
       if (r_texpaint_mode) {
         *r_texpaint_mode = true;
       }
     }
-    else if (is_vertpaint_mode && me && me->mloopcol) {
+    else if (is_vertpaint_mode && me && CustomData_has_layer(ldata, CD_MLOOPCOL)) {
       color_type = V3D_SHADING_VERTEX_COLOR;
     }
   }
@@ -379,7 +400,7 @@ void workbench_cache_populate(void *ved, Object *ob)
     return;
   }
 
-  if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_MBALL, OB_POINTCLOUD)) {
+  if (ELEM(ob->type, OB_MESH, OB_SURF, OB_MBALL, OB_POINTCLOUD)) {
     bool use_sculpt_pbvh, use_texpaint_mode, draw_shadow, has_transp_mat = false;
     eV3DShadingColorType color_type = workbench_color_type_get(
         wpd, ob, &use_sculpt_pbvh, &use_texpaint_mode, &draw_shadow);
@@ -460,7 +481,7 @@ void workbench_cache_finish(void *ved)
 
   workbench_update_material_ubos(wpd);
 
-  /* TODO don't free reuse next redraw. */
+  /* TODO: don't free reuse next redraw. */
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
       for (int k = 0; k < WORKBENCH_DATATYPE_MAX; k++) {
@@ -473,8 +494,6 @@ void workbench_cache_finish(void *ved)
   }
 }
 
-/* Used by viewport rendering & final rendering.
- * Do one render loop iteration (i.e: One TAA sample). */
 void workbench_draw_sample(void *ved)
 {
   WORKBENCH_Data *vedata = ved;
@@ -629,6 +648,7 @@ DrawEngineType draw_engine_workbench = {
     &workbench_data_size,
     &workbench_engine_init,
     &workbench_engine_free,
+    NULL, /* instance_free */
     &workbench_cache_init,
     &workbench_cache_populate,
     &workbench_cache_finish,
@@ -647,6 +667,8 @@ RenderEngineType DRW_engine_viewport_workbench_type = {
     RE_INTERNAL | RE_USE_STEREO_VIEWPORT | RE_USE_GPU_CONTEXT,
     NULL,
     &DRW_render_to_image,
+    NULL,
+    NULL,
     NULL,
     NULL,
     NULL,

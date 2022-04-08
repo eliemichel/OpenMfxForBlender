@@ -191,7 +191,7 @@ static void draw_spline_points(const bContext *C,
                                const char draw_type)
 {
   const bool is_spline_sel = (spline->flag & SELECT) &&
-                             (mask_layer->restrictflag & MASK_RESTRICT_SELECT) == 0;
+                             (mask_layer->visibility_flag & MASK_HIDE_SELECT) == 0;
   const bool is_smooth = (draw_flag & MASK_DRAWFLAG_SMOOTH) != 0;
 
   uchar rgb_spline[4];
@@ -211,7 +211,7 @@ static void draw_spline_points(const bContext *C,
     undistort = sc->clip && (sc->user.render_flag & MCLIP_PROXY_RENDER_UNDISTORT);
   }
 
-  /* TODO, add this to sequence editor */
+  /* TODO: add this to sequence editor. */
   float handle_size = 2.0f * UI_GetThemeValuef(TH_HANDLE_VERTEX_SIZE) * U.pixelsize;
 
   mask_spline_color_get(mask_layer, spline, is_spline_sel, rgb_spline);
@@ -529,7 +529,7 @@ static void draw_spline_curve(const bContext *C,
   uchar rgb_tmp[4];
 
   const bool is_spline_sel = (spline->flag & SELECT) &&
-                             (mask_layer->restrictflag & MASK_RESTRICT_SELECT) == 0;
+                             (mask_layer->visibility_flag & MASK_HIDE_SELECT) == 0;
   const bool is_smooth = (draw_flag & MASK_DRAWFLAG_SMOOTH) != 0;
   const bool is_fill = (spline->flag & MASK_SPLINE_NOFILL) == 0;
 
@@ -587,6 +587,35 @@ static void draw_spline_curve(const bContext *C,
   }
 }
 
+static void draw_layer_splines(const bContext *C,
+                               MaskLayer *layer,
+                               const char draw_flag,
+                               const char draw_type,
+                               const int width,
+                               const int height,
+                               const bool is_active)
+{
+  LISTBASE_FOREACH (MaskSpline *, spline, &layer->splines) {
+    /* draw curve itself first... */
+    draw_spline_curve(C, layer, spline, draw_flag, draw_type, is_active, width, height);
+
+    if (!(layer->visibility_flag & MASK_HIDE_SELECT)) {
+      /* ...and then handles over the curve so they're nicely visible */
+      draw_spline_points(C, layer, spline, draw_flag, draw_type);
+    }
+
+    /* show undeform for testing */
+    if (0) {
+      void *back = spline->points_deform;
+
+      spline->points_deform = NULL;
+      draw_spline_curve(C, layer, spline, draw_flag, draw_type, is_active, width, height);
+      draw_spline_points(C, layer, spline, draw_flag, draw_type);
+      spline->points_deform = back;
+    }
+  }
+}
+
 static void draw_mask_layers(const bContext *C,
                              Mask *mask,
                              const char draw_flag,
@@ -600,34 +629,25 @@ static void draw_mask_layers(const bContext *C,
   MaskLayer *mask_layer;
   int i;
 
+  MaskLayer *active = NULL;
   for (mask_layer = mask->masklayers.first, i = 0; mask_layer != NULL;
        mask_layer = mask_layer->next, i++) {
     const bool is_active = (i == mask->masklay_act);
 
-    if (mask_layer->restrictflag & MASK_RESTRICT_VIEW) {
+    if (mask_layer->visibility_flag & MASK_HIDE_VIEW) {
       continue;
     }
 
-    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
-
-      /* draw curve itself first... */
-      draw_spline_curve(C, mask_layer, spline, draw_flag, draw_type, is_active, width, height);
-
-      if (!(mask_layer->restrictflag & MASK_RESTRICT_SELECT)) {
-        /* ...and then handles over the curve so they're nicely visible */
-        draw_spline_points(C, mask_layer, spline, draw_flag, draw_type);
-      }
-
-      /* show undeform for testing */
-      if (0) {
-        void *back = spline->points_deform;
-
-        spline->points_deform = NULL;
-        draw_spline_curve(C, mask_layer, spline, draw_flag, draw_type, is_active, width, height);
-        draw_spline_points(C, mask_layer, spline, draw_flag, draw_type);
-        spline->points_deform = back;
-      }
+    if (is_active) {
+      active = mask_layer;
+      continue;
     }
+
+    draw_layer_splines(C, mask_layer, draw_flag, draw_type, width, height, is_active);
+  }
+
+  if (active != NULL) {
+    draw_layer_splines(C, active, draw_flag, draw_type, width, height, true);
   }
 
   GPU_program_point_size(false);
@@ -666,8 +686,6 @@ static float *mask_rasterize(Mask *mask, const int width, const int height)
   return buffer;
 }
 
-/* sets up the opengl context.
- * width, height are to match the values from ED_mask_get_size() */
 void ED_mask_draw_region(
     Depsgraph *depsgraph,
     Mask *mask_,
@@ -704,8 +722,8 @@ void ED_mask_draw_region(
   /* find window pixel coordinates of origin */
   UI_view2d_view_to_region(&region->v2d, 0.0f, 0.0f, &x, &y);
 
-  /* w = BLI_rctf_size_x(&v2d->tot); */
-  /* h = BLI_rctf_size_y(&v2d->tot); */
+  // w = BLI_rctf_size_x(&v2d->tot);
+  // h = BLI_rctf_size_y(&v2d->tot);
 
   zoomx = (float)(BLI_rcti_size_x(&region->winrct) + 1) / BLI_rctf_size_x(&region->v2d.cur);
   zoomy = (float)(BLI_rcti_size_y(&region->winrct) + 1) / BLI_rctf_size_y(&region->v2d.cur);
@@ -750,7 +768,8 @@ void ED_mask_draw_region(
     IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
     GPU_shader_uniform_vector(
         state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
-    immDrawPixelsTex(&state, 0.0f, 0.0f, width, height, GPU_R16F, false, buffer, 1.0f, 1.0f, NULL);
+    immDrawPixelsTexTiled(
+        &state, 0.0f, 0.0f, width, height, GPU_R16F, false, buffer, 1.0f, 1.0f, NULL);
 
     GPU_matrix_pop();
 
@@ -817,7 +836,7 @@ void ED_mask_draw_frames(
        mask_layer_shape = mask_layer_shape->next) {
     int frame = mask_layer_shape->frame;
 
-    /* draw_keyframe(i, CFRA, sfra, framelen, 1); */
+    // draw_keyframe(i, CFRA, sfra, framelen, 1);
     int height = (frame == cfra) ? 22 : 10;
     int x = (frame - sfra) * framelen;
     immVertex2i(pos, x, region_bottom);

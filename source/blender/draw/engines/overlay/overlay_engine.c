@@ -56,7 +56,7 @@ static void OVERLAY_engine_init(void *vedata)
   OVERLAY_shader_library_ensure();
 
   if (!stl->pd) {
-    /* Alloc transient pointers */
+    /* Allocate transient pointers. */
     stl->pd = MEM_callocN(sizeof(*stl->pd), __func__);
   }
 
@@ -200,13 +200,14 @@ static void OVERLAY_cache_init(void *vedata)
     case CTX_MODE_OBJECT:
       break;
     default:
-      BLI_assert(!"Draw mode invalid");
+      BLI_assert_msg(0, "Draw mode invalid");
       break;
   }
   OVERLAY_antialiasing_cache_init(vedata);
   OVERLAY_armature_cache_init(vedata);
   OVERLAY_background_cache_init(vedata);
   OVERLAY_fade_cache_init(vedata);
+  OVERLAY_mode_transfer_cache_init(vedata);
   OVERLAY_extra_cache_init(vedata);
   OVERLAY_facing_cache_init(vedata);
   OVERLAY_gpencil_cache_init(vedata);
@@ -234,7 +235,7 @@ BLI_INLINE OVERLAY_DupliData *OVERLAY_duplidata_get(Object *ob, void *vedata, bo
       *do_init = true;
     }
     else if ((*dupli_data)->base_flag != ob->base_flag) {
-      /* Select state might have change, reinit. */
+      /* Select state might have change, reinitialize. */
       *do_init = true;
     }
     return *dupli_data;
@@ -302,6 +303,11 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
   const bool renderable = DRW_object_is_renderable(ob);
   const bool in_pose_mode = ob->type == OB_ARMATURE && OVERLAY_armature_is_pose_mode(ob, draw_ctx);
   const bool in_edit_mode = overlay_object_is_edit_mode(pd, ob);
+  const bool is_instance = (ob->base_flag & BASE_FROM_DUPLI);
+  const bool instance_parent_in_edit_mode = is_instance ?
+                                                overlay_object_is_edit_mode(
+                                                    pd, DRW_object_get_dupli_parent(ob)) :
+                                                false;
   const bool in_particle_edit_mode = (ob->mode == OB_MODE_PARTICLE_EDIT) &&
                                      (pd->ctx_mode == CTX_MODE_PARTICLE);
   const bool in_paint_mode = (ob == draw_ctx->obact) &&
@@ -323,10 +329,12 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
                            !is_select;
   const bool draw_fade = draw_surface && (pd->overlay.flag & V3D_OVERLAY_FADE_INACTIVE) &&
                          overlay_should_fade_object(ob, draw_ctx->obact);
+  const bool draw_mode_transfer = draw_surface;
   const bool draw_bones = (pd->overlay.flag & V3D_OVERLAY_HIDE_BONES) == 0;
   const bool draw_wires = draw_surface && has_surface &&
                           (pd->wireframe_mode || !pd->hide_overlays);
   const bool draw_outlines = !in_edit_mode && !in_paint_mode && renderable && has_surface &&
+                             !instance_parent_in_edit_mode &&
                              (pd->v3d_flag & V3D_SELECT_OUTLINE) &&
                              (ob->base_flag & BASE_SELECTED);
   const bool draw_bone_selection = (ob->type == OB_MESH) && pd->armature.do_pose_fade_geom &&
@@ -348,6 +356,9 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
   }
   if (draw_facing) {
     OVERLAY_facing_cache_populate(vedata, ob);
+  }
+  if (draw_mode_transfer) {
+    OVERLAY_mode_transfer_cache_populate(vedata, ob);
   }
   if (draw_wires) {
     OVERLAY_wireframe_cache_populate(vedata, ob, dupli, do_init);
@@ -458,9 +469,14 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
       case OB_LIGHTPROBE:
         OVERLAY_lightprobe_cache_populate(vedata, ob);
         break;
-      case OB_LATTICE:
-        OVERLAY_lattice_cache_populate(vedata, ob);
+      case OB_LATTICE: {
+        /* Unlike the other types above, lattices actually have a bounding box defined, so hide the
+         * lattice wires if only the bounding-box is requested. */
+        if (ob->dt > OB_BOUNDBOX) {
+          OVERLAY_lattice_cache_populate(vedata, ob);
+        }
         break;
+      }
     }
   }
 
@@ -468,7 +484,7 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
     OVERLAY_particle_cache_populate(vedata, ob);
   }
 
-  /* Relationship, object center, bounbox ... */
+  /* Relationship, object center, bounding-box... etc. */
   if (!pd->hide_overlays) {
     OVERLAY_extra_cache_populate(vedata, ob);
   }
@@ -504,6 +520,7 @@ static void OVERLAY_cache_finish(void *vedata)
         {GPU_ATTACHMENT_TEXTURE(dtxl->depth_in_front), GPU_ATTACHMENT_TEXTURE(dtxl->color)});
   }
 
+  OVERLAY_mode_transfer_cache_finish(vedata);
   OVERLAY_antialiasing_cache_finish(vedata);
   OVERLAY_armature_cache_finish(vedata);
   OVERLAY_image_cache_finish(vedata);
@@ -566,12 +583,24 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_image_draw(vedata);
   OVERLAY_fade_draw(vedata);
   OVERLAY_facing_draw(vedata);
+  OVERLAY_mode_transfer_draw(vedata);
   OVERLAY_extra_blend_draw(vedata);
   OVERLAY_volume_draw(vedata);
 
-  if (pd->ctx_mode == CTX_MODE_SCULPT) {
-    /* Sculpt overlays are drawn here to avoid artifacts with wireframe opacity. */
-    OVERLAY_sculpt_draw(vedata);
+  /* These overlays are drawn here to avoid artifacts with wire-frame opacity. */
+  switch (pd->ctx_mode) {
+    case CTX_MODE_SCULPT:
+      OVERLAY_sculpt_draw(vedata);
+      break;
+    case CTX_MODE_EDIT_MESH:
+    case CTX_MODE_POSE:
+    case CTX_MODE_PAINT_WEIGHT:
+    case CTX_MODE_PAINT_VERTEX:
+    case CTX_MODE_PAINT_TEXTURE:
+      OVERLAY_paint_draw(vedata);
+      break;
+    default:
+      break;
   }
 
   if (DRW_state_is_fbo()) {
@@ -594,17 +623,13 @@ static void OVERLAY_draw_scene(void *vedata)
 
   OVERLAY_xray_depth_infront_copy(vedata);
 
-  if (pd->ctx_mode == CTX_MODE_PAINT_WEIGHT) {
-    /* Fix weird case where weightpaint mode needs to draw before xray bones. */
-    OVERLAY_paint_draw(vedata);
-  }
-
   if (DRW_state_is_fbo()) {
     GPU_framebuffer_bind(fbl->overlay_in_front_fb);
   }
 
   OVERLAY_fade_infront_draw(vedata);
   OVERLAY_facing_infront_draw(vedata);
+  OVERLAY_mode_transfer_infront_draw(vedata);
 
   if (DRW_state_is_fbo()) {
     GPU_framebuffer_bind(fbl->overlay_line_in_front_fb);
@@ -632,7 +657,6 @@ static void OVERLAY_draw_scene(void *vedata)
 
   switch (pd->ctx_mode) {
     case CTX_MODE_EDIT_MESH:
-      OVERLAY_paint_draw(vedata);
       OVERLAY_edit_mesh_draw(vedata);
       break;
     case CTX_MODE_EDIT_SURFACE:
@@ -646,12 +670,7 @@ static void OVERLAY_draw_scene(void *vedata)
       OVERLAY_edit_lattice_draw(vedata);
       break;
     case CTX_MODE_POSE:
-      OVERLAY_paint_draw(vedata);
       OVERLAY_pose_draw(vedata);
-      break;
-    case CTX_MODE_PAINT_VERTEX:
-    case CTX_MODE_PAINT_TEXTURE:
-      OVERLAY_paint_draw(vedata);
       break;
     case CTX_MODE_PARTICLE:
       OVERLAY_edit_particle_draw(vedata);
@@ -690,6 +709,7 @@ DrawEngineType draw_engine_overlay_type = {
     &overlay_data_size,
     &OVERLAY_engine_init,
     &OVERLAY_engine_free,
+    NULL, /* instance_free */
     &OVERLAY_cache_init,
     &OVERLAY_cache_populate,
     &OVERLAY_cache_finish,

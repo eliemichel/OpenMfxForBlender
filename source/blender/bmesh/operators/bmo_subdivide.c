@@ -79,7 +79,7 @@ typedef void (*subd_pattern_fill_fp)(BMesh *bm,
                                      const SubDParams *params);
 
 /*
- * note: this is a pattern-based edge subdivider.
+ * NOTE: this is a pattern-based edge subdivider.
  * it tries to match a pattern to edge selections on faces,
  * then executes functions to cut them.
  */
@@ -138,7 +138,7 @@ static BMEdge *connect_smallest_face(BMesh *bm, BMVert *v_a, BMVert *v_b, BMFace
    * multiple faces yet.  that might require a convexity test to figure out which
    * face is "best" and who knows what for non-manifold conditions.
    *
-   * note: we allow adjacent here, since there's no chance this happens.
+   * NOTE: we allow adjacent here, since there's no chance this happens.
    */
   f = BM_vert_pair_share_face_by_len(v_a, v_b, &l_a, &l_b, true);
 
@@ -240,7 +240,7 @@ static void interp_slerp_co_no_v3(
   }
 }
 
-/* calculates offset for co, based on fractal, sphere or smooth settings  */
+/* Calculates offset for co, based on fractal, sphere or smooth settings. */
 static void alter_co(BMVert *v,
                      BMEdge *UNUSED(e_orig),
                      const SubDParams *params,
@@ -469,7 +469,7 @@ static void bm_subdivide_multicut(
   alter_co(v2, &e_tmp, params, 1.0, &v1_tmp, &v2_tmp);
 }
 
-/* note: the patterns are rotated as necessary to
+/* NOTE: the patterns are rotated as necessary to
  * match the input geometry.  they're based on the
  * pre-split state of the  face */
 
@@ -1187,12 +1187,14 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
       vlen = BLI_array_len(loops);
 
       /* find the boundary of one of the split edges */
-      for (a = 1; a < vlen; a++) {
-        if (!BMO_vert_flag_test(bm, loops[a - 1]->v, ELE_INNER) &&
+      for (a = 0; a < vlen; a++) {
+        if (!BMO_vert_flag_test(bm, loops[a ? (a - 1) : (vlen - 1)]->v, ELE_INNER) &&
             BMO_vert_flag_test(bm, loops[a]->v, ELE_INNER)) {
           break;
         }
       }
+      /* Failure to break means there is an internal error. */
+      BLI_assert(a < vlen);
 
       if (BMO_vert_flag_test(bm, loops[(a + numcuts + 1) % vlen]->v, ELE_INNER)) {
         b = (a + numcuts + 1) % vlen;

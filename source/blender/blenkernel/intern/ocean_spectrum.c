@@ -77,7 +77,7 @@ static float ocean_spectrum_wind_and_damp(const Ocean *oc,
   float newval = val * pow(fabs(k_dot_w), oc->_wind_alignment);
 
   /* Eliminate wavelengths smaller than cutoff. */
-  /* val *= exp(-k2 * m_cutoff); */
+  // val *= exp(-k2 * m_cutoff);
 
   /* Reduce reflected waves. */
   if (k_dot_w < 0.0f) {
@@ -122,17 +122,12 @@ static float jonswap(const Ocean *oc, const float k2)
 
   float val = alpha_beta_spectrum(m_alpha, beta, GRAVITY, omega, m_peakomega);
 
-  /* Peak sharpening  */
+  /* Peak sharpening. */
   val *= peak_sharpen(m_omega, m_peakomega, m_gamma);
 
   return val;
 }
 
-/**
- * Pierson-Moskowitz model, 1964, assumes waves reach equilibrium with wind.
- * Model is intended for large area 'fully developed' sea, where winds have been steadily blowing
- * for days over an area that includes hundreds of wavelengths on a side.
- */
 float BLI_ocean_spectrum_piersonmoskowitz(const Ocean *oc, const float kx, const float kz)
 {
   const float k2 = kx * kx + kz * kz;
@@ -159,10 +154,6 @@ float BLI_ocean_spectrum_piersonmoskowitz(const Ocean *oc, const float kx, const
   return val;
 }
 
-/**
- * TMA extends the JONSWAP spectrum.
- * This spectral model is best suited to shallow water.
- */
 float BLI_ocean_spectrum_texelmarsenarsloe(const Ocean *oc, const float kx, const float kz)
 {
   const float k2 = kx * kx + kz * kz;
@@ -195,14 +186,6 @@ float BLI_ocean_spectrum_texelmarsenarsloe(const Ocean *oc, const float kx, cons
   return val;
 }
 
-/**
- * Hasselmann et al, 1973. This model extends the Pierson-Moskowitz model with a peak sharpening
- * function This enhancement is an artificial construct to address the problem that the wave
- * spectrum is never fully developed.
- *
- * The fetch parameter represents the distance from a lee shore,
- * called the fetch, or the distance over which the wind blows with constant velocity.
- */
 float BLI_ocean_spectrum_jonswap(const Ocean *oc, const float kx, const float kz)
 {
   const float k2 = kx * kx + kz * kz;

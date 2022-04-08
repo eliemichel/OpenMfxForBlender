@@ -45,10 +45,10 @@
 
 #include "armature_intern.h"
 
-/* *************************************************************** */
-/* Validation */
+/* -------------------------------------------------------------------- */
+/** \name Validation
+ * \{ */
 
-/* Sync selection to parent for connected children */
 void ED_armature_edit_sync_selection(ListBase *edbo)
 {
   EditBone *ebo;
@@ -86,10 +86,6 @@ void ED_armature_edit_validate_active(struct bArmature *arm)
   }
 }
 
-/* Update the layers_used variable after bones are moved between layer
- * NOTE: Used to be done in drawing code in 2.7, but that won't work with
- *       Copy-on-Write, as drawing uses evaluated copies.
- */
 void ED_armature_edit_refresh_layer_used(bArmature *arm)
 {
   arm->layer_used = 0;
@@ -98,16 +94,17 @@ void ED_armature_edit_refresh_layer_used(bArmature *arm)
   }
 }
 
-/* *************************************************************** */
-/* Bone Operations */
+/** \} */
 
-/* XXX bone_looper is only to be used when we want to access settings
- * (i.e. editability/visibility/selected) that context doesn't offer */
+/* -------------------------------------------------------------------- */
+/** \name Bone Operations
+ * \{ */
+
 int bone_looper(Object *ob, Bone *bone, void *data, int (*bone_func)(Object *, Bone *, void *))
 {
   /* We want to apply the function bone_func to every bone
    * in an armature -- feed bone_looper the first bone and
-   * a pointer to the bone_func and watch it go!. The int count
+   * a pointer to the bone_func and watch it go! The int count
    * can be useful for counting bones with a certain property
    * (e.g. skinnable)
    */
@@ -129,8 +126,11 @@ int bone_looper(Object *ob, Bone *bone, void *data, int (*bone_func)(Object *, B
   return count;
 }
 
-/* *************************************************************** */
-/* Bone Removal */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Bone Removal
+ * \{ */
 
 void bone_free(bArmature *arm, EditBone *bone)
 {
@@ -155,9 +155,6 @@ void bone_free(bArmature *arm, EditBone *bone)
   BLI_freelinkN(arm->edbo, bone);
 }
 
-/**
- * \param clear_connected: When false caller is responsible for keeping the flag in a valid state.
- */
 void ED_armature_ebone_remove_ex(bArmature *arm, EditBone *exBone, bool clear_connected)
 {
   EditBone *curBone;
@@ -190,13 +187,6 @@ bool ED_armature_ebone_is_child_recursive(EditBone *ebone_parent, EditBone *ebon
   return false;
 }
 
-/**
- * Finds the first parent shared by \a ebone_child
- *
- * \param ebone_child: Children bones to search
- * \param ebone_child_tot: Size of the ebone_child array
- * \return The shared parent or NULL.
- */
 EditBone *ED_armature_ebone_find_shared_parent(EditBone *ebone_child[], const uint ebone_child_tot)
 {
 #define EBONE_TEMP_UINT(ebone) (*((uint *)(&((ebone)->temp))))
@@ -284,20 +274,17 @@ void ED_armature_ebone_from_mat4(EditBone *ebone, const float mat[4][4])
   ED_armature_ebone_from_mat3(ebone, mat3);
 }
 
-/**
- * Return a pointer to the bone of the given name
- */
 EditBone *ED_armature_ebone_find_name(const ListBase *edbo, const char *name)
 {
   return BLI_findstring(edbo, name, offsetof(EditBone, name));
 }
 
-/* *************************************************************** */
-/* Mirroring */
+/** \} */
 
-/**
- * \see #BKE_pose_channel_get_mirrored (pose-mode, matching function)
- */
+/* -------------------------------------------------------------------- */
+/** \name Mirroring
+ * \{ */
+
 EditBone *ED_armature_ebone_get_mirrored(const ListBase *edbo, EditBone *ebo)
 {
   char name_flip[MAXBONENAME];
@@ -317,8 +304,6 @@ EditBone *ED_armature_ebone_get_mirrored(const ListBase *edbo, EditBone *ebo)
 
 /* ------------------------------------- */
 
-/* helper function for tools to work on mirrored parts.
- * it leaves mirrored bones selected then too, which is a good indication of what happened */
 void armature_select_mirrored_ex(bArmature *arm, const int flag)
 {
   BLI_assert((flag & ~(BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL)) == 0);
@@ -375,7 +360,6 @@ void armature_tag_select_mirrored(bArmature *arm)
   }
 }
 
-/* only works when tagged */
 void armature_tag_unselect(bArmature *arm)
 {
   EditBone *curBone;
@@ -391,7 +375,7 @@ void armature_tag_unselect(bArmature *arm)
 
 void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bool check_select)
 {
-  /* TODO When this function is called by property updates,
+  /* TODO: When this function is called by property updates,
    * canceling the value change will not restore mirrored bone correctly. */
 
   /* Currently check_select==true when this function is called from a transform operator,
@@ -414,9 +398,8 @@ void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bo
         eboflip->tail[2] = ebo->tail[2];
         eboflip->rad_tail = ebo->rad_tail;
         eboflip->curve_out_x = -ebo->curve_out_x;
-        eboflip->curve_out_y = ebo->curve_out_y;
-        eboflip->scale_out_x = ebo->scale_out_x;
-        eboflip->scale_out_y = ebo->scale_out_y;
+        eboflip->curve_out_z = ebo->curve_out_z;
+        copy_v3_v3(eboflip->scale_out, ebo->scale_out);
         eboflip->ease2 = ebo->ease2;
         eboflip->roll2 = -ebo->roll2;
 
@@ -438,9 +421,8 @@ void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bo
         eboflip->rad_head = ebo->rad_head;
 
         eboflip->curve_in_x = -ebo->curve_in_x;
-        eboflip->curve_in_y = ebo->curve_in_y;
-        eboflip->scale_in_x = ebo->scale_in_x;
-        eboflip->scale_in_y = ebo->scale_in_y;
+        eboflip->curve_in_z = ebo->curve_in_z;
+        copy_v3_v3(eboflip->scale_in, ebo->scale_in);
         eboflip->ease1 = ebo->ease1;
         eboflip->roll1 = -ebo->roll1;
 
@@ -467,8 +449,6 @@ void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bo
   }
 }
 
-/* if editbone (partial) selected, copy data */
-/* context; editmode armature, with mirror editing enabled */
 void ED_armature_edit_transform_mirror_update(Object *obedit)
 {
   bArmature *arm = obedit->data;
@@ -477,8 +457,11 @@ void ED_armature_edit_transform_mirror_update(Object *obedit)
   }
 }
 
-/* *************************************************************** */
-/* Armature EditMode Conversions */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Armature EditMode Conversions
+ * \{ */
 
 /* converts Bones to EditBone list, used for tools as well */
 static EditBone *make_boneList_recursive(ListBase *edbo,
@@ -542,18 +525,21 @@ static EditBone *make_boneList_recursive(ListBase *edbo,
     eBone->roll1 = curBone->roll1;
     eBone->roll2 = curBone->roll2;
     eBone->curve_in_x = curBone->curve_in_x;
-    eBone->curve_in_y = curBone->curve_in_y;
+    eBone->curve_in_z = curBone->curve_in_z;
     eBone->curve_out_x = curBone->curve_out_x;
-    eBone->curve_out_y = curBone->curve_out_y;
+    eBone->curve_out_z = curBone->curve_out_z;
     eBone->ease1 = curBone->ease1;
     eBone->ease2 = curBone->ease2;
-    eBone->scale_in_x = curBone->scale_in_x;
-    eBone->scale_in_y = curBone->scale_in_y;
-    eBone->scale_out_x = curBone->scale_out_x;
-    eBone->scale_out_y = curBone->scale_out_y;
+
+    copy_v3_v3(eBone->scale_in, curBone->scale_in);
+    copy_v3_v3(eBone->scale_out, curBone->scale_out);
 
     eBone->bbone_prev_type = curBone->bbone_prev_type;
     eBone->bbone_next_type = curBone->bbone_next_type;
+
+    eBone->bbone_flag = curBone->bbone_flag;
+    eBone->bbone_prev_flag = curBone->bbone_prev_flag;
+    eBone->bbone_next_flag = curBone->bbone_next_flag;
 
     if (curBone->prop) {
       eBone->prop = IDP_CopyProperty(curBone->prop);
@@ -687,7 +673,6 @@ static void armature_finalize_restpose(ListBase *bonelist, ListBase *editbonelis
   }
 }
 
-/* put EditMode back in Object */
 void ED_armature_from_edit(Main *bmain, bArmature *arm)
 {
   EditBone *eBone, *neBone;
@@ -757,18 +742,20 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
     newBone->roll1 = eBone->roll1;
     newBone->roll2 = eBone->roll2;
     newBone->curve_in_x = eBone->curve_in_x;
-    newBone->curve_in_y = eBone->curve_in_y;
+    newBone->curve_in_z = eBone->curve_in_z;
     newBone->curve_out_x = eBone->curve_out_x;
-    newBone->curve_out_y = eBone->curve_out_y;
+    newBone->curve_out_z = eBone->curve_out_z;
     newBone->ease1 = eBone->ease1;
     newBone->ease2 = eBone->ease2;
-    newBone->scale_in_x = eBone->scale_in_x;
-    newBone->scale_in_y = eBone->scale_in_y;
-    newBone->scale_out_x = eBone->scale_out_x;
-    newBone->scale_out_y = eBone->scale_out_y;
+    copy_v3_v3(newBone->scale_in, eBone->scale_in);
+    copy_v3_v3(newBone->scale_out, eBone->scale_out);
 
     newBone->bbone_prev_type = eBone->bbone_prev_type;
     newBone->bbone_next_type = eBone->bbone_next_type;
+
+    newBone->bbone_flag = eBone->bbone_flag;
+    newBone->bbone_prev_flag = eBone->bbone_prev_flag;
+    newBone->bbone_next_flag = eBone->bbone_next_flag;
 
     if (eBone->prop) {
       newBone->prop = IDP_CopyProperty(eBone->prop);
@@ -835,7 +822,6 @@ void ED_armature_edit_free(struct bArmature *arm)
   }
 }
 
-/* Put armature in EditMode */
 void ED_armature_to_edit(bArmature *arm)
 {
   ED_armature_edit_free(arm);
@@ -843,10 +829,11 @@ void ED_armature_to_edit(bArmature *arm)
   arm->act_edbone = make_boneList(arm->edbo, &arm->bonebase, arm->act_bone);
 }
 
-/* *************************************************************** */
-/* Used by Undo for Armature EditMode*/
+/** \} */
 
-/* free's bones and their properties */
+/* -------------------------------------------------------------------- */
+/** \name Used by Undo for Armature EditMode
+ * \{ */
 
 void ED_armature_ebone_listbase_free(ListBase *lb, const bool do_id_user)
 {
@@ -905,10 +892,14 @@ void ED_armature_ebone_listbase_temp_clear(ListBase *lb)
   }
 }
 
-/* *************************************************************** */
-/* Low level selection functions which hide connected-parent
- * flag behavior which gets tricky to handle in selection operators.
- * (no flushing in ED_armature_ebone_select.*, that should be explicit) */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Low Level Selection Functions
+ *
+ * which hide connected-parent flag behavior which gets tricky to handle in selection operators.
+ * (no flushing in `ED_armature_ebone_select.*`, that should be explicit).
+ * \{ */
 
 int ED_armature_ebone_selectflag_get(const EditBone *ebone)
 {
@@ -961,3 +952,5 @@ void ED_armature_ebone_select_set(EditBone *ebone, bool select)
   }
   ED_armature_ebone_selectflag_set(ebone, flag);
 }
+
+/** \} */

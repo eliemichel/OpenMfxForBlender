@@ -32,3 +32,32 @@ You can then stack it with other modifiers, and/or apply it.
 
 Blender as a whole, and hence this branch, is licensed under the GNU Public License, Version 3.
 Individual files may have a different, but compatible license.
+
+## Misc
+
+### A little guide for syncing with Blender's main branch
+
+Provided the upstream repository is added as `upstream` (if not, run `git remote add upstream git://git.blender.org/blender.git`) and that you are on branch `openmfx`:
+
+    git fetch upstream
+    git tag  # find the tag X.X.X you want to merge
+    git merge vX.X.X
+
+Then call `make update` to sync the dependencies.
+
+Run a `git status` to see all files marked as `both modified` or `both added`. For files `A`, `B`, `C`, etc. that are not related to OpenMfx nor to the integration of OpenMfx as a modifer, you can run
+
+    git checkout --theirs A B C ...
+
+For unrelated files that are `deleted by them`:
+
+    git rm A B C ...
+
+Other files require manual inspection! Example of files that must be handled manually:
+
+    source/blender/makesdna/DNA_modifier_types.h
+	source/blender/makesrna/intern/rna_modifier.c
+
+Look for `>>>>>>>` and treat cases where the conflict area contains mentions to OpenMfx.
+
+Finally, try to build and fix issues.

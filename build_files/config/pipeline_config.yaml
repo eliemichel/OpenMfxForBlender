@@ -1,48 +1,49 @@
 #
-# Do NOT merge to master 
-#
-
-#
 # Used by Buildbot build pipeline make_update.py script only for now
-# We intended to udpate the make_update.py in the branches to use this file eventually
+# We intended to update the make_update.py in the branches to use this file eventually
 #
 update-code:
     git:
         submodules:
-        -   branch: blender-v2.93-release
+        -   branch: blender-v3.1-release
             commit_id: HEAD
             path: release/scripts/addons
-        -   branch: blender-v2.93-release
+        -   branch: blender-v3.1-release
             commit_id: HEAD
             path: release/scripts/addons_contrib
-        -   branch: blender-v2.93-release
+        -   branch: blender-v3.1-release
             commit_id: HEAD
             path: release/datafiles/locale
-        -   branch: blender-v2.93-release
+        -   branch: blender-v3.1-release
             commit_id: HEAD
             path: source/tools
     svn:
         libraries:
             darwin-arm64:
-                branch: tags/blender-2.93-release
+                branch: tags/blender-3.1-release
                 commit_id: HEAD
                 path: lib/darwin_arm64
             darwin-x86_64:
-                branch: tags/blender-2.93-release
+                branch: tags/blender-3.1-release
                 commit_id: HEAD
                 path: lib/darwin
             linux-x86_64:
-                branch: tags/blender-2.93-release
+                branch: tags/blender-3.1-release
                 commit_id: HEAD
                 path: lib/linux_centos7_x86_64
             windows-amd64:
-                branch: tags/blender-2.93-release
+                branch: tags/blender-3.1-release
                 commit_id: HEAD
                 path: lib/win64_vc15
         tests:
-            branch: tags/blender-2.93-release
+            branch: tags/blender-3.1-release
             commit_id: HEAD
             path: lib/tests
+        benchmarks:
+            branch: trunk
+            commit_id: HEAD
+            path: lib/benchmarks
+
 #
 # Buildbot only configs
 #
@@ -54,11 +55,11 @@ buildbot:
     cuda11:
         version: '11.4.1'
     optix:
-        version: '7.1.0'
+        version: '7.3.0'
     cmake:
         default:
-            overrides: {}
             version: any
+            overrides: {}
         darwin-arm64:
             overrides: {}
         darwin-x86_64:

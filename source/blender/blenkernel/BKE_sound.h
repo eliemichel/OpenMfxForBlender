@@ -61,8 +61,7 @@ struct bSound *BKE_sound_new_file_exists_ex(struct Main *bmain,
                                             bool *r_exists);
 struct bSound *BKE_sound_new_file_exists(struct Main *bmain, const char *filepath);
 
-// XXX unused currently
-#if 0
+#if 0 /* UNUSED */
 struct bSound *BKE_sound_new_buffer(struct Main *bmain, struct bSound *source);
 
 struct bSound *BKE_sound_new_limiter(struct Main *bmain,
@@ -100,9 +99,21 @@ typedef struct SoundInfo {
   double start_offset;
 } SoundInfo;
 
+typedef struct SoundStreamInfo {
+  double duration;
+  double start;
+} SoundStreamInfo;
+
 /* Get information about given sound. Returns truth on success., false if sound can not be loaded
  * or if the codes is not supported. */
 bool BKE_sound_info_get(struct Main *main, struct bSound *sound, SoundInfo *sound_info);
+
+/* Get information about given sound. Returns truth on success., false if sound can not be loaded
+ * or if the codes is not supported. */
+bool BKE_sound_stream_info_get(struct Main *main,
+                               const char *filepath,
+                               int stream,
+                               SoundStreamInfo *sound_info);
 
 #if defined(WITH_AUDASPACE)
 AUD_Device *BKE_sound_mixdown(const struct Scene *scene,

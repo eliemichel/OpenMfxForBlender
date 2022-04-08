@@ -27,7 +27,7 @@ if(NOT MSVC)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  set(MSVC_CLANG On)
+  set(MSVC_CLANG ON)
   set(VC_TOOLS_DIR $ENV{VCToolsRedistDir} CACHE STRING "Location of the msvc redistributables")
   set(MSVC_REDIST_DIR ${VC_TOOLS_DIR})
   if(DEFINED MSVC_REDIST_DIR)
@@ -53,11 +53,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   endif()
   if(WITH_WINDOWS_STRIPPED_PDB)
     message(WARNING "stripped pdb not supported with clang, disabling..")
-    set(WITH_WINDOWS_STRIPPED_PDB Off)
+    set(WITH_WINDOWS_STRIPPED_PDB OFF)
+  endif()
+else()
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19.28.29921) # MSVC 2019 16.9.16
+    message(FATAL_ERROR "Compiler is unsupported, MSVC 2019 16.9.16 or newer is required for building blender.")
   endif()
 endif()
-
-set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
 
 if(NOT WITH_PYTHON_MODULE)
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT blender)
@@ -119,7 +121,7 @@ string(APPEND CMAKE_MODULE_LINKER_FLAGS " /SAFESEH:NO /ignore:4099")
 list(APPEND PLATFORM_LINKLIBS
   ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32 version
   advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
-  pathcch
+  pathcch Shcore
 )
 
 if(WITH_INPUT_IME)
@@ -144,8 +146,8 @@ add_definitions(-D_ALLOW_KEYWORD_MACROS)
 # that both /GR and /GR- are specified.
 remove_cc_flag("/GR")
 
-# We want to support Windows 7 level ABI
-add_definitions(-D_WIN32_WINNT=0x601)
+# Make the Windows 8.1 API available for use.
+add_definitions(-D_WIN32_WINNT=0x603)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD" "/Zi")
 
@@ -153,15 +155,15 @@ if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   string(APPEND CMAKE_CXX_FLAGS " ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference")
 else()
-  string(APPEND CMAKE_CXX_FLAGS " /nologo /J /Gd /MP /EHsc /bigobj")
-  set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
+  string(APPEND CMAKE_CXX_FLAGS " /nologo /J /Gd /MP /EHsc /bigobj /Zc:inline")
+  set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj /Zc:inline")
 endif()
 
 # X64 ASAN is available and usable on MSVC 16.9 preview 4 and up)
 if(WITH_COMPILER_ASAN AND MSVC AND NOT MSVC_CLANG)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19.28.29828)
     #set a flag so we don't have to do this comparison all the time
-    SET(MSVC_ASAN On)
+    SET(MSVC_ASAN ON)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fsanitize=address")
     set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /fsanitize=address")
     string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " /INCREMENTAL:NO")
@@ -181,22 +183,22 @@ endif()
 
 if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
     message(WARNING "Disabling sccache, sccache is not supported with msbuild")
-    set(WITH_WINDOWS_SCCACHE Off)
+    set(WITH_WINDOWS_SCCACHE OFF)
 endif()
 
 # Debug Symbol format
 # sccache # MSVC_ASAN # format # why
-# On      # On        # Z7     # sccache will only play nice with Z7
-# On      # Off       # Z7     # sccache will only play nice with Z7
-# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
-# Off     # Off       # ZI     # Neither asan nor sscache is enabled Edit and Continue is available
+# ON      # ON        # Z7     # sccache will only play nice with Z7
+# ON      # OFF       # Z7     # sccache will only play nice with Z7
+# OFF     # ON        # Zi     # Asan will not play nice with Edit and Continue
+# OFF     # OFF       # ZI     # Neither asan nor sscache is enabled Edit and Continue is available
 
 # Release Symbol format
 # sccache # MSVC_ASAN # format # why
-# On      # On        # Z7     # sccache will only play nice with Z7
-# On      # Off       # Z7     # sccache will only play nice with Z7
-# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
-# Off     # Off       # Zi     # Edit and Continue disables some optimizations
+# ON      # ON        # Z7     # sccache will only play nice with Z7
+# ON      # OFF       # Z7     # sccache will only play nice with Z7
+# OFF     # ON        # Zi     # Asan will not play nice with Edit and Continue
+# OFF     # OFF       # Zi     # Edit and Continue disables some optimizations
 
 
 if(WITH_WINDOWS_SCCACHE)
@@ -217,8 +219,8 @@ else()
 endif()
 
 if(WITH_WINDOWS_PDB)
-	set(PDB_INFO_OVERRIDE_FLAGS "${SYMBOL_FORMAT_RELEASE}")
-	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+  set(PDB_INFO_OVERRIDE_FLAGS "${SYMBOL_FORMAT_RELEASE}")
+  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
 string(APPEND CMAKE_CXX_FLAGS_DEBUG " /MDd ${SYMBOL_FORMAT}")
@@ -261,15 +263,11 @@ if(NOT DEFINED LIBDIR)
   else()
     message(FATAL_ERROR "32 bit compiler detected, blender no longer provides pre-build libraries for 32 bit windows, please set the LIBDIR cmake variable to your own library folder")
   endif()
-  # Can be 1910..1912
-  if(MSVC_VERSION GREATER 1919)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19.30.30423)
+    message(STATUS "Visual Studio 2022 detected.")
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
+  elseif(MSVC_VERSION GREATER 1919)
     message(STATUS "Visual Studio 2019 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
-  elseif(MSVC_VERSION GREATER 1909)
-    message(STATUS "Visual Studio 2017 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
-  elseif(MSVC_VERSION EQUAL 1900)
-    message(STATUS "Visual Studio 2015 detected.")
     set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   endif()
 else()
@@ -288,7 +286,7 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio.+" AND # Only supported in the VS IDE
     "EnableMicrosoftCodeAnalysis=false"
     "EnableClangTidyCodeAnalysis=true"
   )
-  set(VS_CLANG_TIDY On)
+  set(VS_CLANG_TIDY ON)
 endif()
 
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
@@ -347,7 +345,11 @@ set(FREETYPE_INCLUDE_DIRS
   ${LIBDIR}/freetype/include
   ${LIBDIR}/freetype/include/freetype2
 )
-set(FREETYPE_LIBRARY ${LIBDIR}/freetype/lib/freetype2ST.lib)
+set(FREETYPE_LIBRARIES
+  ${LIBDIR}/freetype/lib/freetype2ST.lib
+  ${LIBDIR}/brotli/lib/brotlidec-static.lib
+  ${LIBDIR}/brotli/lib/brotlicommon-static.lib
+)
 windows_find_package(freetype REQUIRED)
 
 if(WITH_FFTW3)
@@ -461,7 +463,7 @@ if(WITH_JACK)
 endif()
 
 if(WITH_PYTHON)
-  set(PYTHON_VERSION 3.9) # CACHE STRING)
+  set(PYTHON_VERSION 3.10) # CACHE STRING)
 
   string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
   set(PYTHON_LIBRARY ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}.lib)
@@ -469,7 +471,7 @@ if(WITH_PYTHON)
 
   set(PYTHON_INCLUDE_DIR ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/include)
   set(PYTHON_NUMPY_INCLUDE_DIRS ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/lib/site-packages/numpy/core/include)
-  set(NUMPY_FOUND On)
+  set(NUMPY_FOUND ON)
   unset(_PYTHON_VERSION_NO_DOTS)
   # uncached vars
   set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
@@ -477,7 +479,7 @@ if(WITH_PYTHON)
 endif()
 
 if(WITH_BOOST)
-  if(WITH_CYCLES_OSL)
+  if(WITH_CYCLES AND WITH_CYCLES_OSL)
     set(boost_extra_libs wave)
   endif()
   if(WITH_INTERNATIONAL)
@@ -520,7 +522,7 @@ if(WITH_BOOST)
       debug ${BOOST_LIBPATH}/libboost_thread-${BOOST_DEBUG_POSTFIX}
       debug ${BOOST_LIBPATH}/libboost_chrono-${BOOST_DEBUG_POSTFIX}
     )
-    if(WITH_CYCLES_OSL)
+    if(WITH_CYCLES AND WITH_CYCLES_OSL)
       set(BOOST_LIBRARIES ${BOOST_LIBRARIES}
         optimized ${BOOST_LIBPATH}/libboost_wave-${BOOST_POSTFIX}
         debug ${BOOST_LIBPATH}/libboost_wave-${BOOST_DEBUG_POSTFIX})
@@ -548,7 +550,6 @@ if(WITH_OPENIMAGEIO)
   set(OPENIMAGEIO_LIBRARIES ${OIIO_OPTIMIZED} ${OIIO_DEBUG})
 
   set(OPENIMAGEIO_DEFINITIONS "-DUSE_TBB=0")
-  set(OPENCOLORIO_DEFINITIONS "-DDOpenColorIO_SKIP_IMPORTS")
   set(OPENIMAGEIO_IDIFF "${OPENIMAGEIO}/bin/idiff.exe")
   add_definitions(-DOIIO_STATIC_DEFINE)
   add_definitions(-DOIIO_NO_SSE=1)
@@ -594,7 +595,7 @@ if(WITH_OPENCOLORIO)
     debug ${OPENCOLORIO_LIBPATH}/libexpatdMD.lib
     debug ${OPENCOLORIO_LIBPATH}/pystring_d.lib
   )
-  set(OPENCOLORIO_DEFINITIONS)
+  set(OPENCOLORIO_DEFINITIONS "-DOpenColorIO_SKIP_IMPORTS")
 endif()
 
 if(WITH_OPENVDB)
@@ -675,10 +676,11 @@ if(WITH_SYSTEM_AUDASPACE)
 endif()
 
 if(WITH_TBB)
-  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/debug/tbb_debug.lib)
+  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
   set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
   set(TBB_INCLUDE_DIRS ${TBB_INCLUDE_DIR})
   if(WITH_TBB_MALLOC_PROXY)
+    set(TBB_MALLOC_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbbmalloc.lib debug ${LIBDIR}/tbb/lib/tbbmalloc_debug.lib)
     add_definitions(-DWITH_TBB_MALLOC)
   endif()
 endif()
@@ -708,7 +710,7 @@ if(WITH_CODEC_SNDFILE)
   set(LIBSNDFILE_LIBRARIES ${LIBSNDFILE_LIBPATH}/libsndfile-1.lib)
 endif()
 
-if(WITH_CYCLES_OSL)
+if(WITH_CYCLES AND WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
   set(OSL_SHADER_DIR ${CYCLES_OSL}/shaders)
   # Shaders have moved around a bit between OSL versions, check multiple locations
@@ -741,7 +743,7 @@ if(WITH_CYCLES_OSL)
   endif()
 endif()
 
-if(WITH_CYCLES_EMBREE)
+if(WITH_CYCLES AND WITH_CYCLES_EMBREE)
   windows_find_package(Embree)
   if(NOT EMBREE_FOUND)
     set(EMBREE_INCLUDE_DIRS ${LIBDIR}/embree/include)
@@ -853,18 +855,18 @@ if(WITH_GMP)
   set(GMP_INCLUDE_DIRS ${LIBDIR}/gmp/include)
   set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
   set(GMP_ROOT_DIR ${LIBDIR}/gmp)
-  set(GMP_FOUND On)
+  set(GMP_FOUND ON)
 endif()
 
 if(WITH_POTRACE)
   set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
   set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
-  set(POTRACE_FOUND On)
+  set(POTRACE_FOUND ON)
 endif()
 
 if(WITH_HARU)
   if(EXISTS ${LIBDIR}/haru)
-    set(HARU_FOUND On)
+    set(HARU_FOUND ON)
     set(HARU_ROOT_DIR ${LIBDIR}/haru)
     set(HARU_INCLUDE_DIRS ${HARU_ROOT_DIR}/include)
     set(HARU_LIBRARIES ${HARU_ROOT_DIR}/lib/libhpdfs.lib)
@@ -873,3 +875,6 @@ if(WITH_HARU)
     set(WITH_HARU OFF)
   endif()
 endif()
+
+set(ZSTD_INCLUDE_DIRS ${LIBDIR}/zstd/include)
+set(ZSTD_LIBRARIES ${LIBDIR}/zstd/lib/zstd_static.lib)

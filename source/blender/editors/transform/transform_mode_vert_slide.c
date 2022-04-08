@@ -158,7 +158,7 @@ static void calcVertSlideMouseActiveEdges(struct TransInfo *t, const int mval[2]
   TransDataVertSlideVert *sv;
   int i;
 
-  /* note: we could save a matrix-multiply for each vertex
+  /* NOTE: we could save a matrix-multiply for each vertex
    * by finding the closest edge in local-space.
    * However this skews the outcome with non-uniform-scale. */
 
@@ -582,7 +582,7 @@ static void applyVertSlide(TransInfo *t, const int UNUSED(mval[2]))
   const bool is_clamp = !(t->flag & T_ALT_TRANSFORM);
   const bool is_constrained = !(is_clamp == false || hasNumInput(&t->num));
 
-  final = t->values[0];
+  final = t->values[0] + t->values_modal_offset[0];
 
   applySnapping(t, &final);
   if (!validSnap(t)) {
@@ -606,15 +606,15 @@ static void applyVertSlide(TransInfo *t, const int UNUSED(mval[2]))
     ofs += BLI_strncpy_rlen(str + ofs, &c[0], sizeof(str) - ofs);
   }
   else {
-    ofs += BLI_snprintf(str + ofs, sizeof(str) - ofs, "%.4f ", final);
+    ofs += BLI_snprintf_rlen(str + ofs, sizeof(str) - ofs, "%.4f ", final);
   }
-  ofs += BLI_snprintf(
+  ofs += BLI_snprintf_rlen(
       str + ofs, sizeof(str) - ofs, TIP_("(E)ven: %s, "), WM_bool_as_string(use_even));
   if (use_even) {
-    ofs += BLI_snprintf(
+    ofs += BLI_snprintf_rlen(
         str + ofs, sizeof(str) - ofs, TIP_("(F)lipped: %s, "), WM_bool_as_string(flipped));
   }
-  ofs += BLI_snprintf(
+  ofs += BLI_snprintf_rlen(
       str + ofs, sizeof(str) - ofs, TIP_("Alt or (C)lamp: %s"), WM_bool_as_string(is_clamp));
   /* done with header string */
 
@@ -687,4 +687,5 @@ void initVertSlide(TransInfo *t)
 {
   initVertSlide_ex(t, false, false, true);
 }
+
 /** \} */

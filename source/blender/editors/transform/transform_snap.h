@@ -27,7 +27,7 @@
 
 bool peelObjectsTransform(struct TransInfo *t,
                           const float mval[2],
-                          const bool use_peel_object,
+                          bool use_peel_object,
                           /* return args */
                           float r_loc[3],
                           float r_no[3],
@@ -45,22 +45,16 @@ bool snapNodesTransform(struct TransInfo *t,
                         float r_loc[2],
                         float *r_dist_px,
                         char *r_node_border);
-void snapFrameTransform(struct TransInfo *t,
-                        const eAnimEdit_AutoSnap autosnap,
-                        const bool is_frame_value,
-                        const float delta,
-                        /* return args */
-                        float *r_val);
 
 bool transformModeUseSnap(const TransInfo *t);
 
-bool transform_snap_increment_ex(TransInfo *t, bool use_local_space, float *r_val);
-bool transform_snap_increment(TransInfo *t, float *val);
+bool transform_snap_increment_ex(const TransInfo *t, bool use_local_space, float *r_val);
+bool transform_snap_increment(const TransInfo *t, float *val);
 bool transform_snap_grid(TransInfo *t, float *val);
 
-void snapSequenceBounds(TransInfo *t, const int mval[2]);
-
 bool activeSnap(const TransInfo *t);
+bool activeSnap_with_project(const TransInfo *t);
+
 bool validSnap(const TransInfo *t);
 
 void initSnapping(struct TransInfo *t, struct wmOperator *op);
@@ -80,3 +74,33 @@ eRedrawFlag updateSelectedSnapPoint(TransInfo *t);
 void removeSnapPoint(TransInfo *t);
 
 float transform_snap_distance_len_squared_fn(TransInfo *t, const float p1[3], const float p2[3]);
+
+/* transform_snap_sequencer.c */
+
+struct TransSeqSnapData *transform_snap_sequencer_data_alloc(const TransInfo *t);
+void transform_snap_sequencer_data_free(struct TransSeqSnapData *data);
+bool transform_snap_sequencer_calc(struct TransInfo *t);
+void transform_snap_sequencer_apply_translate(TransInfo *t, float *vec);
+
+/* transform_snap_animation.c */
+
+/**
+ * This function returns the snapping 'mode' for Animation Editors only.
+ * We cannot use the standard snapping due to NLA-strip scaling complexities.
+ *
+ * TODO: these modifier checks should be accessible from the key-map.
+ */
+short getAnimEdit_SnapMode(TransInfo *t);
+void snapFrameTransform(TransInfo *t,
+                        eAnimEdit_AutoSnap autosnap,
+                        float val_initial,
+                        float val_final,
+                        float *r_val_final);
+/**
+ * This function is used by Animation Editor specific transform functions to do
+ * the Snap Keyframe to Nearest Frame/Marker
+ */
+void transform_snap_anim_flush_data(TransInfo *t,
+                                    TransData *td,
+                                    eAnimEdit_AutoSnap autosnap,
+                                    float *r_val_final);

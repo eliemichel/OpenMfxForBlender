@@ -15,7 +15,7 @@
  */
 
 /** \file
- * \ingroup MEM
+ * \ingroup intern_mem
  *
  * Guarded memory allocation, and boundary-write detection.
  */
@@ -67,7 +67,7 @@ const char *(*MEM_name_ptr)(void *vmemh) = MEM_lockfree_name_ptr;
 
 void *aligned_malloc(size_t size, size_t alignment)
 {
-  /* posix_memalign requires alignment to be a multiple of sizeof(void *). */
+  /* #posix_memalign requires alignment to be a multiple of `sizeof(void *)`. */
   assert(alignment >= ALIGNED_MALLOC_MINIMUM_ALIGNMENT);
 
 #ifdef _WIN32

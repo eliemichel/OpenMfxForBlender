@@ -16,27 +16,14 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_remove_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING,
-     N_("Attribute"),
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     -1.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_MULTI_INPUT},
-    {-1, ""},
-};
+namespace blender::nodes::node_geo_attribute_remove_cc {
 
-static bNodeSocketTemplate geo_node_attribute_remove_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
-
-namespace blender::nodes {
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>(N_("Geometry"));
+  b.add_input<decl::String>(N_("Attribute")).multi_input();
+  b.add_output<decl::Geometry>(N_("Geometry"));
+}
 
 static void remove_attribute(GeometryComponent &component,
                              GeoNodeExecParams &params,
@@ -55,12 +42,10 @@ static void remove_attribute(GeometryComponent &component,
   }
 }
 
-static void geo_node_attribute_remove_exec(GeoNodeExecParams params)
+static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
   Vector<std::string> attribute_names = params.extract_multi_input<std::string>("Attribute");
-
-  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     remove_attribute(
@@ -70,18 +55,27 @@ static void geo_node_attribute_remove_exec(GeoNodeExecParams params)
     remove_attribute(
         geometry_set.get_component_for_write<PointCloudComponent>(), params, attribute_names);
   }
+  if (geometry_set.has<CurveComponent>()) {
+    remove_attribute(
+        geometry_set.get_component_for_write<CurveComponent>(), params, attribute_names);
+  }
+  if (geometry_set.has<InstancesComponent>()) {
+    remove_attribute(
+        geometry_set.get_component_for_write<InstancesComponent>(), params, attribute_names);
+  }
 
   params.set_output("Geometry", geometry_set);
 }
-}  // namespace blender::nodes
+}  // namespace blender::nodes::node_geo_attribute_remove_cc
 
 void register_node_type_geo_attribute_remove()
 {
+  namespace file_ns = blender::nodes::node_geo_attribute_remove_cc;
+
   static bNodeType ntype;
 
-  geo_node_type_base(
-      &ntype, GEO_NODE_ATTRIBUTE_REMOVE, "Attribute Remove", NODE_CLASS_ATTRIBUTE, 0);
-  node_type_socket_templates(&ntype, geo_node_attribute_remove_in, geo_node_attribute_remove_out);
-  ntype.geometry_node_execute = blender::nodes::geo_node_attribute_remove_exec;
+  geo_node_type_base(&ntype, GEO_NODE_ATTRIBUTE_REMOVE, "Attribute Remove", NODE_CLASS_ATTRIBUTE);
+  ntype.geometry_node_execute = file_ns::node_geo_exec;
+  ntype.declare = file_ns::node_declare;
   nodeRegisterType(&ntype);
 }

@@ -180,7 +180,7 @@ void ED_object_assign_active_image(Main *bmain, Object *ob, int mat_nr, Image *i
 
   if (node && is_image_texture_node(node)) {
     node->id = &ima->id;
-    ED_node_tag_update_nodetree(bmain, ma->nodetree, node);
+    ED_node_tree_propagate_change(NULL, bmain, ma->nodetree);
   }
 }
 
@@ -253,7 +253,6 @@ bool ED_uvedit_minmax(const Scene *scene, Object *obedit, float r_min[2], float 
   return ED_uvedit_minmax_multi(scene, &obedit, 1, r_min, r_max);
 }
 
-/* Be careful when using this, it bypasses all synchronization options */
 void ED_uvedit_select_all(BMesh *bm)
 {
   BMFace *efa;
@@ -608,7 +607,7 @@ static void uv_weld_align(bContext *C, eUVWeldAlign tool)
                 /* Projection of point (x, y) over line (x1, y1, x2, y2) along X axis:
                  * new_y = (y2 - y1) / (x2 - x1) * (x - x1) + y1
                  * Maybe this should be a BLI func? Or is it already existing?
-                 * Could use interp_v2_v2v2, but not sure it's worth it here...*/
+                 * Could use interp_v2_v2v2, but not sure it's worth it here. */
                 if (tool_local == UV_STRAIGHTEN_X) {
                   luv->uv[0] = a * (luv->uv[1] - uv_start[1]) + uv_start[0];
                 }
@@ -624,7 +623,7 @@ static void uv_weld_align(bContext *C, eUVWeldAlign tool)
           }
         }
         else {
-          /* error - not a line, needs 3+ points  */
+          /* error - not a line, needs 3+ points. */
         }
 
         if (eve_line) {
@@ -632,7 +631,7 @@ static void uv_weld_align(bContext *C, eUVWeldAlign tool)
         }
       }
       else {
-        /* error - cant find an endpoint */
+        /* error - can't find an endpoint. */
       }
     }
 
@@ -1187,15 +1186,15 @@ static bool uv_snap_uvs_to_adjacent_unselected(Scene *scene, Object *obedit)
   }
 
   BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-    if (BM_elem_flag_test(f, BM_ELEM_TAG)) { /* face: visible */
+    if (BM_elem_flag_test(f, BM_ELEM_TAG)) { /* Face: visible. */
       BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
-        if (BM_elem_flag_test(l, BM_ELEM_TAG)) { /* loop: selected*/
+        if (BM_elem_flag_test(l, BM_ELEM_TAG)) { /* Loop: selected. */
           float uv[2] = {0.0f, 0.0f};
           int uv_tot = 0;
 
           BM_ITER_ELEM (lsub, &lsubiter, l->v, BM_LOOPS_OF_VERT) {
-            if (BM_elem_flag_test(lsub->f, BM_ELEM_TAG) && /* face: visible */
-                !BM_elem_flag_test(lsub, BM_ELEM_TAG))     /* loop: unselected  */
+            if (BM_elem_flag_test(lsub->f, BM_ELEM_TAG) && /* Face: visible. */
+                !BM_elem_flag_test(lsub, BM_ELEM_TAG))     /* Loop: unselected. */
             {
               luv = BM_ELEM_CD_GET_VOID_P(lsub, cd_loop_uv_offset);
               add_v2_v2(uv, luv->uv);
@@ -1469,7 +1468,12 @@ static int uv_hide_exec(bContext *C, wmOperator *op)
 
     if (ts->uv_flag & UV_SYNC_SELECTION) {
       if (EDBM_mesh_hide(em, swap)) {
-        EDBM_update_generic(ob->data, true, false);
+        EDBM_update(ob->data,
+                    &(const struct EDBMUpdate_Params){
+                        .calc_looptri = true,
+                        .calc_normals = false,
+                        .is_destructive = false,
+                    });
       }
       continue;
     }
@@ -1491,7 +1495,7 @@ static int uv_hide_exec(bContext *C, wmOperator *op)
       }
 
       if (hide) {
-        /* note, a special case for edges could be used,
+        /* NOTE: a special case for edges could be used,
          * for now edges act like verts and get flushed */
         if (use_face_center) {
           if (em->selectmode == SCE_SELECT_FACE) {
@@ -1607,7 +1611,12 @@ static int uv_reveal_exec(bContext *C, wmOperator *op)
     /* call the mesh function if we are in mesh sync sel */
     if (ts->uv_flag & UV_SYNC_SELECTION) {
       if (EDBM_mesh_reveal(em, select)) {
-        EDBM_update_generic(ob->data, true, false);
+        EDBM_update(ob->data,
+                    &(const struct EDBMUpdate_Params){
+                        .calc_looptri = true,
+                        .calc_normals = false,
+                        .is_destructive = false,
+                    });
       }
       continue;
     }
@@ -1755,11 +1764,9 @@ static int uv_set_2d_cursor_invoke(bContext *C, wmOperator *op, const wmEvent *e
   float location[2];
 
   if (region->regiontype == RGN_TYPE_WINDOW) {
-    if (event->mval[1] <= 16) {
-      SpaceImage *sima = CTX_wm_space_image(C);
-      if (sima && ED_space_image_show_cache(sima)) {
-        return OPERATOR_PASS_THROUGH;
-      }
+    SpaceImage *sima = CTX_wm_space_image(C);
+    if (sima && ED_space_image_show_cache_and_mval_over(sima, region, event->mval)) {
+      return OPERATOR_PASS_THROUGH;
     }
   }
 

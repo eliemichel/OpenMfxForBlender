@@ -18,12 +18,13 @@
 #include "bvh/bvh.h"
 
 #include "bvh/bvh2.h"
-#include "bvh/bvh_embree.h"
-#include "bvh/bvh_multi.h"
-#include "bvh/bvh_optix.h"
+#include "bvh/embree.h"
+#include "bvh/metal.h"
+#include "bvh/multi.h"
+#include "bvh/optix.h"
 
-#include "util/util_logging.h"
-#include "util/util_progress.h"
+#include "util/log.h"
+#include "util/progress.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -40,8 +41,12 @@ const char *bvh_layout_name(BVHLayout layout)
       return "EMBREE";
     case BVH_LAYOUT_OPTIX:
       return "OPTIX";
+    case BVH_LAYOUT_METAL:
+      return "METAL";
     case BVH_LAYOUT_MULTI_OPTIX:
+    case BVH_LAYOUT_MULTI_METAL:
     case BVH_LAYOUT_MULTI_OPTIX_EMBREE:
+    case BVH_LAYOUT_MULTI_METAL_EMBREE:
       return "MULTI";
     case BVH_LAYOUT_ALL:
       return "ALL";
@@ -103,8 +108,17 @@ BVH *BVH::create(const BVHParams &params,
       (void)device;
       break;
 #endif
+    case BVH_LAYOUT_METAL:
+#ifdef WITH_METAL
+      return bvh_metal_create(params, geometry, objects, device);
+#else
+      (void)device;
+      break;
+#endif
     case BVH_LAYOUT_MULTI_OPTIX:
+    case BVH_LAYOUT_MULTI_METAL:
     case BVH_LAYOUT_MULTI_OPTIX_EMBREE:
+    case BVH_LAYOUT_MULTI_METAL_EMBREE:
       return new BVHMulti(params, geometry, objects);
     case BVH_LAYOUT_NONE:
     case BVH_LAYOUT_ALL:

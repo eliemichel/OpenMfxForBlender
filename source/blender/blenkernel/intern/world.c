@@ -131,33 +131,33 @@ static void world_foreach_id(ID *id, LibraryForeachIDData *data)
 
   if (world->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
-    BKE_library_foreach_ID_embedded(data, (ID **)&world->nodetree);
+    BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+        data, BKE_library_foreach_ID_embedded(data, (ID **)&world->nodetree));
   }
 }
 
 static void world_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   World *wrld = (World *)id;
-  if (wrld->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
-    BLI_listbase_clear(&wrld->gpumaterial);
 
-    /* write LibData */
-    BLO_write_id_struct(writer, World, id_address, &wrld->id);
-    BKE_id_blend_write(writer, &wrld->id);
+  /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+  BLI_listbase_clear(&wrld->gpumaterial);
 
-    if (wrld->adt) {
-      BKE_animdata_blend_write(writer, wrld->adt);
-    }
+  /* write LibData */
+  BLO_write_id_struct(writer, World, id_address, &wrld->id);
+  BKE_id_blend_write(writer, &wrld->id);
 
-    /* nodetree is integral part of world, no libdata */
-    if (wrld->nodetree) {
-      BLO_write_struct(writer, bNodeTree, wrld->nodetree);
-      ntreeBlendWrite(writer, wrld->nodetree);
-    }
-
-    BKE_previewimg_blend_write(writer, wrld->preview);
+  if (wrld->adt) {
+    BKE_animdata_blend_write(writer, wrld->adt);
   }
+
+  /* nodetree is integral part of world, no libdata */
+  if (wrld->nodetree) {
+    BLO_write_struct(writer, bNodeTree, wrld->nodetree);
+    ntreeBlendWrite(writer, wrld->nodetree);
+  }
+
+  BKE_previewimg_blend_write(writer, wrld->preview);
 }
 
 static void world_blend_read_data(BlendDataReader *reader, ID *id)
@@ -191,7 +191,8 @@ IDTypeInfo IDType_ID_WO = {
     .name = "World",
     .name_plural = "worlds",
     .translation_context = BLT_I18NCONTEXT_ID_WORLD,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
+    .asset_type_info = NULL,
 
     .init_data = world_init_data,
     .copy_data = world_copy_data,
@@ -199,6 +200,7 @@ IDTypeInfo IDType_ID_WO = {
     .make_local = NULL,
     .foreach_id = world_foreach_id,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = world_blend_write,

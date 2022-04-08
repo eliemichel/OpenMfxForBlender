@@ -20,6 +20,7 @@
 
 #include <vector>
 
+#include "BKE_geometry_set.hh"
 #include "BKE_lib_query.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_mesh_wrapper.h"
@@ -196,15 +197,17 @@ static float compute_voxel_size(const ModifierEvalContext *ctx,
   /* Compute the voxel size based on the desired number of voxels and the approximated bounding box
    * of the volume. */
   const BoundBox *bb = BKE_object_boundbox_get(mvmd->object);
-  const float diagonal = float3::distance(transform * float3(bb->vec[6]),
-                                          transform * float3(bb->vec[0]));
+  const float diagonal = math::distance(transform * float3(bb->vec[6]),
+                                        transform * float3(bb->vec[0]));
   const float approximate_volume_side_length = diagonal + mvmd->exterior_band_width * 2.0f;
   const float voxel_size = approximate_volume_side_length / mvmd->voxel_amount / volume_simplify;
   return voxel_size;
 }
 #endif
 
-static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Volume *input_volume)
+static Volume *mesh_to_volume(ModifierData *md,
+                              const ModifierEvalContext *ctx,
+                              Volume *input_volume)
 {
 #ifdef WITH_OPENVDB
   using namespace blender;
@@ -278,6 +281,17 @@ static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Vo
 #endif
 }
 
+static void modifyGeometrySet(ModifierData *md,
+                              const ModifierEvalContext *ctx,
+                              GeometrySet *geometry_set)
+{
+  Volume *input_volume = geometry_set->get_volume_for_write();
+  Volume *result_volume = mesh_to_volume(md, ctx, input_volume);
+  if (result_volume != input_volume) {
+    geometry_set->replace_volume(result_volume);
+  }
+}
+
 ModifierTypeInfo modifierType_MeshToVolume = {
     /* name */ "Mesh to Volume",
     /* structName */ "MeshToVolumeModifierData",
@@ -295,8 +309,7 @@ ModifierTypeInfo modifierType_MeshToVolume = {
     /* deformMatricesEM */ nullptr,
     /* modifyMesh */ nullptr,
     /* modifyHair */ nullptr,
-    /* modifyGeometrySet */ nullptr,
-    /* modifyVolume */ modifyVolume,
+    /* modifyGeometrySet */ modifyGeometrySet,
 
     /* initData */ initData,
     /* requiredDataMask */ nullptr,

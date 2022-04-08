@@ -37,39 +37,65 @@ struct Main;
 
 typedef struct Global {
 
-  /** Active pointers. */
+  /**
+   * Data for the current active blend file.
+   *
+   * Note that `CTX_data_main(C)` should be used where possible.
+   * Otherwise access via #G_MAIN.
+   */
   struct Main *main;
 
-  /** Strings: last saved */
-  char ima[1024], lib[1024]; /* 1024 = FILE_MAX */
+  /** Last saved location for images. */
+  char ima[1024]; /* 1024 = FILE_MAX */
+  /** Last used location for library link/append. */
+  char lib[1024];
 
-  /** When set: `G_MAIN->name` contains valid relative base path. */
-  bool relbase_valid;
-  bool file_loaded;
-  bool save_over;
-
-  /** Strings of recent opened files. */
+  /**
+   * Strings of recently opened files to show in the file menu.
+   * A list of #RecentFile read from #BLENDER_HISTORY_FILE.
+   */
   struct ListBase recent_files;
 
-  /** Has escape been pressed or Ctrl+C pressed in background mode, used for render quit. */
+  /**
+   * Set when Escape been pressed or `Ctrl-C` pressed in background mode.
+   * Used for render quit and some other background tasks such as baking.
+   */
   bool is_break;
 
+  /**
+   * Blender is running without any Windows or OpenGLES context.
+   * Typically set by the `--background` command-line argument.
+   *
+   * Also enabled when build defines `WITH_PYTHON_MODULE` or `WITH_HEADLESS` are set
+   * (which use background mode by definition).
+   */
   bool background;
+
+  /**
+   * Skip reading the startup file and user preferences.
+   * Also disable saving the preferences on exit (see #G_FLAG_USERPREF_NO_SAVE_ON_EXIT),
+   * see via the command line argument: `--factory-startup`.
+   */
   bool factory_startup;
 
+  /**
+   * Set when the user is interactively moving (transforming) content.
+   * see: #G_TRANSFORM_OBJ and related flags.
+   */
   short moving;
 
-  /** To indicate render is busy, prevent render-window events etc. */
+  /** To indicate render is busy, prevent render-window events, animation playback etc. */
   bool is_rendering;
 
   /**
    * Debug value, can be set from the UI and python, used for testing nonstandard features.
    * DO NOT abuse it with generic checks like `if (G.debug_value > 0)`. Do not use it as bitflags.
    * Only precise specific values should be checked for, to avoid unpredictable side-effects.
-   * Please document here the value(s) you are using (or a range of values reserved to some area).
+   * Please document here the value(s) you are using (or a range of values reserved to some area):
    *   * -16384 and below: Reserved for python (add-ons) usage.
    *   *     -1: Disable faster motion paths computation (since 08/2018).
    *   * 1 - 30: EEVEE debug/stats values (01/2018).
+   *   *     31: Enable the Select Debug Engine. Only available with #WITH_DRAW_DEBUG (08/2021).
    *   *    101: Enable UI debug drawing of fullscreen area's corner widget (10/2014).
    *   *    666: Use quicker batch delete for outliners' delete hierarchy (01/2019).
    *   *    777: Enable UI node panel's sockets polling (11/2011).
@@ -78,28 +104,55 @@ typedef struct Global {
    *   *   1234: Disable new dyntopo code fixing skinny faces generation (04/2015).
    *   *   3001: Enable additional Fluid modifier (Mantaflow) options (02/2020).
    *   *   4000: Line Art state output and debugging logs (03/2021).
+   *   *   4001: Mesh topology information in the spreadsheet (01/2022).
    *   * 16384 and above: Reserved for python (add-ons) usage.
    */
   short debug_value;
 
-  /** Saved to the blend file as #FileGlobal.globalf,
-   * however this is now only used for runtime options. */
+  /**
+   * Saved to the blend file as #FileGlobal.globalf
+   *
+   * \note Currently this is only used for runtime options, adding flags to #G_FLAG_ALL_READFILE
+   * will cause them to be written and read to files.
+   */
   int f;
 
   struct {
-    /** Logging vars (different loggers may use). */
+    /**
+     * Logging vars (different loggers may use).
+     * Set via `--log-level` command line argument.
+     */
     int level;
-    /** FILE handle or use stderr (we own this so close when done). */
+    /**
+     * FILE handle or use `stderr` (we own this so close when done).
+     * Set via `--log-file` command line argument.
+     */
     void *file;
   } log;
 
-  /** debug flag, #G_DEBUG, #G_DEBUG_PYTHON & friends, set python or command line args */
+  /**
+   * Debug flag, #G_DEBUG, #G_DEBUG_PYTHON & friends, set via:
+   * - Command line arguments: `--debug`, `--debug-memory` ... etc.
+   * - Python API: `bpy.app.debug`, `bpy.app.debug_memory` ... etc.
+   */
   int debug;
 
-  /** This variable is written to / read from #FileGlobal.fileflags */
+  /**
+   * Control behavior of file reading/writing.
+   *
+   * This variable is written to / read from #FileGlobal.fileflags.
+   * See: #G_FILE_COMPRESS and related flags.
+   */
   int fileflags;
 
-  /** Message to use when auto execution fails. */
+  /**
+   * Message to show when loading a `.blend` file attempts to execute
+   * a Python script or driver-expression when doing so is disallowed.
+   *
+   * Set when `(G.f & G_FLAG_SCRIPT_AUTOEXEC_FAIL) == 0`,
+   * so users can be alerted to the reason why the file may not be behaving as expected.
+   * Typically Python drivers.
+   */
   char autoexec_fail[200];
 } Global;
 
@@ -123,7 +176,10 @@ enum {
 /** Don't overwrite these flags when reading a file. */
 #define G_FLAG_ALL_RUNTIME \
   (G_FLAG_SCRIPT_AUTOEXEC | G_FLAG_SCRIPT_OVERRIDE_PREF | G_FLAG_EVENT_SIMULATE | \
-   G_FLAG_USERPREF_NO_SAVE_ON_EXIT)
+   G_FLAG_USERPREF_NO_SAVE_ON_EXIT | \
+\
+   /* #BPY_python_reset is responsible for resetting these flags on file load. */ \
+   G_FLAG_SCRIPT_AUTOEXEC_FAIL | G_FLAG_SCRIPT_AUTOEXEC_FAIL_QUIET)
 
 /** Flags to read from blend file. */
 #define G_FLAG_ALL_READFILE 0
@@ -144,12 +200,13 @@ enum {
   G_DEBUG_DEPSGRAPH_TIME = (1 << 11),       /* depsgraph timing statistics and messages */
   G_DEBUG_DEPSGRAPH_NO_THREADS = (1 << 12), /* single threaded depsgraph */
   G_DEBUG_DEPSGRAPH_PRETTY = (1 << 13),     /* use pretty colors in depsgraph messages */
-  G_DEBUG_DEPSGRAPH_UUID = (1 << 14),       /* use pretty colors in depsgraph messages */
+  G_DEBUG_DEPSGRAPH_UUID = (1 << 14),       /* Verify validness of session-wide identifiers
+                                             * assigned to ID datablocks */
   G_DEBUG_DEPSGRAPH = (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_EVAL | G_DEBUG_DEPSGRAPH_TAG |
                        G_DEBUG_DEPSGRAPH_TIME | G_DEBUG_DEPSGRAPH_UUID),
   G_DEBUG_SIMDATA = (1 << 15),               /* sim debug data display */
   G_DEBUG_GPU = (1 << 16),                   /* gpu debug */
-  G_DEBUG_IO = (1 << 17),                    /* IO Debugging (for Collada, ...)*/
+  G_DEBUG_IO = (1 << 17),                    /* IO Debugging (for Collada, ...). */
   G_DEBUG_GPU_FORCE_WORKAROUNDS = (1 << 18), /* force gpu workarounds bypassing detections. */
   G_DEBUG_XR = (1 << 19),                    /* XR/OpenXR messages */
   G_DEBUG_XR_TIME = (1 << 20),               /* XR/OpenXR timing messages */
@@ -199,20 +256,6 @@ enum {
  */
 #define G_FILE_FLAG_ALL_RUNTIME (G_FILE_NO_UI | G_FILE_RECOVER_READ | G_FILE_RECOVER_WRITE)
 
-/** ENDIAN_ORDER: indicates what endianness the platform where the file was written had. */
-#if !defined(__BIG_ENDIAN__) && !defined(__LITTLE_ENDIAN__)
-#  error Either __BIG_ENDIAN__ or __LITTLE_ENDIAN__ must be defined.
-#endif
-
-#define L_ENDIAN 1
-#define B_ENDIAN 0
-
-#ifdef __BIG_ENDIAN__
-#  define ENDIAN_ORDER B_ENDIAN
-#else
-#  define ENDIAN_ORDER L_ENDIAN
-#endif
-
 /** #Global.moving, signals drawing in (3d) window to denote transform */
 enum {
   G_TRANSFORM_OBJ = (1 << 0),
@@ -220,6 +263,12 @@ enum {
   G_TRANSFORM_SEQ = (1 << 2),
   G_TRANSFORM_FCURVES = (1 << 3),
   G_TRANSFORM_WM = (1 << 4),
+  /**
+   * Set when transforming the cursor itself.
+   * Used as a hint to draw the cursor (even when hidden).
+   * Otherwise it's not possible to see what's being transformed.
+   */
+  G_TRANSFORM_CURSOR = (1 << 5),
 };
 
 /** Defined in blender.c */

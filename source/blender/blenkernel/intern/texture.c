@@ -67,6 +67,8 @@
 #include "BKE_scene.h"
 #include "BKE_texture.h"
 
+#include "NOD_texture.h"
+
 #include "RE_texture.h"
 
 #include "BLO_read_write.h"
@@ -142,36 +144,36 @@ static void texture_foreach_id(ID *id, LibraryForeachIDData *data)
   Tex *texture = (Tex *)id;
   if (texture->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
-    BKE_library_foreach_ID_embedded(data, (ID **)&texture->nodetree);
+    BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+        data, BKE_library_foreach_ID_embedded(data, (ID **)&texture->nodetree));
   }
-  BKE_LIB_FOREACHID_PROCESS(data, texture->ima, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, texture->ima, IDWALK_CB_USER);
 }
 
 static void texture_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Tex *tex = (Tex *)id;
-  if (tex->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* write LibData */
-    BLO_write_id_struct(writer, Tex, id_address, &tex->id);
-    BKE_id_blend_write(writer, &tex->id);
 
-    if (tex->adt) {
-      BKE_animdata_blend_write(writer, tex->adt);
-    }
+  /* write LibData */
+  BLO_write_id_struct(writer, Tex, id_address, &tex->id);
+  BKE_id_blend_write(writer, &tex->id);
 
-    /* direct data */
-    if (tex->coba) {
-      BLO_write_struct(writer, ColorBand, tex->coba);
-    }
-
-    /* nodetree is integral part of texture, no libdata */
-    if (tex->nodetree) {
-      BLO_write_struct(writer, bNodeTree, tex->nodetree);
-      ntreeBlendWrite(writer, tex->nodetree);
-    }
-
-    BKE_previewimg_blend_write(writer, tex->preview);
+  if (tex->adt) {
+    BKE_animdata_blend_write(writer, tex->adt);
   }
+
+  /* direct data */
+  if (tex->coba) {
+    BLO_write_struct(writer, ColorBand, tex->coba);
+  }
+
+  /* nodetree is integral part of texture, no libdata */
+  if (tex->nodetree) {
+    BLO_write_struct(writer, bNodeTree, tex->nodetree);
+    ntreeBlendWrite(writer, tex->nodetree);
+  }
+
+  BKE_previewimg_blend_write(writer, tex->preview);
 }
 
 static void texture_blend_read_data(BlendDataReader *reader, ID *id)
@@ -185,7 +187,6 @@ static void texture_blend_read_data(BlendDataReader *reader, ID *id)
   BLO_read_data_address(reader, &tex->preview);
   BKE_previewimg_blend_read(reader, tex->preview);
 
-  tex->iuser.ok = 1;
   tex->iuser.scene = NULL;
 }
 
@@ -211,7 +212,8 @@ IDTypeInfo IDType_ID_TE = {
     .name = "Texture",
     .name_plural = "textures",
     .translation_context = BLT_I18NCONTEXT_ID_TEXTURE,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
+    .asset_type_info = NULL,
 
     .init_data = texture_init_data,
     .copy_data = texture_copy_data,
@@ -219,6 +221,7 @@ IDTypeInfo IDType_ID_TE = {
     .make_local = NULL,
     .foreach_id = texture_foreach_id,
     .foreach_cache = NULL,
+    .foreach_path = NULL,
     .owner_get = NULL,
 
     .blend_write = texture_blend_write,
@@ -231,11 +234,10 @@ IDTypeInfo IDType_ID_TE = {
     .lib_override_apply_post = NULL,
 };
 
-/* Utils for all IDs using those texture slots. */
 void BKE_texture_mtex_foreach_id(LibraryForeachIDData *data, MTex *mtex)
 {
-  BKE_LIB_FOREACHID_PROCESS(data, mtex->object, IDWALK_CB_NOP);
-  BKE_LIB_FOREACHID_PROCESS(data, mtex->tex, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, mtex->object, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, mtex->tex, IDWALK_CB_USER);
 }
 
 /* ****************** Mapping ******************* */
@@ -413,7 +415,6 @@ MTex *BKE_texture_mtex_add(void)
   return mtex;
 }
 
-/* slot -1 for first free ID */
 MTex *BKE_texture_mtex_add_id(ID *id, int slot)
 {
   MTex **mtex_ar;
@@ -490,9 +491,8 @@ void set_current_linestyle_texture(FreestyleLineStyle *linestyle, Tex *newtex)
     linestyle->mtex[act]->tex = newtex;
     id_us_plus(&newtex->id);
   }
-  else if (linestyle->mtex[act]) {
-    MEM_freeN(linestyle->mtex[act]);
-    linestyle->mtex[act] = NULL;
+  else {
+    MEM_SAFE_FREE(linestyle->mtex[act]);
   }
 }
 
@@ -595,9 +595,8 @@ void set_current_particle_texture(ParticleSettings *part, Tex *newtex)
     part->mtex[act]->tex = newtex;
     id_us_plus(&newtex->id);
   }
-  else if (part->mtex[act]) {
-    MEM_freeN(part->mtex[act]);
-    part->mtex[act] = NULL;
+  else {
+    MEM_SAFE_FREE(part->mtex[act]);
   }
 }
 
@@ -660,14 +659,8 @@ void BKE_texture_pointdensity_free_data(PointDensity *pd)
     BLI_bvhtree_free(pd->point_tree);
     pd->point_tree = NULL;
   }
-  if (pd->point_data) {
-    MEM_freeN(pd->point_data);
-    pd->point_data = NULL;
-  }
-  if (pd->coba) {
-    MEM_freeN(pd->coba);
-    pd->coba = NULL;
-  }
+  MEM_SAFE_FREE(pd->point_data);
+  MEM_SAFE_FREE(pd->coba);
 
   BKE_curvemapping_free(pd->falloff_curve); /* can be NULL */
 }
@@ -679,9 +672,6 @@ void BKE_texture_pointdensity_free(PointDensity *pd)
 }
 /* ------------------------------------------------------------------------- */
 
-/**
- * \returns true if this texture can use its #Texture.ima (even if its NULL)
- */
 bool BKE_texture_is_image_user(const struct Tex *tex)
 {
   switch (tex->type) {
@@ -693,7 +683,6 @@ bool BKE_texture_is_image_user(const struct Tex *tex)
   return false;
 }
 
-/* ------------------------------------------------------------------------- */
 bool BKE_texture_dependsOnTime(const struct Tex *texture)
 {
   if (texture->ima && BKE_image_is_animated(texture->ima)) {
@@ -734,10 +723,10 @@ void BKE_texture_get_value_ex(const Scene *scene,
    * if the texture didn't give an RGB value, copy the intensity across
    */
   if (result_type & TEX_RGB) {
-    texres->tin = (1.0f / 3.0f) * (texres->tr + texres->tg + texres->tb);
+    texres->tin = (1.0f / 3.0f) * (texres->trgba[0] + texres->trgba[1] + texres->trgba[2]);
   }
   else {
-    copy_v3_fl(&texres->tr, texres->tin);
+    copy_v3_fl(texres->trgba, texres->tin);
   }
 }
 
@@ -767,7 +756,6 @@ static void texture_nodes_fetch_images_for_pool(Tex *texture,
   }
 }
 
-/* Make sure all images used by texture are loaded into pool. */
 void BKE_texture_fetch_images_for_pool(Tex *texture, struct ImagePool *pool)
 {
   if (texture->nodetree != NULL) {

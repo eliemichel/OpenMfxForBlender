@@ -19,6 +19,9 @@
 
 /** \file
  * \ingroup render
+ *
+ * \note Some of this logic has been duplicated in `COM_VectorBlurOperation.cc`
+ * changes here may also apply also apply to that file.
  */
 
 /*---------------------------------------------------------------------------*/
@@ -41,7 +44,6 @@
 
 /* ****************** Spans ******************************* */
 
-/* each zbuffer has coordinates transformed to local rect coordinates, so we can simply clip */
 void zbuf_alloc_span(ZSpan *zspan, int rectx, int recty)
 {
   memset(zspan, 0, sizeof(ZSpan));
@@ -56,13 +58,8 @@ void zbuf_alloc_span(ZSpan *zspan, int rectx, int recty)
 void zbuf_free_span(ZSpan *zspan)
 {
   if (zspan) {
-    if (zspan->span1) {
-      MEM_freeN(zspan->span1);
-    }
-    if (zspan->span2) {
-      MEM_freeN(zspan->span2);
-    }
-    zspan->span1 = zspan->span2 = NULL;
+    MEM_SAFE_FREE(zspan->span1);
+    MEM_SAFE_FREE(zspan->span2);
   }
 }
 
@@ -174,9 +171,6 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
 /*-----------------------------------------------------------*/
 /* Functions                                                 */
 /*-----------------------------------------------------------*/
-
-/* Scanconvert for strand triangles, calls func for each x, y coordinate
- * and gives UV barycentrics and z. */
 
 void zspan_scanconvert(ZSpan *zspan,
                        void *handle,

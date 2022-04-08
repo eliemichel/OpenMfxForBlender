@@ -62,9 +62,6 @@ int ED_gpencil_session_active(void)
   return (BLI_listbase_is_empty(&undo_nodes) == false);
 }
 
-/**
- * \param step: eUndoStepDir.
- */
 int ED_undo_gpencil_step(bContext *C, const int step)
 {
   bGPdata **gpd_ptr = NULL, *new_gpd = NULL;
@@ -125,15 +122,13 @@ static void gpencil_undo_free_node(bGPundonode *undo_node)
    */
   undo_node->gpd->adt = NULL;
 
-  BKE_gpencil_free(undo_node->gpd, false);
+  BKE_gpencil_free_data(undo_node->gpd, false);
   MEM_freeN(undo_node->gpd);
 }
 
 void gpencil_undo_push(bGPdata *gpd)
 {
   bGPundonode *undo_node;
-
-  // printf("\t\tGP - undo push\n");
 
   if (cur_node) {
     /* Remove all undone nodes from stack. */

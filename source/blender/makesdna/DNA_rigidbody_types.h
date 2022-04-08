@@ -38,7 +38,7 @@ struct EffectorWeights;
 /* ******************************** */
 /* RigidBody World */
 
-/* Container for data shared by original and evaluated copies of RigidBodyWorld */
+/** Container for data shared by original and evaluated copies of #RigidBodyWorld. */
 typedef struct RigidBodyWorld_Shared {
   /* cache */
   struct PointCache *pointcache;
@@ -90,7 +90,7 @@ typedef struct RigidBodyWorld {
   float time_scale;
 } RigidBodyWorld;
 
-/* Flags for RigidBodyWorld */
+/** RigidBodyWorld.flag */
 typedef enum eRigidBodyWorld_Flag {
   /* should sim world be skipped when evaluating (user setting) */
   RBW_FLAG_MUTED = (1 << 0),
@@ -125,7 +125,7 @@ typedef struct RigidBodyOb_Shared {
  */
 typedef struct RigidBodyOb {
   /* General Settings for this RigidBodyOb */
-  /** (eRigidBodyOb_Type) role of RigidBody in sim . */
+  /** (eRigidBodyOb_Type) role of RigidBody in sim. */
   short type;
   /** (eRigidBody_Shape) collision shape to use. */
   short shape;
@@ -170,7 +170,7 @@ typedef struct RigidBodyOb {
   struct RigidBodyOb_Shared *shared;
 } RigidBodyOb;
 
-/* Participation types for RigidBodyOb */
+/** #RigidBodyOb.type */
 typedef enum eRigidBodyOb_Type {
   /* active geometry participant in simulation. is directly controlled by sim */
   RBO_TYPE_ACTIVE = 0,
@@ -178,7 +178,7 @@ typedef enum eRigidBodyOb_Type {
   RBO_TYPE_PASSIVE = 1,
 } eRigidBodyOb_Type;
 
-/* Flags for RigidBodyOb */
+/** #RigidBodyOb.flag */
 typedef enum eRigidBodyOb_Flag {
   /* rigidbody is kinematic (controlled by the animation system) */
   RBO_FLAG_KINEMATIC = (1 << 0),
@@ -198,7 +198,7 @@ typedef enum eRigidBodyOb_Flag {
   RBO_FLAG_USE_DEFORM = (1 << 7),
 } eRigidBodyOb_Flag;
 
-/* RigidBody Collision Shape */
+/** Rigid Body Collision Shape. */
 typedef enum eRigidBody_Shape {
   /** Simple box (i.e. bounding box). */
   RB_SHAPE_BOX = 0,
@@ -206,12 +206,12 @@ typedef enum eRigidBody_Shape {
   RB_SHAPE_SPHERE = 1,
   /** Rounded "pill" shape (i.e. calcium tablets). */
   RB_SHAPE_CAPSULE = 2,
-  /** Cylinder (i.e. pringles can). */
+  /** Cylinder (i.e. tin of beans). */
   RB_SHAPE_CYLINDER = 3,
   /** Cone (i.e. party hat). */
   RB_SHAPE_CONE = 4,
 
-  /** Convex hull (minimal shrinkwrap encompassing all verts). */
+  /** Convex hull (minimal shrink-wrap encompassing all verts). */
   RB_SHAPE_CONVEXH = 5,
   /** Triangulated mesh. */
   RB_SHAPE_TRIMESH = 6,
@@ -243,7 +243,7 @@ typedef struct RigidBodyCon {
   struct Object *ob2;
 
   /* General Settings for this RigidBodyCon */
-  /** (eRigidBodyCon_Type) role of RigidBody in sim . */
+  /** (eRigidBodyCon_Type) role of RigidBody in sim. */
   short type;
   /** Number of constraint solver iterations made per simulation step. */
   short num_solver_iterations;
@@ -304,7 +304,7 @@ typedef struct RigidBodyCon {
   void *physics_constraint;
 } RigidBodyCon;
 
-/* Participation types for RigidBodyOb */
+/** Participation types for #RigidBodyOb.type */
 typedef enum eRigidBodyCon_Type {
   /** lets bodies rotate around a specified point */
   RBC_TYPE_POINT = 0,
@@ -333,13 +333,13 @@ typedef enum eRigidBodyCon_Type {
   RBC_TYPE_MOTOR = 11,
 } eRigidBodyCon_Type;
 
-/* Spring implementation type for RigidBodyOb */
+/** Spring implementation type for RigidBodyOb. */
 typedef enum eRigidBodyCon_SpringType {
   RBC_SPRING_TYPE1 = 0, /* btGeneric6DofSpringConstraint */
   RBC_SPRING_TYPE2 = 1, /* btGeneric6DofSpring2Constraint */
 } eRigidBodyCon_SpringType;
 
-/* Flags for RigidBodyCon */
+/** #RigidBodyCon.flag */
 typedef enum eRigidBodyCon_Flag {
   /* constraint influences rigid body motion */
   RBC_FLAG_ENABLED = (1 << 0),

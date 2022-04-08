@@ -44,7 +44,7 @@ class GLTexture : public Texture {
   /** All samplers states. */
   static GLuint samplers_[GPU_SAMPLER_MAX];
 
-  /** Target to bind the texture to (GL_TEXTURE_1D, GL_TEXTURE_2D, etc...)*/
+  /** Target to bind the texture to (#GL_TEXTURE_1D, #GL_TEXTURE_2D, etc...). */
   GLenum target_ = -1;
   /** opengl identifier for texture. */
   GLuint tex_id_ = 0;
@@ -53,6 +53,8 @@ class GLTexture : public Texture {
   /** True if this texture is bound to at least one texture unit. */
   /* TODO(fclem): How do we ensure thread safety here? */
   bool is_bound_ = false;
+  /** True if pixels in the texture have been initialized. */
+  bool has_pixels_ = false;
 
  public:
   GLTexture(const char *name);
@@ -61,32 +63,41 @@ class GLTexture : public Texture {
   void update_sub(
       int mip, int offset[3], int extent[3], eGPUDataFormat type, const void *data) override;
 
-  void generate_mipmap(void) override;
+  /**
+   * This will create the mipmap images and populate them with filtered data from base level.
+   *
+   * \warning Depth textures are not populated but they have their mips correctly defined.
+   * \warning This resets the mipmap range.
+   */
+  void generate_mipmap() override;
   void copy_to(Texture *dst) override;
   void clear(eGPUDataFormat format, const void *data) override;
   void swizzle_set(const char swizzle_mask[4]) override;
   void mip_range_set(int min, int max) override;
   void *read(int mip, eGPUDataFormat type) override;
 
-  void check_feedback_loop(void);
+  void check_feedback_loop();
 
   /* TODO(fclem): Legacy. Should be removed at some point. */
-  uint gl_bindcode_get(void) const override;
+  uint gl_bindcode_get() const override;
 
-  static void samplers_init(void);
-  static void samplers_free(void);
-  static void samplers_update(void);
+  static void samplers_init();
+  static void samplers_free();
+  static void samplers_update();
 
  protected:
-  bool init_internal(void) override;
+  /** Return true on success. */
+  bool init_internal() override;
+  /** Return true on success. */
   bool init_internal(GPUVertBuf *vbo) override;
 
  private:
   bool proxy_check(int mip);
+  /** Will create enough mipmaps up to get to the given level. */
   void ensure_mipmaps(int mip);
   void update_sub_direct_state_access(
       int mip, int offset[3], int extent[3], GLenum gl_format, GLenum gl_type, const void *data);
-  GPUFrameBuffer *framebuffer_get(void);
+  GPUFrameBuffer *framebuffer_get();
 
   MEM_CXX_CLASS_ALLOC_FUNCS("GLTexture")
 };
@@ -192,7 +203,7 @@ inline GLenum to_gl_internal_format(eGPUTextureFormat format)
     case GPU_DEPTH_COMPONENT16:
       return GL_DEPTH_COMPONENT16;
     default:
-      BLI_assert(!"Texture format incorrect or unsupported\n");
+      BLI_assert_msg(0, "Texture format incorrect or unsupported");
       return 0;
   }
 }
@@ -287,12 +298,14 @@ inline GLenum to_gl(eGPUDataFormat format)
     case GPU_DATA_10_11_11_REV:
       return GL_UNSIGNED_INT_10F_11F_11F_REV;
     default:
-      BLI_assert(!"Unhandled data format");
+      BLI_assert_msg(0, "Unhandled data format");
       return GL_FLOAT;
   }
 }
 
-/* Definitely not complete, edit according to the gl specification. */
+/**
+ * Definitely not complete, edit according to the OpenGL specification.
+ */
 inline GLenum to_gl_data_format(eGPUTextureFormat format)
 {
   /* You can add any of the available type to this list
@@ -359,12 +372,14 @@ inline GLenum to_gl_data_format(eGPUTextureFormat format)
     case GPU_RGBA8_DXT5:
       return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
     default:
-      BLI_assert(!"Texture format incorrect or unsupported\n");
+      BLI_assert_msg(0, "Texture format incorrect or unsupported\n");
       return 0;
   }
 }
 
-/* Assume Unorm / Float target. Used with glReadPixels. */
+/**
+ * Assume Unorm / Float target. Used with #glReadPixels.
+ */
 inline GLenum channel_len_to_gl(int channel_len)
 {
   switch (channel_len) {
@@ -377,7 +392,7 @@ inline GLenum channel_len_to_gl(int channel_len)
     case 4:
       return GL_RGBA;
     default:
-      BLI_assert(!"Wrong number of texture channels");
+      BLI_assert_msg(0, "Wrong number of texture channels");
       return GL_RED;
   }
 }

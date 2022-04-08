@@ -267,7 +267,7 @@ static void smooth_iter__length_weight(CorrectiveSmoothModifierData *csmd,
 {
   const float eps = FLT_EPSILON * 10.0f;
   const uint numEdges = (uint)mesh->totedge;
-  /* note: the way this smoothing method works, its approx half as strong as the simple-smooth,
+  /* NOTE: the way this smoothing method works, its approx half as strong as the simple-smooth,
    * and 2.0 rarely spikes, double the value for consistent behavior. */
   const float lambda = csmd->lambda * 2.0f;
   const MEdge *edges = mesh->medge;
@@ -588,7 +588,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
   CorrectiveSmoothModifierData *csmd = (CorrectiveSmoothModifierData *)md;
 
   const bool force_delta_cache_update =
-      /* XXX, take care! if mesh data its self changes we need to forcefully recalculate deltas */
+      /* XXX, take care! if mesh data itself changes we need to forcefully recalculate deltas */
       !cache_settings_equal(csmd) ||
       ((csmd->rest_source == MOD_CORRECTIVESMOOTH_RESTSOURCE_ORCO) &&
        (((ID *)ob->data)->recalc & ID_RECALC_ALL));
@@ -610,7 +610,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
       BLI_assert(csmd->bind_coords != NULL);
       /* Copy bound data to the original modifier. */
       CorrectiveSmoothModifierData *csmd_orig = (CorrectiveSmoothModifierData *)
-          BKE_modifier_get_original(&csmd->modifier);
+          BKE_modifier_get_original(ob, &csmd->modifier);
       csmd_orig->bind_coords = MEM_dupallocN(csmd->bind_coords);
       csmd_orig->bind_coords_num = csmd->bind_coords_num;
     }
@@ -852,7 +852,6 @@ ModifierTypeInfo modifierType_CorrectiveSmooth = {
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

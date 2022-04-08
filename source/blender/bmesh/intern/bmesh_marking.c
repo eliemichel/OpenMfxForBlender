@@ -33,6 +33,7 @@
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_task.h"
 
 #include "bmesh.h"
 #include "bmesh_structure.h"
@@ -40,31 +41,123 @@
 /* For '_FLAG_OVERLAP'. */
 #include "bmesh_private.h"
 
-static void recount_totsels(BMesh *bm)
+/* -------------------------------------------------------------------- */
+/** \name Recounting total selection.
+ * \{ */
+
+typedef struct SelectionCountChunkData {
+  int selection_len;
+} SelectionCountChunkData;
+
+static void recount_totsels_range_vert_func(void *UNUSED(userdata),
+                                            MempoolIterData *iter,
+                                            const TaskParallelTLS *__restrict tls)
 {
-  const char iter_types[3] = {BM_VERTS_OF_MESH, BM_EDGES_OF_MESH, BM_FACES_OF_MESH};
-  int *tots[3];
-  int i;
-
-  /* Recount total selection variables. */
-  bm->totvertsel = bm->totedgesel = bm->totfacesel = 0;
-  tots[0] = &bm->totvertsel;
-  tots[1] = &bm->totedgesel;
-  tots[2] = &bm->totfacesel;
-
-  for (i = 0; i < 3; i++) {
-    BMIter iter;
-    BMElem *ele;
-    int count = 0;
-
-    BM_ITER_MESH (ele, &iter, bm, iter_types[i]) {
-      if (BM_elem_flag_test(ele, BM_ELEM_SELECT)) {
-        count += 1;
-      }
-    }
-    *tots[i] = count;
+  SelectionCountChunkData *count = tls->userdata_chunk;
+  const BMVert *eve = (const BMVert *)iter;
+  if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
+    count->selection_len += 1;
   }
 }
+
+static void recount_totsels_range_edge_func(void *UNUSED(userdata),
+                                            MempoolIterData *iter,
+                                            const TaskParallelTLS *__restrict tls)
+{
+  SelectionCountChunkData *count = tls->userdata_chunk;
+  const BMEdge *eed = (const BMEdge *)iter;
+  if (BM_elem_flag_test(eed, BM_ELEM_SELECT)) {
+    count->selection_len += 1;
+  }
+}
+
+static void recount_totsels_range_face_func(void *UNUSED(userdata),
+                                            MempoolIterData *iter,
+                                            const TaskParallelTLS *__restrict tls)
+{
+  SelectionCountChunkData *count = tls->userdata_chunk;
+  const BMFace *efa = (const BMFace *)iter;
+  if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+    count->selection_len += 1;
+  }
+}
+
+static void recount_totsels_reduce(const void *__restrict UNUSED(userdata),
+                                   void *__restrict chunk_join,
+                                   void *__restrict chunk)
+{
+  SelectionCountChunkData *dst = chunk_join;
+  const SelectionCountChunkData *src = chunk;
+  dst->selection_len += src->selection_len;
+}
+
+static TaskParallelMempoolFunc recount_totsels_get_range_func(BMIterType iter_type)
+{
+  BLI_assert(ELEM(iter_type, BM_VERTS_OF_MESH, BM_EDGES_OF_MESH, BM_FACES_OF_MESH));
+
+  TaskParallelMempoolFunc range_func = NULL;
+  if (iter_type == BM_VERTS_OF_MESH) {
+    range_func = recount_totsels_range_vert_func;
+  }
+  else if (iter_type == BM_EDGES_OF_MESH) {
+    range_func = recount_totsels_range_edge_func;
+  }
+  else if (iter_type == BM_FACES_OF_MESH) {
+    range_func = recount_totsels_range_face_func;
+  }
+  return range_func;
+}
+
+static int recount_totsel(BMesh *bm, BMIterType iter_type)
+{
+  const int MIN_ITER_SIZE = 1024;
+
+  TaskParallelSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+  settings.func_reduce = recount_totsels_reduce;
+  settings.min_iter_per_thread = MIN_ITER_SIZE;
+
+  SelectionCountChunkData count = {0};
+  settings.userdata_chunk = &count;
+  settings.userdata_chunk_size = sizeof(count);
+
+  TaskParallelMempoolFunc range_func = recount_totsels_get_range_func(iter_type);
+  BM_iter_parallel(bm, iter_type, range_func, NULL, &settings);
+  return count.selection_len;
+}
+
+static void recount_totvertsel(BMesh *bm)
+{
+  bm->totvertsel = recount_totsel(bm, BM_VERTS_OF_MESH);
+}
+
+static void recount_totedgesel(BMesh *bm)
+{
+  bm->totedgesel = recount_totsel(bm, BM_EDGES_OF_MESH);
+}
+
+static void recount_totfacesel(BMesh *bm)
+{
+  bm->totfacesel = recount_totsel(bm, BM_FACES_OF_MESH);
+}
+
+static void recount_totsels(BMesh *bm)
+{
+  recount_totvertsel(bm);
+  recount_totedgesel(bm);
+  recount_totfacesel(bm);
+}
+
+#ifndef NDEBUG
+static bool recount_totsels_are_ok(BMesh *bm)
+{
+  return bm->totvertsel == recount_totsel(bm, BM_VERTS_OF_MESH) &&
+         bm->totedgesel == recount_totsel(bm, BM_EDGES_OF_MESH) &&
+         bm->totfacesel == recount_totsel(bm, BM_FACES_OF_MESH);
+}
+#endif
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name BMesh helper functions for selection & hide flushing.
@@ -158,14 +251,6 @@ static bool bm_edge_is_face_visible_any(const BMEdge *e)
 
 /** \} */
 
-/**
- * \brief Select Mode Clean
- *
- * Remove isolated selected elements when in a mode doesn't support them.
- * eg: in edge-mode a selected vertex must be connected to a selected edge.
- *
- * \note this could be made a part of #BM_mesh_select_mode_flush_ex
- */
 void BM_mesh_select_mode_clean_ex(BMesh *bm, const short selectmode)
 {
   if (selectmode & SCE_SELECT_VERTEX) {
@@ -231,86 +316,138 @@ void BM_mesh_select_mode_clean(BMesh *bm)
   BM_mesh_select_mode_clean_ex(bm, bm->selectmode);
 }
 
-/**
- * \brief Select Mode Flush
- *
- * Makes sure to flush selections 'upwards'
- * (ie: all verts of an edge selects the edge and so on).
- * This should only be called by system and not tool authors.
- */
-void BM_mesh_select_mode_flush_ex(BMesh *bm, const short selectmode)
+/* -------------------------------------------------------------------- */
+/** \name Select mode flush selection
+ * \{ */
+
+typedef struct SelectionFlushChunkData {
+  int delta_selection_len;
+} SelectionFlushChunkData;
+
+static void bm_mesh_select_mode_flush_vert_to_edge_iter_fn(void *UNUSED(userdata),
+                                                           MempoolIterData *iter,
+                                                           const TaskParallelTLS *__restrict tls)
 {
-  BMEdge *e;
+  SelectionFlushChunkData *chunk_data = tls->userdata_chunk;
+  BMEdge *e = (BMEdge *)iter;
+  const bool is_selected = BM_elem_flag_test(e, BM_ELEM_SELECT);
+  const bool is_hidden = BM_elem_flag_test(e, BM_ELEM_HIDDEN);
+  if (!is_hidden &&
+      (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) && BM_elem_flag_test(e->v2, BM_ELEM_SELECT))) {
+    BM_elem_flag_enable(e, BM_ELEM_SELECT);
+    chunk_data->delta_selection_len += is_selected ? 0 : 1;
+  }
+  else {
+    BM_elem_flag_disable(e, BM_ELEM_SELECT);
+    chunk_data->delta_selection_len += is_selected ? -1 : 0;
+  }
+}
+
+static void bm_mesh_select_mode_flush_edge_to_face_iter_fn(void *UNUSED(userdata),
+                                                           MempoolIterData *iter,
+                                                           const TaskParallelTLS *__restrict tls)
+{
+  SelectionFlushChunkData *chunk_data = tls->userdata_chunk;
+  BMFace *f = (BMFace *)iter;
   BMLoop *l_iter;
   BMLoop *l_first;
-  BMFace *f;
-
-  BMIter eiter;
-  BMIter fiter;
-
-  if (selectmode & SCE_SELECT_VERTEX) {
-    /* both loops only set edge/face flags and read off verts */
-    BM_ITER_MESH (e, &eiter, bm, BM_EDGES_OF_MESH) {
-      if (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) && BM_elem_flag_test(e->v2, BM_ELEM_SELECT) &&
-          !BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-        BM_elem_flag_enable(e, BM_ELEM_SELECT);
-      }
-      else {
-        BM_elem_flag_disable(e, BM_ELEM_SELECT);
-      }
-    }
-    BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-      bool ok = true;
-      if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-        l_iter = l_first = BM_FACE_FIRST_LOOP(f);
-        do {
-          if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
-            ok = false;
-            break;
-          }
-        } while ((l_iter = l_iter->next) != l_first);
-      }
-      else {
+  const bool is_selected = BM_elem_flag_test(f, BM_ELEM_SELECT);
+  bool ok = true;
+  if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
+    l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+    do {
+      if (!BM_elem_flag_test(l_iter->e, BM_ELEM_SELECT)) {
         ok = false;
+        break;
       }
-
-      BM_elem_flag_set(f, BM_ELEM_SELECT, ok);
-    }
+    } while ((l_iter = l_iter->next) != l_first);
   }
-  else if (selectmode & SCE_SELECT_EDGE) {
-    BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-      bool ok = true;
-      if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-        l_iter = l_first = BM_FACE_FIRST_LOOP(f);
-        do {
-          if (!BM_elem_flag_test(l_iter->e, BM_ELEM_SELECT)) {
-            ok = false;
-            break;
-          }
-        } while ((l_iter = l_iter->next) != l_first);
-      }
-      else {
-        ok = false;
-      }
+  else {
+    ok = false;
+  }
 
-      BM_elem_flag_set(f, BM_ELEM_SELECT, ok);
-    }
+  BM_elem_flag_set(f, BM_ELEM_SELECT, ok);
+  if (is_selected && !ok) {
+    chunk_data->delta_selection_len -= 1;
+  }
+  else if (ok && !is_selected) {
+    chunk_data->delta_selection_len += 1;
+  }
+}
+
+static void bm_mesh_select_mode_flush_reduce_fn(const void *__restrict UNUSED(userdata),
+                                                void *__restrict chunk_join,
+                                                void *__restrict chunk)
+{
+  SelectionFlushChunkData *dst = chunk_join;
+  const SelectionFlushChunkData *src = chunk;
+  dst->delta_selection_len += src->delta_selection_len;
+}
+
+static void bm_mesh_select_mode_flush_vert_to_edge(BMesh *bm)
+{
+  SelectionFlushChunkData chunk_data = {0};
+
+  TaskParallelSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+  settings.use_threading = bm->totedge >= BM_OMP_LIMIT;
+  settings.userdata_chunk = &chunk_data;
+  settings.userdata_chunk_size = sizeof(chunk_data);
+  settings.func_reduce = bm_mesh_select_mode_flush_reduce_fn;
+
+  BM_iter_parallel(
+      bm, BM_EDGES_OF_MESH, bm_mesh_select_mode_flush_vert_to_edge_iter_fn, NULL, &settings);
+  bm->totedgesel += chunk_data.delta_selection_len;
+}
+
+static void bm_mesh_select_mode_flush_edge_to_face(BMesh *bm)
+{
+  SelectionFlushChunkData chunk_data = {0};
+
+  TaskParallelSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+  settings.use_threading = bm->totface >= BM_OMP_LIMIT;
+  settings.userdata_chunk = &chunk_data;
+  settings.userdata_chunk_size = sizeof(chunk_data);
+  settings.func_reduce = bm_mesh_select_mode_flush_reduce_fn;
+
+  BM_iter_parallel(
+      bm, BM_FACES_OF_MESH, bm_mesh_select_mode_flush_edge_to_face_iter_fn, NULL, &settings);
+  bm->totfacesel += chunk_data.delta_selection_len;
+}
+
+void BM_mesh_select_mode_flush_ex(BMesh *bm, const short selectmode, eBMSelectionFlushFLags flags)
+{
+  if (selectmode & SCE_SELECT_VERTEX) {
+    bm_mesh_select_mode_flush_vert_to_edge(bm);
+  }
+
+  if (selectmode & (SCE_SELECT_VERTEX | SCE_SELECT_EDGE)) {
+    bm_mesh_select_mode_flush_edge_to_face(bm);
   }
 
   /* Remove any deselected elements from the BMEditSelection */
   BM_select_history_validate(bm);
 
-  recount_totsels(bm);
+  if (flags & BM_SELECT_LEN_FLUSH_RECALC_VERT) {
+    recount_totvertsel(bm);
+  }
+  if (flags & BM_SELECT_LEN_FLUSH_RECALC_EDGE) {
+    recount_totedgesel(bm);
+  }
+  if (flags & BM_SELECT_LEN_FLUSH_RECALC_FACE) {
+    recount_totfacesel(bm);
+  }
+  BLI_assert(recount_totsels_are_ok(bm));
 }
 
 void BM_mesh_select_mode_flush(BMesh *bm)
 {
-  BM_mesh_select_mode_flush_ex(bm, bm->selectmode);
+  BM_mesh_select_mode_flush_ex(bm, bm->selectmode, BM_SELECT_LEN_FLUSH_RECALC_ALL);
 }
 
-/**
- * mode independent flushing up/down
- */
+/** \} */
+
 void BM_mesh_deselect_flush(BMesh *bm)
 {
   BMIter eiter;
@@ -343,9 +480,6 @@ void BM_mesh_deselect_flush(BMesh *bm)
   recount_totsels(bm);
 }
 
-/**
- * mode independent flushing up/down
- */
 void BM_mesh_select_flush(BMesh *bm)
 {
   BMEdge *e;
@@ -387,12 +521,6 @@ void BM_mesh_select_flush(BMesh *bm)
   recount_totsels(bm);
 }
 
-/**
- * \brief Select Vert
- *
- * Changes selection state of a single vertex
- * in a mesh
- */
 void BM_vert_select_set(BMesh *bm, BMVert *v, const bool select)
 {
   BLI_assert(v->head.htype == BM_VERT);
@@ -415,11 +543,6 @@ void BM_vert_select_set(BMesh *bm, BMVert *v, const bool select)
   }
 }
 
-/**
- * \brief Select Edge
- *
- * Changes selection state of a single edge in a mesh.
- */
 void BM_edge_select_set(BMesh *bm, BMEdge *e, const bool select)
 {
   BLI_assert(e->head.htype == BM_EDGE);
@@ -460,12 +583,6 @@ void BM_edge_select_set(BMesh *bm, BMEdge *e, const bool select)
   }
 }
 
-/**
- * \brief Select Face
- *
- * Changes selection state of a single
- * face in a mesh.
- */
 void BM_face_select_set(BMesh *bm, BMFace *f, const bool select)
 {
   BMLoop *l_iter;
@@ -591,12 +708,6 @@ void BM_face_select_set_noflush(BMesh *bm, BMFace *f, const bool select)
 
 /** \} */
 
-/**
- * Select Mode Set
- *
- * Sets the selection mode for the bmesh,
- * updating the selection state.
- */
 void BM_mesh_select_mode_set(BMesh *bm, int selectmode)
 {
   BMIter iter;
@@ -712,10 +823,6 @@ int BM_mesh_elem_hflag_count_disabled(BMesh *bm,
   return bm_mesh_flag_count(bm, htype, hflag, respecthide, false);
 }
 
-/**
- * \note use BM_elem_flag_test(ele, BM_ELEM_SELECT) to test selection
- * \note by design, this will not touch the editselection history stuff
- */
 void BM_elem_select_set(BMesh *bm, BMElem *ele, const bool select)
 {
   switch (ele->head.htype) {
@@ -734,7 +841,6 @@ void BM_elem_select_set(BMesh *bm, BMElem *ele, const bool select)
   }
 }
 
-/* this replaces the active flag used in uv/face mode */
 void BM_mesh_active_face_set(BMesh *bm, BMFace *f)
 {
   bm->act_face = f;
@@ -819,15 +925,6 @@ BMElem *BM_mesh_active_elem_get(BMesh *bm)
   return NULL;
 }
 
-/**
- * Generic way to get data from an EditSelection type
- * These functions were written to be used by the Modifier widget
- * when in Rotate about active mode, but can be used anywhere.
- *
- * - #BM_editselection_center
- * - #BM_editselection_normal
- * - #BM_editselection_plane
- */
 void BM_editselection_center(BMEditSelection *ese, float r_center[3])
 {
   if (ese->htype == BM_VERT) {
@@ -872,11 +969,6 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
   }
 }
 
-/**
- * Calculate a plane that is right angles to the edge/vert/faces normal
- * also make the plane run along an axis that is related to the geometry,
- * because this is used for the gizmos Y axis.
- */
 void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 {
   if (ese->htype == BM_VERT) {
@@ -943,6 +1035,7 @@ static BMEditSelection *bm_select_history_create(BMHeader *ele)
 }
 
 /* --- macro wrapped funcs --- */
+
 bool _bm_select_history_check(BMesh *bm, const BMHeader *ele)
 {
   return (BLI_findptr(&bm->selected, ele, offsetof(BMEditSelection, ele)) != NULL);
@@ -1015,9 +1108,6 @@ void BM_select_history_validate(BMesh *bm)
   }
 }
 
-/**
- * Get the active mesh element (with active-face fallback).
- */
 bool BM_select_history_active_get(BMesh *bm, BMEditSelection *ese)
 {
   BMEditSelection *ese_last = bm->selected.last;
@@ -1054,9 +1144,6 @@ bool BM_select_history_active_get(BMesh *bm, BMEditSelection *ese)
   return true;
 }
 
-/**
- * Return a map from BMVert/Edge/Face -> BMEditSelection
- */
 GHash *BM_select_history_map_create(BMesh *bm)
 {
   BMEditSelection *ese;
@@ -1075,9 +1162,6 @@ GHash *BM_select_history_map_create(BMesh *bm)
   return map;
 }
 
-/**
- * Map arguments may all be the same pointer.
- */
 void BM_select_history_merge_from_targetmap(
     BMesh *bm, GHash *vert_map, GHash *edge_map, GHash *face_map, const bool use_chain)
 {
@@ -1231,7 +1315,7 @@ void BM_mesh_elem_hflag_enable_test(BMesh *bm,
 
   BLI_assert((htype & ~BM_ALL_NOLOOP) == 0);
 
-  /* note, better not attempt a fast path for selection as done with de-select
+  /* NOTE: better not attempt a fast path for selection as done with de-select
    * because hidden geometry and different selection modes can give different results,
    * we could of course check for no hidden faces and then use
    * quicker method but its not worth it. */

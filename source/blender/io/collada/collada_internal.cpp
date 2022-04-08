@@ -71,7 +71,7 @@ void UnitConverter::convertVector3(COLLADABU::Math::Vector3 &vec, float *v)
   v[2] = vec.z;
 }
 
-/* TODO need also for angle conversion, time conversion... */
+/* TODO: need also for angle conversion, time conversion... */
 
 void UnitConverter::dae_matrix_to_mat4_(float out[4][4], const COLLADABU::Math::Matrix4 &in)
 {
@@ -162,7 +162,7 @@ void UnitConverter::calculate_scale(Scene &sce)
  * Translation map.
  * Used to translate every COLLADA id to a valid id, no matter what "wrong" letters may be
  * included. Look at the IDREF XSD declaration for more.
- * Follows strictly the COLLADA XSD declaration which explicitly allows non-english chars,
+ * Follows strictly the COLLADA XSD declaration which explicitly allows non-English chars,
  * like special chars (e.g. micro sign), umlauts and so on.
  * The COLLADA spec also allows additional chars for member access ('.'), these
  * must obviously be removed too, otherwise they would be heavily misinterpreted.
@@ -213,7 +213,6 @@ void clear_global_id_map()
   global_id_map.clear();
 }
 
-/** Look at documentation of translate_map */
 std::string translate_id(const char *idString)
 {
   std::string id = std::string(idString);

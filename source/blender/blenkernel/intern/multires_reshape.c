@@ -69,10 +69,6 @@ bool multiresModifier_reshapeFromVertcos(struct Depsgraph *depsgraph,
   return true;
 }
 
-/* Returns truth on success, false otherwise.
- *
- * This function might fail in cases like source and destination not having
- * matched amount of vertices. */
 bool multiresModifier_reshapeFromObject(struct Depsgraph *depsgraph,
                                         struct MultiresModifierData *mmd,
                                         struct Object *dst,
@@ -235,7 +231,7 @@ void multiresModifier_subdivide_to_level(struct Object *object,
 
   /* Free original grids which makes it so smoothing with details thinks all the details were
    * added against base mesh's limit surface. This is similar behavior to as if we've done all
-   * displacement in sculpt mode at the old top level and then propagated to the new top level.*/
+   * displacement in sculpt mode at the old top level and then propagated to the new top level. */
   multires_reshape_free_original_grids(&reshape_context);
 
   if (ELEM(mode, MULTIRES_SUBDIVIDE_LINEAR, MULTIRES_SUBDIVIDE_SIMPLE)) {

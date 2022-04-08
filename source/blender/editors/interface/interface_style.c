@@ -83,7 +83,6 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 
   style->paneltitle.uifont_id = uifont_id;
   style->paneltitle.points = UI_DEFAULT_TITLE_POINTS;
-  style->paneltitle.kerning = 1;
   style->paneltitle.shadow = 3;
   style->paneltitle.shadx = 0;
   style->paneltitle.shady = -1;
@@ -92,7 +91,6 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 
   style->grouplabel.uifont_id = uifont_id;
   style->grouplabel.points = UI_DEFAULT_TITLE_POINTS;
-  style->grouplabel.kerning = 1;
   style->grouplabel.shadow = 3;
   style->grouplabel.shadx = 0;
   style->grouplabel.shady = -1;
@@ -101,7 +99,6 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 
   style->widgetlabel.uifont_id = uifont_id;
   style->widgetlabel.points = UI_DEFAULT_TEXT_POINTS;
-  style->widgetlabel.kerning = 1;
   style->widgetlabel.shadow = 3;
   style->widgetlabel.shadx = 0;
   style->widgetlabel.shady = -1;
@@ -110,7 +107,6 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 
   style->widget.uifont_id = uifont_id;
   style->widget.points = UI_DEFAULT_TEXT_POINTS;
-  style->widget.kerning = 1;
   style->widget.shadow = 1;
   style->widget.shady = -1;
   style->widget.shadowalpha = 0.5f;
@@ -144,9 +140,9 @@ static uiFont *uifont_to_blfont(int id)
 void UI_fontstyle_draw_ex(const uiFontStyle *fs,
                           const rcti *rect,
                           const char *str,
+                          const size_t str_len,
                           const uchar col[4],
                           const struct uiFontStyleDraw_Params *fs_params,
-                          size_t len,
                           int *r_xofs,
                           int *r_yofs,
                           struct ResultBLF *r_info)
@@ -164,9 +160,6 @@ void UI_fontstyle_draw_ex(const uiFontStyle *fs,
     BLF_shadow(fs->uifont_id, fs->shadow, shadow_color);
     BLF_shadow_offset(fs->uifont_id, fs->shadx, fs->shady);
   }
-  if (fs->kerning == 1) {
-    font_flag |= BLF_KERNING_DEFAULT;
-  }
   if (fs_params->word_wrap == 1) {
     font_flag |= BLF_WORD_WRAP;
   }
@@ -180,20 +173,20 @@ void UI_fontstyle_draw_ex(const uiFontStyle *fs,
   BLF_enable(fs->uifont_id, font_flag);
 
   if (fs_params->word_wrap == 1) {
-    /* draw from boundbox top */
+    /* Draw from bound-box top. */
     yofs = BLI_rcti_size_y(rect) - BLF_height_max(fs->uifont_id);
   }
   else {
-    /* draw from boundbox center */
+    /* Draw from bound-box center. */
     const float height = BLF_ascender(fs->uifont_id) + BLF_descender(fs->uifont_id);
     yofs = ceil(0.5f * (BLI_rcti_size_y(rect) - height));
   }
 
   if (fs_params->align == UI_STYLE_TEXT_CENTER) {
-    xofs = floor(0.5f * (BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, len)));
+    xofs = floor(0.5f * (BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, str_len)));
   }
   else if (fs_params->align == UI_STYLE_TEXT_RIGHT) {
-    xofs = BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, len);
+    xofs = BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, str_len);
   }
 
   yofs = MAX2(0, yofs);
@@ -203,7 +196,7 @@ void UI_fontstyle_draw_ex(const uiFontStyle *fs,
   BLF_position(fs->uifont_id, rect->xmin + xofs, rect->ymin + yofs, 0.0f);
   BLF_color4ubv(fs->uifont_id, col);
 
-  BLF_draw_ex(fs->uifont_id, str, len, r_info);
+  BLF_draw_ex(fs->uifont_id, str, str_len, r_info);
 
   BLF_disable(fs->uifont_id, font_flag);
 
@@ -218,15 +211,13 @@ void UI_fontstyle_draw_ex(const uiFontStyle *fs,
 void UI_fontstyle_draw(const uiFontStyle *fs,
                        const rcti *rect,
                        const char *str,
+                       const size_t str_len,
                        const uchar col[4],
                        const struct uiFontStyleDraw_Params *fs_params)
 {
-  int xofs, yofs;
-
-  UI_fontstyle_draw_ex(fs, rect, str, col, fs_params, BLF_DRAW_STR_DUMMY_MAX, &xofs, &yofs, NULL);
+  UI_fontstyle_draw_ex(fs, rect, str, str_len, col, fs_params, NULL, NULL, NULL);
 }
 
-/* drawn same as above, but at 90 degree angle */
 void UI_fontstyle_draw_rotated(const uiFontStyle *fs,
                                const rcti *rect,
                                const char *str,
@@ -245,7 +236,7 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs,
 
   /* ignore UI_STYLE, always aligned to top */
 
-  /* rotate counter-clockwise for now (assumes left-to-right language)*/
+  /* Rotate counter-clockwise for now (assumes left-to-right language). */
   xofs += height;
   yofs = BLF_width(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX) + 5;
   angle = M_PI_2;
@@ -278,47 +269,23 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs,
     BLF_shadow_offset(fs->uifont_id, fs->shadx, fs->shady);
   }
 
-  if (fs->kerning == 1) {
-    BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
-
   BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
   BLF_disable(fs->uifont_id, BLF_ROTATION);
   BLF_disable(fs->uifont_id, BLF_CLIPPING);
   if (fs->shadow) {
     BLF_disable(fs->uifont_id, BLF_SHADOW);
   }
-  if (fs->kerning == 1) {
-    BLF_disable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
 }
 
-/**
- * Similar to #UI_fontstyle_draw
- * but ignore alignment, shadow & no clipping rect.
- *
- * For drawing on-screen labels.
- */
 void UI_fontstyle_draw_simple(
     const uiFontStyle *fs, float x, float y, const char *str, const uchar col[4])
 {
-  if (fs->kerning == 1) {
-    BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
-
   UI_fontstyle_set(fs);
   BLF_position(fs->uifont_id, x, y, 0.0f);
   BLF_color4ubv(fs->uifont_id, col);
   BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
-
-  if (fs->kerning == 1) {
-    BLF_disable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
 }
 
-/**
- * Same as #UI_fontstyle_draw but draw a colored backdrop.
- */
 void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
                                        float x,
                                        float y,
@@ -326,10 +293,6 @@ void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
                                        const float col_fg[4],
                                        const float col_bg[4])
 {
-  if (fs->kerning == 1) {
-    BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
-
   UI_fontstyle_set(fs);
 
   {
@@ -338,11 +301,8 @@ void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
     const float decent = BLF_descender(fs->uifont_id);
     const float margin = height / 4.0f;
 
-    /* backdrop */
-    const float color[4] = {col_bg[0], col_bg[1], col_bg[2], 0.5f};
-
     UI_draw_roundbox_corner_set(UI_CNR_ALL);
-    UI_draw_roundbox_aa(
+    UI_draw_roundbox_4fv(
         &(const rctf){
             .xmin = x - margin,
             .xmax = x + width + margin,
@@ -351,20 +311,16 @@ void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
         },
         true,
         margin,
-        color);
+        col_bg);
   }
 
   BLF_position(fs->uifont_id, x, y, 0.0f);
   BLF_color4fv(fs->uifont_id, col_fg);
   BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
-
-  if (fs->kerning == 1) {
-    BLF_disable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
 }
 
 /* ************** helpers ************************ */
-/* XXX: read a style configure */
+
 const uiStyle *UI_style_get(void)
 {
 #if 0
@@ -377,7 +333,6 @@ const uiStyle *UI_style_get(void)
 #endif
 }
 
-/* for drawing, scaled with DPI setting */
 const uiStyle *UI_style_get_dpi(void)
 {
   const uiStyle *style = UI_style_get();
@@ -405,20 +360,28 @@ const uiStyle *UI_style_get_dpi(void)
 
 int UI_fontstyle_string_width(const uiFontStyle *fs, const char *str)
 {
-  int width;
-
-  if (fs->kerning == 1) {
-    /* for BLF_width */
-    BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
-  }
-
   UI_fontstyle_set(fs);
-  width = BLF_width(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
+  return (int)BLF_width(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
+}
 
-  if (fs->kerning == 1) {
-    BLF_disable(fs->uifont_id, BLF_KERNING_DEFAULT);
+int UI_fontstyle_string_width_with_block_aspect(const uiFontStyle *fs,
+                                                const char *str,
+                                                const float aspect)
+{
+  uiFontStyle fs_buf;
+  if (aspect != 1.0f) {
+    fs_buf = *fs;
+    ui_fontscale(&fs_buf.points, aspect);
+    fs = &fs_buf;
   }
 
+  int width = UI_fontstyle_string_width(fs, str);
+
+  if (aspect != 1.0f) {
+    /* While in most cases rounding up isn't important, it can make a difference
+     * with small fonts (3px or less), zooming out in the node-editor for e.g. */
+    width = (int)ceilf(width * aspect);
+  }
   return width;
 }
 
@@ -430,11 +393,9 @@ int UI_fontstyle_height_max(const uiFontStyle *fs)
 
 /* ************** init exit ************************ */
 
-/* called on each startup.blend read */
-/* reading without uifont will create one */
 void uiStyleInit(void)
 {
-  uiStyle *style = U.uistyles.first;
+  const uiStyle *style = U.uistyles.first;
 
   /* recover from uninitialized dpi */
   if (U.dpi == 0) {
@@ -465,11 +426,11 @@ void uiStyleInit(void)
   }
 
   if (U.font_path_ui[0]) {
-    BLI_strncpy(font_first->filename, U.font_path_ui, sizeof(font_first->filename));
+    BLI_strncpy(font_first->filepath, U.font_path_ui, sizeof(font_first->filepath));
     font_first->uifont_id = UIFONT_CUSTOM1;
   }
   else {
-    BLI_strncpy(font_first->filename, "default", sizeof(font_first->filename));
+    BLI_strncpy(font_first->filepath, "default", sizeof(font_first->filepath));
     font_first->uifont_id = UIFONT_DEFAULT;
   }
 
@@ -480,7 +441,7 @@ void uiStyleInit(void)
       font->blf_id = BLF_load_default(unique);
     }
     else {
-      font->blf_id = BLF_load(font->filename);
+      font->blf_id = BLF_load(font->filepath);
       if (font->blf_id == -1) {
         font->blf_id = BLF_load_default(unique);
       }
@@ -498,15 +459,19 @@ void uiStyleInit(void)
        * Yes, this build the glyph cache and create
        * the texture.
        */
-      BLF_size(font->blf_id, 11 * U.pixelsize, U.dpi);
-      BLF_size(font->blf_id, 12 * U.pixelsize, U.dpi);
-      BLF_size(font->blf_id, 14 * U.pixelsize, U.dpi);
+      BLF_size(font->blf_id, 11.0f * U.pixelsize, U.dpi);
+      BLF_size(font->blf_id, 12.0f * U.pixelsize, U.dpi);
+      BLF_size(font->blf_id, 14.0f * U.pixelsize, U.dpi);
     }
   }
 
   if (style == NULL) {
-    ui_style_new(&U.uistyles, "Default Style", UIFONT_DEFAULT);
+    style = ui_style_new(&U.uistyles, "Default Style", UIFONT_DEFAULT);
   }
+
+  BLF_cache_flush_set_fn(UI_widgetbase_draw_cache_flush);
+
+  BLF_default_size(style->widgetlabel.points);
 
   /* XXX, this should be moved into a style,
    * but for now best only load the monospaced font once. */
@@ -521,7 +486,7 @@ void uiStyleInit(void)
     blf_mono_font = BLF_load_mono_default(unique);
   }
 
-  BLF_size(blf_mono_font, 12 * U.pixelsize, 72);
+  BLF_size(blf_mono_font, 12.0f * U.pixelsize, 72);
 
   /* Set default flags based on UI preferences (not render fonts) */
   {
@@ -566,7 +531,7 @@ void uiStyleInit(void)
     blf_mono_font_render = BLF_load_mono_default(unique);
   }
 
-  BLF_size(blf_mono_font_render, 12 * U.pixelsize, 72);
+  BLF_size(blf_mono_font_render, 12.0f * U.pixelsize, 72);
 }
 
 void UI_fontstyle_set(const uiFontStyle *fs)

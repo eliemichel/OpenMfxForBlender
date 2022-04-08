@@ -42,6 +42,8 @@
 #include "BLT_translation.h"
 
 #include "transform.h"
+#include "transform_convert.h"
+
 #include "transform_mode.h"
 
 /* -------------------------------------------------------------------- */
@@ -230,4 +232,5 @@ void initTimeSlide(TransInfo *t)
   /* No time unit supporting frames currently... */
   t->num.unit_type[0] = B_UNIT_NONE;
 }
+
 /** \} */

@@ -76,7 +76,9 @@ typedef struct BrushGpencilSettings {
   float fill_threshold;
   /** Number of pixel to consider the leak is too small (x 2). */
   short fill_leak;
-  char _pad2[2];
+  /* Type of caps: eGPDstroke_Caps. */
+  int8_t caps_type;
+  char _pad;
 
   int flag2;
 
@@ -121,7 +123,7 @@ typedef struct BrushGpencilSettings {
   int sculpt_mode_flag;
   /** Preset type (used to reset brushes - internal). */
   short preset_type;
-  /** Brush preselected mode (Active/Material/Vertexcolor). */
+  /** Brush preselected mode (Active/Material/Vertex-color). */
   short brush_draw_mode;
 
   /** Randomness for Hue. */
@@ -133,7 +135,8 @@ typedef struct BrushGpencilSettings {
 
   /** Factor to extend stroke extremes using fill tool. */
   float fill_extend_fac;
-  char _pad3[4];
+  /** Number of pixels to dilate fill area. */
+  int dilate_pixels;
 
   struct CurveMapping *curve_sensitivity;
   struct CurveMapping *curve_strength;

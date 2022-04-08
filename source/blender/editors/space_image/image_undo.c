@@ -293,8 +293,9 @@ static void ptile_restore_runtime_list(ListBase *paint_tiles)
       SWAP(uint *, ptile->rect.uint, tmpibuf->rect);
     }
 
-    BKE_image_free_gputextures(
-        image); /* force OpenGL reload (maybe partial update will operate better?) */
+    /* Force OpenGL reload (maybe partial update will operate better?) */
+    BKE_image_free_gputextures(image);
+
     if (ibuf->rect_float) {
       ibuf->userflags |= IB_RECT_INVALID; /* force recreate of char rect */
     }
@@ -569,7 +570,8 @@ static void uhandle_restore_list(ListBase *undo_handles, bool use_init)
 
     if (changed) {
       BKE_image_mark_dirty(image, ibuf);
-      BKE_image_free_gputextures(image); /* force OpenGL reload */
+      /* TODO(jbakker): only mark areas that are actually updated to improve performance. */
+      BKE_image_partial_update_mark_full_update(image);
 
       if (ibuf->rect_float) {
         ibuf->userflags |= IB_RECT_INVALID; /* force recreate of char rect */
@@ -667,7 +669,6 @@ static UndoImageHandle *uhandle_add(ListBase *undo_handles, Image *image, ImageU
   uh->image_ref.ptr = image;
   uh->iuser = *iuser;
   uh->iuser.scene = NULL;
-  uh->iuser.ok = 1;
   BLI_addtail(undo_handles, uh);
   return uh;
 }
@@ -989,7 +990,6 @@ static void image_undosys_foreach_ID_ref(UndoStep *us_p,
   }
 }
 
-/* Export for ED_undo_sys. */
 void ED_image_undosys_type(UndoType *ut)
 {
   ut->name = "Image";
@@ -1005,7 +1005,7 @@ void ED_image_undosys_type(UndoType *ut)
    * specific case, see `image_undosys_step_encode` code. We cannot specify
    * `UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE` though, as it can be called with a NULL context by
    * current code. */
-  ut->flags = 0;
+  ut->flags = UNDOTYPE_FLAG_DECODE_ACTIVE_STEP;
 
   ut->step_size = sizeof(ImageUndoStep);
 }
@@ -1040,7 +1040,6 @@ ListBase *ED_image_paint_tile_list_get(void)
   return &us->paint_tiles;
 }
 
-/* restore painting image to previous state. Used for anchored and drag-dot style brushes*/
 void ED_image_undo_restore(UndoStep *us)
 {
   ListBase *paint_tiles = &((ImageUndoStep *)us)->paint_tiles;
@@ -1059,10 +1058,6 @@ static ImageUndoStep *image_undo_push_begin(const char *name, int paint_mode)
   return us;
 }
 
-/**
- * The caller is responsible for running #ED_image_undo_push_end,
- * failure to do so causes an invalid state for the undo system.
- */
 void ED_image_undo_push_begin(const char *name, int paint_mode)
 {
   image_undo_push_begin(name, paint_mode);

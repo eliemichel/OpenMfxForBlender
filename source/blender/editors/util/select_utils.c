@@ -18,15 +18,14 @@
  * \ingroup edutil
  */
 
+#include <float.h>
+
 #include "BLI_kdtree.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "ED_select_utils.h"
 
-#include "float.h"
-
-/** 1: select, 0: deselect, -1: pass. */
 int ED_select_op_action(const eSelectOp sel_op, const bool is_select, const bool is_inside)
 {
   switch (sel_op) {
@@ -41,15 +40,9 @@ int ED_select_op_action(const eSelectOp sel_op, const bool is_select, const bool
     case SEL_OP_XOR:
       return (is_select && is_inside) ? 0 : ((!is_select && is_inside) ? 1 : -1);
   }
-  BLI_assert(!"invalid sel_op");
+  BLI_assert_msg(0, "invalid sel_op");
   return -1;
 }
-/**
- * Use when we've de-selected all items first (for modes that need it).
- *
- * \note In some cases changing selection needs to perform other checks,
- * so it's more straightforward to deselect all, then select.
- */
 int ED_select_op_action_deselected(const eSelectOp sel_op,
                                    const bool is_select,
                                    const bool is_inside)
@@ -67,13 +60,10 @@ int ED_select_op_action_deselected(const eSelectOp sel_op,
     case SEL_OP_XOR:
       return (is_select && is_inside) ? 0 : ((!is_select && is_inside) ? 1 : -1);
   }
-  BLI_assert(!"invalid sel_op");
+  BLI_assert_msg(0, "invalid sel_op");
   return -1;
 }
 
-/**
- * Utility to use for selection operations that run multiple times (circle select).
- */
 eSelectOp ED_select_op_modal(const eSelectOp sel_op, const bool is_first)
 {
   if (sel_op == SEL_OP_SET) {

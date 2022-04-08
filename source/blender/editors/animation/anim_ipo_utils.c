@@ -43,14 +43,6 @@
 
 /* ----------------------- Getter functions ----------------------- */
 
-/**
- * Write into "name" buffer, the name of the property
- * (retrieved using RNA from the curve's settings),
- * and return the icon used for the struct that this property refers to
- *
- * \warning name buffer we're writing to cannot exceed 256 chars
- * (check anim_channels_defines.c for details).
- */
 int getname_anim_fcurve(char *name, ID *id, FCurve *fcu)
 {
   int icon = 0;
@@ -106,23 +98,14 @@ int getname_anim_fcurve(char *name, ID *id, FCurve *fcu)
        * - If a pointer just refers to the ID-block, then don't repeat this info
        *   since this just introduces clutter.
        */
-      if (strstr(fcu->rna_path, "bones") && strstr(fcu->rna_path, "constraints")) {
-        /* perform string 'chopping' to get "Bone Name : Constraint Name" */
-        char *pchanName = BLI_str_quoted_substrN(fcu->rna_path, "bones[");
-        char *constName = BLI_str_quoted_substrN(fcu->rna_path, "constraints[");
+
+      char pchanName[256], constName[256];
+      if (BLI_str_quoted_substr(fcu->rna_path, "bones[", pchanName, sizeof(pchanName)) &&
+          BLI_str_quoted_substr(fcu->rna_path, "constraints[", constName, sizeof(constName))) {
 
         /* assemble the string to display in the UI... */
-        structname = BLI_sprintfN(
-            "%s : %s", pchanName ? pchanName : "", constName ? constName : "");
+        structname = BLI_sprintfN("%s : %s", pchanName, constName);
         free_structname = 1;
-
-        /* free the temp names */
-        if (pchanName) {
-          MEM_freeN(pchanName);
-        }
-        if (constName) {
-          MEM_freeN(constName);
-        }
       }
       else if (ptr.data != ptr.owner_id) {
         PropertyRNA *nameprop = RNA_struct_name_property(ptr.type);
@@ -133,6 +116,42 @@ int getname_anim_fcurve(char *name, ID *id, FCurve *fcu)
         }
         else {
           structname = RNA_struct_ui_name(ptr.type);
+        }
+
+        /* For the sequencer, a strip's 'Transform' or 'Crop' is a nested (under Sequence)
+         * struct, but displaying the struct name alone is no meaningful information
+         * (and also cannot be filtered well), same for modifiers.
+         * So display strip name alongside as well. */
+        if (GS(ptr.owner_id->name) == ID_SCE) {
+          char stripname[256];
+          if (BLI_str_quoted_substr(
+                  fcu->rna_path, "sequence_editor.sequences_all[", stripname, sizeof(stripname))) {
+            if (strstr(fcu->rna_path, ".transform.") || strstr(fcu->rna_path, ".crop.") ||
+                strstr(fcu->rna_path, ".modifiers[")) {
+              const char *structname_all = BLI_sprintfN("%s : %s", stripname, structname);
+              if (free_structname) {
+                MEM_freeN((void *)structname);
+              }
+              structname = structname_all;
+              free_structname = 1;
+            }
+          }
+        }
+        /* For node sockets, it is useful to include the node name as well (multiple similar nodes
+         * are not distinguishable otherwise). Unfortunately, the node label cannot be retrieved
+         * from the rna path, for this to work access to the underlying node is needed (but finding
+         * the node iterates all nodes & sockets which would result in bad performance in some
+         * circumstances). */
+        if (RNA_struct_is_a(ptr.type, &RNA_NodeSocket)) {
+          char nodename[256];
+          if (BLI_str_quoted_substr(fcu->rna_path, "nodes[", nodename, sizeof(nodename))) {
+            const char *structname_all = BLI_sprintfN("%s : %s", nodename, structname);
+            if (free_structname) {
+              MEM_freeN((void *)structname);
+            }
+            structname = structname_all;
+            free_structname = 1;
+          }
         }
       }
 

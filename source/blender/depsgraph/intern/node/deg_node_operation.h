@@ -79,7 +79,7 @@ enum class OperationCode {
   TRANSFORM_PARENT,
   /* Constraints */
   TRANSFORM_CONSTRAINTS,
-  /* Handle object-level updates, mainly proxies hacks and recalc flags.  */
+  /* Handle object-level updates, mainly proxies hacks and recalc flags. */
   TRANSFORM_EVAL,
   /* Initializes transformation for simulation.
    * For example, ensures point cache is properly reset before doing rigid
@@ -102,7 +102,7 @@ enum class OperationCode {
   GEOMETRY_EVAL_INIT,
   /* Evaluate the whole geometry, including modifiers. */
   GEOMETRY_EVAL,
-  /* Evaluation of geometry is completely done.. */
+  /* Evaluation of geometry is completely done. */
   GEOMETRY_EVAL_DONE,
   /* Evaluation of a shape key.
    * NOTE: Currently only for object data data-blocks. */
@@ -177,6 +177,9 @@ enum class OperationCode {
   LIGHT_UPDATE,
   WORLD_UPDATE,
 
+  /* Node Tree. ----------------------------------------------------------- */
+  NTREE_OUTPUT,
+
   /* Batch caches. -------------------------------------------------------- */
   GEOMETRY_SELECT_UPDATE,
 
@@ -233,6 +236,10 @@ struct OperationNode : public Node {
   OperationNode();
 
   virtual string identifier() const override;
+  /**
+   * Full node identifier, including owner name.
+   * used for logging and debug prints.
+   */
   string full_identifier() const;
 
   virtual void tag_update(Depsgraph *graph, eUpdateSource source) override;

@@ -94,6 +94,7 @@ static bool bmw_edge_is_wire(const BMWalker *walker, const BMEdge *e)
   }
   return BM_edge_is_wire(e);
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -107,6 +108,7 @@ static bool bmw_edge_is_wire(const BMWalker *walker, const BMEdge *e)
  *
  * \todo Add restriction flag/callback for wire edges.
  * \{ */
+
 static void bmw_VertShellWalker_visitEdge(BMWalker *walker, BMEdge *e)
 {
   BMwShellWalker *shellWalk = NULL;
@@ -203,9 +205,9 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
   curedge = shellWalk.curedge;
   do {
     if (!BLI_gset_haskey(walker->visit_set, curedge)) {
-      if (!walker->restrictflag ||
-          (walker->restrictflag &&
-           BMO_edge_flag_test(walker->bm, curedge, walker->restrictflag))) {
+      if (!walker->visibility_flag ||
+          (walker->visibility_flag &&
+           BMO_edge_flag_test(walker->bm, curedge, walker->visibility_flag))) {
         BMwShellWalker *newstate;
 
         v_old = BM_edge_other_vert(curedge, shellWalk.base);
@@ -236,6 +238,7 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
  *
  * \note this is mainly useful to loop over a shell delimited by edges.
  * \{ */
+
 static void bmw_LoopShellWalker_visitLoop(BMWalker *walker, BMLoop *l)
 {
   BMwLoopShellWalker *shellWalk = NULL;
@@ -509,6 +512,7 @@ static void *bmw_LoopShellWireWalker_step(BMWalker *walker)
  * Starts at an edge on the mesh and walks over the 'shell' it belongs
  * to via visiting connected faces.
  * \{ */
+
 static void bmw_FaceShellWalker_visitEdge(BMWalker *walker, BMEdge *e)
 {
   BMwShellWalker *shellWalk = NULL;
@@ -564,6 +568,7 @@ static void *bmw_FaceShellWalker_step(BMWalker *walker)
 
   return e;
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -573,6 +578,7 @@ static void *bmw_FaceShellWalker_step(BMWalker *walker)
  *
  * Walk from a vertex to all connected vertices.
  * \{ */
+
 static void bmw_ConnectedVertexWalker_visitVertex(BMWalker *walker, BMVert *v)
 {
   BMwConnectedVertexWalker *vwalk;
@@ -640,6 +646,7 @@ static void *bmw_ConnectedVertexWalker_step(BMWalker *walker)
  *
  * \todo Add restriction flag/callback for wire edges.
  * \{ */
+
 static void bmw_IslandboundWalker_begin(BMWalker *walker, void *data)
 {
   BMLoop *l = data;
@@ -714,7 +721,7 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
   iwalk->base = owalk.base;
 
 #if 0
-  if (!BMO_face_flag_test(walker->bm, l->f, walker->restrictflag)) {
+  if (!BMO_face_flag_test(walker->bm, l->f, walker->visibility_flag)) {
     iwalk->curloop = l->radial_next;
   }
   else {
@@ -735,6 +742,7 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
  *
  * \todo Add restriction flag/callback for wire edges.
  * \{ */
+
 static void bmw_IslandWalker_begin(BMWalker *walker, void *data)
 {
   BMwIslandWalker *iwalk = NULL;
@@ -842,7 +850,7 @@ static void *bmw_IslandManifoldWalker_step(BMWalker *walker)
 /* utility function to see if an edge is a part of an ngon boundary */
 static bool bm_edge_is_single(BMEdge *e)
 {
-  return ((BM_edge_is_boundary(e)) && (e->l->f->len > 4) &&
+  return (BM_edge_is_boundary(e) && (e->l->f->len > 4) &&
           (BM_edge_is_boundary(e->l->next->e) || BM_edge_is_boundary(e->l->prev->e)));
 }
 
@@ -1299,6 +1307,7 @@ static void *bmw_FaceLoopWalker_step(BMWalker *walker)
  * Conditions for starting and stepping the edge ring have been
  * tuned to match behavior users expect (dating back to v2.4x).
  * \{ */
+
 static void bmw_EdgeringWalker_begin(BMWalker *walker, void *data)
 {
   BMwEdgeringWalker *lwalk, owalk, *owalk_pt;
@@ -1631,7 +1640,7 @@ static void *bmw_NonManifoldedgeWalker_yield(BMWalker *walker)
 /**
  * Walk over manifold loops around `v` until loop-edge is found with `face_count` users.
  * or return NULL if not found.
- * */
+ */
 static BMLoop *bmw_NonManifoldLoop_find_next_around_vertex(BMLoop *l, BMVert *v, int face_count)
 {
   BLI_assert(!BM_loop_is_manifold(l));
@@ -1667,7 +1676,7 @@ static void *bmw_NonManifoldedgeWalker_step(BMWalker *walker)
     v = BM_edge_other_vert(e, lwalk->lastv);
 
     /* If `lwalk.lastv` can't be walked along, start walking in the opposite direction
-     * on the initial edge, do this at most one time during this walk operation.  */
+     * on the initial edge, do this at most one time during this walk operation. */
     if (UNLIKELY(pass == 1)) {
       e = lwalk->start;
       v = lwalk->startv;
@@ -1850,6 +1859,12 @@ static BMWalker bmw_ConnectedVertexWalker_Type = {
     BM_VERT, /* Valid restrict masks. */
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name All Walker Types
+ * \{ */
+
 BMWalker *bm_walker_types[] = {
     &bmw_VertShellWalker_Type,       /* #BMW_VERT_SHELL */
     &bmw_LoopShellWalker_Type,       /* #BMW_LOOP_SHELL */
@@ -1868,3 +1883,5 @@ BMWalker *bm_walker_types[] = {
 };
 
 const int bm_totwalkers = ARRAY_SIZE(bm_walker_types);
+
+/** \} */

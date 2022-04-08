@@ -161,7 +161,7 @@ static Mesh *get_quick_mesh(
             mul_m4_v3(omat, mv->co);
           }
 
-          result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+          BKE_mesh_normals_tag_dirty(result);
         }
 
         break;
@@ -245,12 +245,22 @@ static BMesh *BMD_mesh_bm_create(
 
   const BMAllocTemplate allocsize = BMALLOC_TEMPLATE_FROM_ME(mesh, mesh_operand_ob);
 
-  BMeshCreateParams bmcp = {false};
-  BMesh *bm = BM_mesh_create(&allocsize, &bmcp);
+  BMeshCreateParams bmesh_create_params{};
+  BMesh *bm = BM_mesh_create(&allocsize, &bmesh_create_params);
 
-  BMeshFromMeshParams params{};
-  params.calc_face_normal = true;
-  BM_mesh_bm_from_me(bm, mesh_operand_ob, &params);
+  /* Keep `mesh` first, needed so active layers are set based on `mesh` not `mesh_operand_ob`,
+   * otherwise the wrong active render layer is used, see T92384.
+   *
+   * NOTE: while initializing customer data layers the is not essential,
+   * it avoids the overhead of having to re-allocate #BMHeader.data when the 2nd mesh is added
+   * (if it contains additional custom-data layers). */
+  const Mesh *mesh_array[2] = {mesh, mesh_operand_ob};
+  BM_mesh_copy_init_customdata_from_mesh_array(bm, mesh_array, ARRAY_SIZE(mesh_array), &allocsize);
+
+  BMeshFromMeshParams bmesh_from_mesh_params{};
+  bmesh_from_mesh_params.calc_face_normal = true;
+  bmesh_from_mesh_params.calc_vert_normal = true;
+  BM_mesh_bm_from_me(bm, mesh_operand_ob, &bmesh_from_mesh_params);
 
   if (UNLIKELY(*r_is_flip)) {
     const int cd_loop_mdisp_offset = CustomData_get_offset(&bm->ldata, CD_MDISPS);
@@ -261,7 +271,7 @@ static BMesh *BMD_mesh_bm_create(
     }
   }
 
-  BM_mesh_bm_from_me(bm, mesh, &params);
+  BM_mesh_bm_from_me(bm, mesh, &bmesh_from_mesh_params);
 
   return bm;
 }
@@ -283,11 +293,10 @@ static void BMD_mesh_intersection(BMesh *bm,
   /* main bmesh intersection setup */
   /* create tessface & intersect */
   const int looptris_tot = poly_to_tri_count(bm->totface, bm->totloop);
-  int tottri;
   BMLoop *(*looptris)[3] = (BMLoop * (*)[3])
       MEM_malloc_arrayN(looptris_tot, sizeof(*looptris), __func__);
 
-  BM_mesh_calc_tessellation_beauty(bm, looptris, &tottri);
+  BM_mesh_calc_tessellation_beauty(bm, looptris);
 
   /* postpone this until after tessellating
    * so we can use the original normals before the vertex are moved */
@@ -364,7 +373,7 @@ static void BMD_mesh_intersection(BMesh *bm,
 
   BM_mesh_intersect(bm,
                     looptris,
-                    tottri,
+                    looptris_tot,
                     bm_face_isect_pair,
                     nullptr,
                     false,
@@ -387,7 +396,7 @@ static void BMD_mesh_intersection(BMesh *bm,
  * Caller owns the returned array. */
 static Array<short> get_material_remap(Object *dest_ob, Object *src_ob)
 {
-  int n = dest_ob->totcol;
+  int n = src_ob->totcol;
   if (n <= 0) {
     n = 1;
   }
@@ -507,7 +516,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
         result = BKE_mesh_from_bmesh_for_eval_nomain(bm, nullptr, mesh);
 
         BM_mesh_free(bm);
-        result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+        BKE_mesh_normals_tag_dirty(result);
       }
 
       if (result == nullptr) {
@@ -536,13 +545,13 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
           BMD_mesh_intersection(bm, md, ctx, mesh_operand_ob, object, operand_ob, is_flip);
 
           /* Needed for multiple objects to work. */
-          BMeshToMeshParams params{};
-          params.calc_object_remap = false;
-          BM_mesh_bm_to_me(nullptr, bm, mesh, &params);
+          BMeshToMeshParams bmesh_to_mesh_params{};
+          bmesh_to_mesh_params.calc_object_remap = false;
+          BM_mesh_bm_to_me(nullptr, bm, mesh, &bmesh_to_mesh_params);
 
           result = BKE_mesh_from_bmesh_for_eval_nomain(bm, nullptr, mesh);
           BM_mesh_free(bm);
-          result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+          BKE_mesh_normals_tag_dirty(result);
         }
       }
     }
@@ -635,7 +644,6 @@ ModifierTypeInfo modifierType_Boolean = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ nullptr,
     /* modifyGeometrySet */ nullptr,
-    /* modifyVolume */ nullptr,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

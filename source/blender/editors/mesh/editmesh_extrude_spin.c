@@ -80,7 +80,7 @@ static int edbm_spin_exec(bContext *C, wmOperator *op)
     BMesh *bm = em->bm;
     BMOperator spinop;
 
-    /* keep the values in worldspace since we're passing the obmat */
+    /* Keep the values in world-space since we're passing the `obmat`. */
     if (!EDBM_op_init(em,
                       &spinop,
                       op,
@@ -108,7 +108,12 @@ static int edbm_spin_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    EDBM_update_generic(obedit->data, true, true);
+    EDBM_update(obedit->data,
+                &(const struct EDBMUpdate_Params){
+                    .calc_looptri = true,
+                    .calc_normals = false,
+                    .is_destructive = true,
+                });
   }
 
   MEM_freeN(objects);

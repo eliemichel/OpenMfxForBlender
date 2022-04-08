@@ -47,7 +47,7 @@
 #endif
 
 #include <fcntl.h>
-#include <string.h> /* strcpy etc.. */
+#include <string.h> /* `strcpy` etc. */
 
 #ifdef WIN32
 #  include "BLI_string_utf8.h"
@@ -72,12 +72,6 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-/**
- * Copies the current working directory into *dir (max size maxncpy), and
- * returns a pointer to same.
- *
- * \note can return NULL when the size is not big enough
- */
 char *BLI_current_working_dir(char *dir, const size_t maxncpy)
 {
 #if defined(WIN32)
@@ -102,10 +96,6 @@ char *BLI_current_working_dir(char *dir, const size_t maxncpy)
 #endif
 }
 
-/**
- * Returns the number of free bytes on the volume containing the specified pathname. */
-/* Not actually used anywhere.
- */
 double BLI_dir_free_space(const char *dir)
 {
 #ifdef WIN32
@@ -201,9 +191,6 @@ int64_t BLI_lseek(int fd, int64_t offset, int whence)
 #endif
 }
 
-/**
- * Returns the file size of an opened file descriptor.
- */
 size_t BLI_file_descriptor_size(int file)
 {
   BLI_stat_t st;
@@ -213,9 +200,6 @@ size_t BLI_file_descriptor_size(int file)
   return st.st_size;
 }
 
-/**
- * Returns the size of a file.
- */
 size_t BLI_file_size(const char *path)
 {
   BLI_stat_t stats;
@@ -266,7 +250,8 @@ eFileAttributes BLI_file_attributes(const char *path)
   if (attr & FILE_ATTRIBUTE_SPARSE_FILE) {
     ret |= FILE_ATTR_SPARSE_FILE;
   }
-  if (attr & FILE_ATTRIBUTE_OFFLINE) {
+  if (attr & FILE_ATTRIBUTE_OFFLINE || attr & FILE_ATTRIBUTE_RECALL_ON_OPEN ||
+      attr & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) {
     ret |= FILE_ATTR_OFFLINE;
   }
   if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -292,7 +277,7 @@ bool BLI_file_alias_target(const char *filepath,
                            /* This parameter can only be `const` on Linux since
                             * redirections are not supported there.
                             * NOLINTNEXTLINE: readability-non-const-parameter. */
-                           char r_targetpath[FILE_MAXDIR])
+                           char r_targetpath[/*FILE_MAXDIR*/])
 {
 #  ifdef WIN32
   if (!BLI_path_extension_check(filepath, ".lnk")) {
@@ -342,10 +327,6 @@ bool BLI_file_alias_target(const char *filepath,
 }
 #endif
 
-/**
- * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
- * (most likely doesn't exist or no access).
- */
 int BLI_exists(const char *path)
 {
 #if defined(WIN32)
@@ -429,18 +410,11 @@ int BLI_stat(const char *path, struct stat *buffer)
 }
 #endif
 
-/**
- * Does the specified path point to a directory?
- * \note Would be better in fileops.c except that it needs stat.h so add here
- */
 bool BLI_is_dir(const char *file)
 {
   return S_ISDIR(BLI_exists(file));
 }
 
-/**
- * Does the specified path point to a non-directory?
- */
 bool BLI_is_file(const char *path)
 {
   const int mode = BLI_exists(path);
@@ -527,33 +501,6 @@ void *BLI_file_read_binary_as_mem(const char *filepath, size_t pad_bytes, size_t
   return mem;
 }
 
-/**
- * Return the text file data with:
-
- * - Newlines replaced with '\0'.
- * - Optionally trim white-space, replacing trailing <space> & <tab> with '\0'.
- *
- * This is an alternative to using #BLI_file_read_as_lines,
- * allowing us to loop over lines without converting it into a linked list
- * with individual allocations.
- *
- * \param trim_trailing_space: Replace trailing spaces & tabs with nil.
- * This arguments prevents the caller from counting blank lines (if that's important).
- * \param pad_bytes: When this is non-zero, the first byte is set to nil,
- * to simplify parsing the file.
- * It's recommended to pass in 1, so all text is nil terminated.
- *
- * Example looping over lines:
- *
- * \code{.c}
- * size_t data_len;
- * char *data = BLI_file_read_text_as_mem_with_newline_as_nil(filepath, true, 1, &data_len);
- * char *data_end = data + data_len;
- * for (char *line = data; line != data_end; line = strlen(line) + 1) {
- *  printf("line='%s'\n", line);
- * }
- * \endcode
- */
 void *BLI_file_read_text_as_mem_with_newline_as_nil(const char *filepath,
                                                     bool trim_trailing_space,
                                                     size_t pad_bytes,
@@ -584,9 +531,6 @@ void *BLI_file_read_text_as_mem_with_newline_as_nil(const char *filepath,
   return mem;
 }
 
-/**
- * Reads the contents of a text file and returns the lines in a linked list.
- */
 LinkNode *BLI_file_read_as_lines(const char *filepath)
 {
   FILE *fp = BLI_fopen(filepath, "r");
@@ -633,15 +577,11 @@ LinkNode *BLI_file_read_as_lines(const char *filepath)
   return lines.list;
 }
 
-/*
- * Frees memory from a previous call to BLI_file_read_as_lines.
- */
 void BLI_file_free_lines(LinkNode *lines)
 {
   BLI_linklist_freeN(lines);
 }
 
-/** is file1 older than file2 */
 bool BLI_file_older(const char *file1, const char *file2)
 {
 #ifdef WIN32

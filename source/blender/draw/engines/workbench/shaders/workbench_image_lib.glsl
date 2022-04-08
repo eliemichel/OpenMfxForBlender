@@ -1,5 +1,5 @@
 
-/* TODO(fclem): deduplicate code.  */
+/* TODO(fclem): deduplicate code. */
 bool node_tex_tile_lookup(inout vec3 co, sampler2DArray ima, sampler1DArray map)
 {
   vec2 tile_pos = floor(co.xy);
@@ -24,13 +24,6 @@ bool node_tex_tile_lookup(inout vec3 co, sampler2DArray ima, sampler1DArray map)
   co = vec3(((co.xy - tile_pos) * tile_info.zw) + tile_info.xy, tile_layer);
   return true;
 }
-
-uniform sampler2DArray imageTileArray;
-uniform sampler1DArray imageTileData;
-uniform sampler2D imageTexture;
-
-uniform float imageTransparencyCutoff = 0.1;
-uniform bool imagePremult;
 
 vec3 workbench_image_color(vec2 uvs)
 {

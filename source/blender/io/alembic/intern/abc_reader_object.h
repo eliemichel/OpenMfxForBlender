@@ -50,7 +50,12 @@ struct ImportSettings {
   /* From MeshSeqCacheModifierData.read_flag */
   int read_flag;
 
+  /* From CacheFile and MeshSeqCacheModifierData */
+  std::string velocity_name;
+  float velocity_scale;
+
   bool validate_meshes;
+  bool always_add_cache_reader;
 
   CacheFile *cache_file;
 
@@ -64,7 +69,10 @@ struct ImportSettings {
         sequence_len(1),
         sequence_offset(0),
         read_flag(0),
+        velocity_name(""),
+        velocity_scale(1.0f),
         validate_meshes(false),
+        always_add_cache_reader(false),
         cache_file(NULL)
   {
   }
@@ -142,12 +150,14 @@ class AbcObjectReader {
   virtual struct Mesh *read_mesh(struct Mesh *mesh,
                                  const Alembic::Abc::ISampleSelector &sample_sel,
                                  int read_flag,
+                                 const char *velocity_name,
+                                 float velocity_scale,
                                  const char **err_str);
   virtual bool topology_changed(Mesh *existing_mesh,
                                 const Alembic::Abc::ISampleSelector &sample_sel);
 
   /** Reads the object matrix and sets up an object transform if animated. */
-  void setupObjectTransform(const float time);
+  void setupObjectTransform(float time);
 
   void addCacheModifier();
 
@@ -158,12 +168,13 @@ class AbcObjectReader {
   void incref();
   void decref();
 
-  void read_matrix(float r_mat[4][4], const float time, const float scale, bool &is_constant);
+  void read_matrix(float r_mat[4][4], float time, float scale, bool &is_constant);
 
  protected:
+  /** Determine whether we can inherit our parent's XForm. */
   void determine_inherits_xform();
 };
 
-Imath::M44d get_matrix(const Alembic::AbcGeom::IXformSchema &schema, const float time);
+Imath::M44d get_matrix(const Alembic::AbcGeom::IXformSchema &schema, float time);
 
 }  // namespace blender::io::alembic

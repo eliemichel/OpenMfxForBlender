@@ -34,7 +34,7 @@
 #include "BKE_lib_id.h"
 #include "BKE_linestyle.h"
 
-// function declarations
+/* Function declarations. */
 static FreestyleLineSet *alloc_lineset(void);
 static void copy_lineset(FreestyleLineSet *new_lineset, FreestyleLineSet *lineset, const int flag);
 static FreestyleModuleConfig *alloc_module(void);
@@ -152,10 +152,6 @@ bool BKE_freestyle_module_delete(FreestyleConfig *config, FreestyleModuleConfig 
   return true;
 }
 
-/**
- * Reinsert \a module_conf offset by \a direction from current position.
- * \return if position of \a module_conf changed.
- */
 bool BKE_freestyle_module_move(FreestyleConfig *config,
                                FreestyleModuleConfig *module_conf,
                                int direction)

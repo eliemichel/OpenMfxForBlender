@@ -63,7 +63,7 @@ typedef union {
 
 typedef struct SortFace {
   EdgeUUID es[4];
-  unsigned int index;
+  uint index;
 } SortFace;
 
 /* Used to detect polys (faces) using exactly the same vertices. */
@@ -72,7 +72,7 @@ typedef struct SortPoly {
   int *verts;
   int numverts;
   int loopstart;
-  unsigned int index;
+  uint index;
   bool invalid; /* Poly index. */
 } SortPoly;
 
@@ -154,7 +154,7 @@ static int search_face_cmp(const void *v1, const void *v2)
   return 0;
 }
 
-/* TODO check there is not some standard define of this somewhere! */
+/* TODO: check there is not some standard define of this somewhere! */
 static int int_cmp(const void *v1, const void *v2)
 {
   return *(int *)v1 > *(int *)v2 ? 1 : *(int *)v1 < *(int *)v2 ? -1 : 0;
@@ -193,6 +193,7 @@ static int search_polyloop_cmp(const void *v1, const void *v2)
   /* Else, sort on loopstart. */
   return sp1->loopstart > sp2->loopstart ? 1 : sp1->loopstart < sp2->loopstart ? -1 : 0;
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -213,23 +214,18 @@ static int search_polyloop_cmp(const void *v1, const void *v2)
     } \
   } while (0)
 
-/**
- * Validate the mesh, \a do_fixes requires \a mesh to be non-null.
- *
- * \return false if no changes needed to be made.
- */
 /* NOLINTNEXTLINE: readability-function-size */
 bool BKE_mesh_validate_arrays(Mesh *mesh,
                               MVert *mverts,
-                              unsigned int totvert,
+                              uint totvert,
                               MEdge *medges,
-                              unsigned int totedge,
+                              uint totedge,
                               MFace *mfaces,
-                              unsigned int totface,
+                              uint totface,
                               MLoop *mloops,
-                              unsigned int totloop,
+                              uint totloop,
                               MPoly *mpolys,
-                              unsigned int totpoly,
+                              uint totpoly,
                               MDeformVert *dverts, /* assume totvert length */
                               const bool do_verbose,
                               const bool do_fixes,
@@ -260,7 +256,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
   MEdge *me;
   MLoop *ml;
   MPoly *mp;
-  unsigned int i, j;
+  uint i, j;
   int *v;
 
   bool is_valid = true;
@@ -307,6 +303,12 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
     recalc_flag.edges = do_fixes;
   }
 
+  const float(*vert_normals)[3] = NULL;
+  BKE_mesh_assert_normals_dirty_or_calculated(mesh);
+  if (!BKE_mesh_vertex_normals_are_dirty(mesh)) {
+    vert_normals = BKE_mesh_vertex_normals_ensure(mesh);
+  }
+
   for (i = 0; i < totvert; i++, mv++) {
     bool fix_normal = true;
 
@@ -321,17 +323,29 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
         }
       }
 
-      if (mv->no[j] != 0) {
+      if (vert_normals && vert_normals[i][j] != 0.0f) {
         fix_normal = false;
         break;
       }
     }
 
-    if (fix_normal) {
-      PRINT_ERR("\tVertex %u: has zero normal, assuming Z-up normal", i);
-      if (do_fixes) {
-        mv->no[2] = SHRT_MAX;
-        fix_flag.verts = true;
+    if (vert_normals && fix_normal) {
+      /* If the vertex normal accumulates to zero or isn't part of a face, the location is used.
+       * When the location is also zero, a zero normal warning should not be raised.
+       * since this is the expected behavior of normal calculation.
+       *
+       * This avoids false positives but isn't foolproof as it's possible the vertex
+       * is part of a polygon that has a normal which this vertex should be using,
+       * although it's also possible degenerate/opposite faces accumulate to a zero vector.
+       * To detect this a full normal recalculation would be needed, which is out of scope
+       * for a basic validity check (see "Vertex Normal" in the doc-string). */
+      if (!is_zero_v3(mv->co)) {
+        PRINT_ERR("\tVertex %u: has zero normal, assuming Z-up normal", i);
+        if (do_fixes) {
+          float *normal = (float *)vert_normals[i];
+          normal[2] = 1.0f;
+          fix_flag.verts = true;
+        }
       }
     }
   }
@@ -398,14 +412,14 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
     SortFace *sort_faces = MEM_callocN(sizeof(SortFace) * totface, "search faces");
     SortFace *sf;
     SortFace *sf_prev;
-    unsigned int totsortface = 0;
+    uint totsortface = 0;
 
     PRINT_ERR("No Polys, only tessellated Faces");
 
     for (i = 0, mf = mfaces, sf = sort_faces; i < totface; i++, mf++) {
       bool remove = false;
       int fidx;
-      unsigned int fv[4];
+      uint fv[4];
 
       fidx = mf->v4 ? 3 : 2;
       do {
@@ -798,7 +812,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
       MDeformWeight *dw;
 
       for (j = 0, dw = dv->dw; j < dv->totweight; j++, dw++) {
-        /* note, greater than max defgroups is accounted for in our code, but not < 0 */
+        /* NOTE: greater than max defgroups is accounted for in our code, but not < 0. */
         if (!isfinite(dw->weight)) {
           PRINT_ERR("\tVertex deform %u, group %u has weight: %f", i, dw->def_nr, dw->weight);
           if (do_fixes) {
@@ -815,7 +829,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
         }
 
         /* Not technically incorrect since this is unsigned, however,
-         * a value over INT_MAX is almost certainly caused by wrapping an unsigned int. */
+         * a value over INT_MAX is almost certainly caused by wrapping an uint. */
         if (dw->def_nr >= INT_MAX) {
           PRINT_ERR("\tVertex deform %u, has invalid group %u", i, dw->def_nr);
           if (do_fixes) {
@@ -976,9 +990,6 @@ static bool mesh_validate_customdata(CustomData *data,
   return is_valid;
 }
 
-/**
- * \returns is_valid.
- */
 bool BKE_mesh_validate_all_customdata(CustomData *vdata,
                                       const uint totvert,
                                       CustomData *edata,
@@ -997,6 +1008,10 @@ bool BKE_mesh_validate_all_customdata(CustomData *vdata,
   CustomData_MeshMasks mask = {0};
   if (check_meshmask) {
     mask = CD_MASK_MESH;
+    /* Normal data isn't in the mask since it is derived data,
+     * but it is valid and should not be removed. */
+    mask.vmask |= CD_MASK_NORMAL;
+    mask.pmask |= CD_MASK_NORMAL;
   }
 
   is_valid &= mesh_validate_customdata(
@@ -1040,11 +1055,6 @@ bool BKE_mesh_validate_all_customdata(CustomData *vdata,
   return is_valid;
 }
 
-/**
- * Validates and corrects a Mesh.
- *
- * \returns true if a change is made.
- */
 bool BKE_mesh_validate(Mesh *me, const bool do_verbose, const bool cddata_check_mask)
 {
   bool is_valid = true;
@@ -1084,20 +1094,13 @@ bool BKE_mesh_validate(Mesh *me, const bool do_verbose, const bool cddata_check_
                                        &changed);
 
   if (changed) {
-    DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
+    DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY_ALL_MODES);
     return true;
   }
 
   return false;
 }
 
-/**
- * Checks if a Mesh is valid without any modification. This is always verbose.
- *
- * \see  #DM_is_valid to call on derived meshes
- *
- * \returns is_valid.
- */
 bool BKE_mesh_is_valid(Mesh *me)
 {
   const bool do_verbose = true;
@@ -1105,6 +1108,8 @@ bool BKE_mesh_is_valid(Mesh *me)
 
   bool is_valid = true;
   bool changed = true;
+
+  BKE_mesh_assert_normals_dirty_or_calculated(me);
 
   is_valid &= BKE_mesh_validate_all_customdata(
       &me->vdata,
@@ -1141,10 +1146,6 @@ bool BKE_mesh_is_valid(Mesh *me)
   return is_valid;
 }
 
-/**
- * Check all material indices of polygons are valid, invalid ones are set to 0.
- * \returns is_valid.
- */
 bool BKE_mesh_validate_material_indices(Mesh *me)
 {
   /* Cast to unsigned to catch negative indices too. */
@@ -1162,7 +1163,7 @@ bool BKE_mesh_validate_material_indices(Mesh *me)
   }
 
   if (!is_valid) {
-    DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
+    DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY_ALL_MODES);
     return true;
   }
 
@@ -1175,9 +1176,9 @@ bool BKE_mesh_validate_material_indices(Mesh *me)
 /** \name Mesh Stripping (removing invalid data)
  * \{ */
 
-/* We need to keep this for edge creation (for now?), and some old readfile code... */
 void BKE_mesh_strip_loose_faces(Mesh *me)
 {
+  /* NOTE: We need to keep this for edge creation (for now?), and some old `readfile.c` code. */
   MFace *f;
   int a, b;
 
@@ -1196,13 +1197,6 @@ void BKE_mesh_strip_loose_faces(Mesh *me)
   }
 }
 
-/**
- * Works on both loops and polys!
- *
- * \note It won't try to guess which loops of an invalid poly to remove!
- * this is the work of the caller, to mark those loops...
- * See e.g. #BKE_mesh_validate_arrays().
- */
 void BKE_mesh_strip_loose_polysloops(Mesh *me)
 {
   MPoly *p;
@@ -1266,7 +1260,7 @@ void BKE_mesh_strip_loose_polysloops(Mesh *me)
   }
 
   /* And now, update polys' start loop index. */
-  /* Note: At this point, there should never be any poly using a striped loop! */
+  /* NOTE: At this point, there should never be any poly using a striped loop! */
   for (a = 0, p = me->mpoly; a < me->totpoly; a++, p++) {
     p->loopstart = new_idx[p->loopstart];
   }
@@ -1279,7 +1273,7 @@ void BKE_mesh_strip_loose_edges(Mesh *me)
   MEdge *e;
   MLoop *l;
   int a, b;
-  unsigned int *new_idx = MEM_mallocN(sizeof(int) * me->totedge, __func__);
+  uint *new_idx = MEM_mallocN(sizeof(int) * me->totedge, __func__);
 
   for (a = b = 0, e = me->medge; a < me->totedge; a++, e++) {
     if (e->v1 != e->v2) {
@@ -1308,6 +1302,7 @@ void BKE_mesh_strip_loose_edges(Mesh *me)
 
   MEM_freeN(new_idx);
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -1317,13 +1312,12 @@ void BKE_mesh_strip_loose_edges(Mesh *me)
 /* make edges in a Mesh, for outside of editmode */
 
 struct EdgeSort {
-  unsigned int v1, v2;
+  uint v1, v2;
   char is_loose, is_draw;
 };
 
 /* edges have to be added with lowest index first for sorting */
-static void to_edgesort(
-    struct EdgeSort *ed, unsigned int v1, unsigned int v2, char is_loose, short is_draw)
+static void to_edgesort(struct EdgeSort *ed, uint v1, uint v2, char is_loose, short is_draw)
 {
   if (v1 < v2) {
     ed->v1 = v1;
@@ -1378,8 +1372,8 @@ static void mesh_calc_edges_mdata(MVert *UNUSED(allvert),
   EdgeHash *hash;
   struct EdgeSort *edsort, *ed;
   int a, totedge = 0;
-  unsigned int totedge_final = 0;
-  unsigned int edge_index;
+  uint totedge_final = 0;
+  uint edge_index;
 
   /* we put all edges in array, sort them, and detect doubles that way */
 
@@ -1442,10 +1436,10 @@ static void mesh_calc_edges_mdata(MVert *UNUSED(allvert),
         med->flag |= ME_LOOSEEDGE;
       }
 
-      /* order is swapped so extruding this edge as a surface wont flip face normals
+      /* order is swapped so extruding this edge as a surface won't flip face normals
        * with cyclic curves */
       if (ed->v1 + 1 != ed->v2) {
-        SWAP(unsigned int, med->v1, med->v2);
+        SWAP(uint, med->v1, med->v2);
       }
       med++;
     }
@@ -1492,10 +1486,6 @@ static void mesh_calc_edges_mdata(MVert *UNUSED(allvert),
   *r_totedge = totedge_final;
 }
 
-/**
- * If the mesh is from a very old blender version,
- * convert mface->edcode to edge drawflags
- */
 void BKE_mesh_calc_edges_legacy(Mesh *me, const bool use_old)
 {
   MEdge *medge;
@@ -1544,12 +1534,6 @@ void BKE_mesh_calc_edges_loose(Mesh *mesh)
     }
   }
 }
-
-/**
- * Calculate/create edges from tessface data
- *
- * \param mesh: The mesh to add edges into
- */
 
 void BKE_mesh_calc_edges_tessface(Mesh *mesh)
 {

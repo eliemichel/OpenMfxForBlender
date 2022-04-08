@@ -22,8 +22,8 @@
  * \note Currently only used for gizmo selection,
  * will need to add begin/end and a way to access the hits.
  *
- * - Use ``bpygpu_`` for local API.
- * - Use ``BPyGPU`` for public API.
+ * - Use `bpygpu_` for local API.
+ * - Use `BPyGPU` for public API.
  */
 
 #include <Python.h>
@@ -56,6 +56,7 @@ static PyObject *pygpu_select_load_id(PyObject *UNUSED(self), PyObject *value)
   GPU_select_load_id(id);
   Py_RETURN_NONE;
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */

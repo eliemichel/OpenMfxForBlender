@@ -131,12 +131,12 @@ static void autokeyframe_pose(
 
     ListBase dsources = {NULL, NULL};
 
-    /* add datasource override for the camera object */
+    /* Add data-source override for the camera object. */
     ANIM_relative_keyingset_add_source(&dsources, id, &RNA_PoseBone, pchan);
 
     /* only insert into active keyingset? */
     if (IS_AUTOKEY_FLAG(scene, ONLYKEYINGSET) && (active_ks)) {
-      /* run the active Keying Set on the current datasource */
+      /* Run the active Keying Set on the current data-source. */
       ANIM_apply_keyingset(
           C, &dsources, NULL, active_ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
     }
@@ -145,30 +145,26 @@ static void autokeyframe_pose(
       if (act) {
         for (fcu = act->curves.first; fcu; fcu = fcu->next) {
           /* only insert keyframes for this F-Curve if it affects the current bone */
-          if (strstr(fcu->rna_path, "bones") == NULL) {
+          char pchan_name[sizeof(pchan->name)];
+          if (!BLI_str_quoted_substr(fcu->rna_path, "bones[", pchan_name, sizeof(pchan_name))) {
             continue;
           }
-          char *pchanName = BLI_str_quoted_substrN(fcu->rna_path, "bones[");
 
           /* only if bone name matches too...
            * NOTE: this will do constraints too, but those are ok to do here too?
            */
-          if (pchanName) {
-            if (STREQ(pchanName, pchan->name)) {
-              insert_keyframe(bmain,
-                              reports,
-                              id,
-                              act,
-                              ((fcu->grp) ? (fcu->grp->name) : (NULL)),
-                              fcu->rna_path,
-                              fcu->array_index,
-                              &anim_eval_context,
-                              ts->keyframe_type,
-                              &nla_cache,
-                              flag);
-            }
-
-            MEM_freeN(pchanName);
+          if (STREQ(pchan_name, pchan->name)) {
+            insert_keyframe(bmain,
+                            reports,
+                            id,
+                            act,
+                            ((fcu->grp) ? (fcu->grp->name) : (NULL)),
+                            fcu->rna_path,
+                            fcu->array_index,
+                            &anim_eval_context,
+                            ts->keyframe_type,
+                            &nla_cache,
+                            flag);
           }
         }
       }
@@ -431,7 +427,7 @@ static short pose_grab_with_ik(Main *bmain, Object *ob)
   /* Rule: allow multiple Bones
    * (but they must be selected, and only one ik-solver per chain should get added) */
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-    if (pchan->bone->layer & arm->layer) {
+    if (BKE_pose_is_layer_visible(arm, pchan)) {
       if (pchan->bone->flag & (BONE_SELECTED | BONE_TRANSFORM_MIRROR)) {
         /* Rule: no IK for solitary (unconnected) bones. */
         for (bonec = pchan->bone->childbase.first; bonec; bonec = bonec->next) {
@@ -666,6 +662,12 @@ static void add_pose_transdata(TransInfo *t, bPoseChannel *pchan, Object *ob, Tr
   mul_m3_m3m3(td->axismtx, omat, pmat);
   normalize_m3(td->axismtx);
 
+  if (t->orient_type_mask & (1 << V3D_ORIENT_GIMBAL)) {
+    if (!gimbal_axis_pose(ob, pchan, td->ext->axismtx_gimbal)) {
+      copy_m3_m3(td->ext->axismtx_gimbal, td->axismtx);
+    }
+  }
+
   if (t->mode == TFM_BONE_ENVELOPE_DIST) {
     td->loc = NULL;
     td->val = &bone->dist;
@@ -714,9 +716,6 @@ static void add_pose_transdata(TransInfo *t, bPoseChannel *pchan, Object *ob, Tr
   td->con = pchan->constraints.first;
 }
 
-/**
- * When objects array is NULL, use 't->data_container' as is.
- */
 void createTransPose(TransInfo *t)
 {
   Main *bmain = CTX_data_main(t->context);
@@ -1268,9 +1267,6 @@ void recalcData_edit_armature(TransInfo *t)
         restoreBones(tc);
       }
     }
-
-    /* Tag for redraw/invalidate overlay cache. */
-    DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
   }
 }
 
@@ -1452,9 +1448,9 @@ void recalcData_pose(TransInfo *t)
       /* TODO: autokeyframe calls need some setting to specify to add samples
        * (FPoints) instead of keyframes? */
       if ((t->animtimer) && (t->context) && IS_AUTOKEY_ON(t->scene)) {
-        int targetless_ik =
-            (t->flag &
-             T_AUTOIK); /* XXX this currently doesn't work, since flags aren't set yet! */
+
+        /* XXX: this currently doesn't work, since flags aren't set yet! */
+        int targetless_ik = (t->flag & T_AUTOIK);
 
         animrecord_check_state(t, ob);
         autokeyframe_pose(t->context, t->scene, ob, t->mode, targetless_ik);
@@ -1503,8 +1499,6 @@ static void bone_children_clear_transflag(int mode, short around, ListBase *lb)
   }
 }
 
-/* Sets transform flags in the bones.
- * Returns total number of bones with `BONE_TRANSFORM`. */
 int transform_convert_pose_transflags_update(Object *ob,
                                              const int mode,
                                              const short around,
@@ -1518,7 +1512,7 @@ int transform_convert_pose_transflags_update(Object *ob,
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
     bone = pchan->bone;
     if (PBONE_VISIBLE(arm, bone)) {
-      if ((bone->flag & BONE_SELECTED)) {
+      if (bone->flag & BONE_SELECTED) {
         bone->flag |= BONE_TRANSFORM;
       }
       else {
@@ -1613,10 +1607,10 @@ static short apply_targetless_ik(Object *ob)
         Bone *bone;
         float mat[4][4];
 
-        /* pose_mat(b) = pose_mat(b-1) * offs_bone * channel * constraint * IK  */
-        /* we put in channel the entire result of mat = (channel * constraint * IK) */
-        /* pose_mat(b) = pose_mat(b-1) * offs_bone * mat  */
-        /* mat = pose_mat(b) * inv(pose_mat(b-1) * offs_bone ) */
+        /* `pose_mat(b) = pose_mat(b-1) * offs_bone * channel * constraint * IK` */
+        /* We put in channel the entire result of: `mat = (channel * constraint * IK)` */
+        /* `pose_mat(b) = pose_mat(b-1) * offs_bone * mat` */
+        /* `mat = pose_mat(b) * inv(pose_mat(b-1) * offs_bone)` */
 
         parchan = chanlist[segcount - 1];
         bone = parchan->bone;
@@ -1737,7 +1731,7 @@ void special_aftertrans_update__pose(bContext *C, TransInfo *t)
         BKE_pose_where_is(t->depsgraph, t->scene, pose_ob);
       }
 
-      /* set BONE_TRANSFORM flags for autokey, gizmo draw might have changed them */
+      /* Set BONE_TRANSFORM flags for auto-key, gizmo draw might have changed them. */
       if (!canceled && (t->mode != TFM_DUMMY)) {
         transform_convert_pose_transflags_update(ob, t->mode, t->around, NULL);
       }

@@ -91,13 +91,12 @@ class ControllerExporter : public COLLADASW::LibraryControllers,
 
   std::string get_controller_id(Key *key, Object *ob);
 
-  /* ob should be of type OB_MESH
-   * both args are required */
+  /** `ob` should be of type OB_MESH, both arguments are required. */
   void export_skin_controller(Object *ob, Object *ob_arm);
 
   void export_morph_controller(Object *ob, Key *key);
 
-  void add_joints_element(ListBase *defbase,
+  void add_joints_element(const ListBase *defbase,
                           const std::string &joints_source_id,
                           const std::string &inv_bind_mat_source_id);
 
@@ -107,19 +106,22 @@ class ControllerExporter : public COLLADASW::LibraryControllers,
 
   std::string add_morph_weights(Key *key, Object *ob);
 
+  /**
+   * Added to implement support for animations.
+   */
   void add_weight_extras(Key *key);
 
   std::string add_joints_source(Object *ob_arm,
-                                ListBase *defbase,
+                                const ListBase *defbase,
                                 const std::string &controller_id);
 
   std::string add_inv_bind_mats_source(Object *ob_arm,
-                                       ListBase *defbase,
+                                       const ListBase *defbase,
                                        const std::string &controller_id);
 
-  Bone *get_bone_from_defgroup(Object *ob_arm, bDeformGroup *def);
+  Bone *get_bone_from_defgroup(Object *ob_arm, const bDeformGroup *def);
 
-  bool is_bone_defgroup(Object *ob_arm, bDeformGroup *def);
+  bool is_bone_defgroup(Object *ob_arm, const bDeformGroup *def);
 
   std::string add_weights_source(Mesh *me,
                                  const std::string &controller_id,

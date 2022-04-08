@@ -72,7 +72,7 @@ static int set_pointer_type(ButsContextPath *path, bContextDataResult *result, S
     PointerRNA *ptr = &path->ptr[i];
 
     if (RNA_struct_is_a(ptr->type, type)) {
-      CTX_data_pointer_set(result, ptr->owner_id, ptr->type, ptr->data);
+      CTX_data_pointer_set_ptr(result, ptr);
       return CTX_RESULT_OK;
     }
   }
@@ -126,7 +126,7 @@ static bool buttons_context_path_view_layer(ButsContextPath *path, wmWindow *win
   return false;
 }
 
-/* note: this function can return true without adding a world to the path
+/* NOTE: this function can return true without adding a world to the path
  * so the buttons stay visible, but be sure to check the ID type if a ID_WO */
 static bool buttons_context_path_world(ButsContextPath *path)
 {
@@ -242,55 +242,55 @@ static bool buttons_context_path_data(ButsContextPath *path, int type)
   PointerRNA *ptr = &path->ptr[path->len - 1];
 
   /* if we already have a data, we're done */
-  if (RNA_struct_is_a(ptr->type, &RNA_Mesh) && (type == -1 || type == OB_MESH)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Mesh) && (ELEM(type, -1, OB_MESH))) {
     return true;
   }
   if (RNA_struct_is_a(ptr->type, &RNA_Curve) &&
       (type == -1 || ELEM(type, OB_CURVE, OB_SURF, OB_FONT))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_Armature) && (type == -1 || type == OB_ARMATURE)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Armature) && (ELEM(type, -1, OB_ARMATURE))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_MetaBall) && (type == -1 || type == OB_MBALL)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_MetaBall) && (ELEM(type, -1, OB_MBALL))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_Lattice) && (type == -1 || type == OB_LATTICE)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Lattice) && (ELEM(type, -1, OB_LATTICE))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_Camera) && (type == -1 || type == OB_CAMERA)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Camera) && (ELEM(type, -1, OB_CAMERA))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_Light) && (type == -1 || type == OB_LAMP)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Light) && (ELEM(type, -1, OB_LAMP))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_Speaker) && (type == -1 || type == OB_SPEAKER)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Speaker) && (ELEM(type, -1, OB_SPEAKER))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_LightProbe) && (type == -1 || type == OB_LIGHTPROBE)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LightProbe) && (ELEM(type, -1, OB_LIGHTPROBE))) {
     return true;
   }
-  if (RNA_struct_is_a(ptr->type, &RNA_GreasePencil) && (type == -1 || type == OB_GPENCIL)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_GreasePencil) && (ELEM(type, -1, OB_GPENCIL))) {
     return true;
   }
 #ifdef WITH_HAIR_NODES
-  if (RNA_struct_is_a(ptr->type, &RNA_Hair) && (type == -1 || type == OB_HAIR)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Hair) && (ELEM(type, -1, OB_HAIR))) {
     return true;
   }
 #endif
 #ifdef WITH_POINT_CLOUD
-  if (RNA_struct_is_a(ptr->type, &RNA_PointCloud) && (type == -1 || type == OB_POINTCLOUD)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_PointCloud) && (ELEM(type, -1, OB_POINTCLOUD))) {
     return true;
   }
 #endif
-  if (RNA_struct_is_a(ptr->type, &RNA_Volume) && (type == -1 || type == OB_VOLUME)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Volume) && (ELEM(type, -1, OB_VOLUME))) {
     return true;
   }
   /* try to get an object in the path, no pinning supported here */
   if (buttons_context_path_object(path)) {
     Object *ob = path->ptr[path->len - 1].data;
 
-    if (ob && (type == -1 || type == ob->type)) {
+    if (ob && (ELEM(type, -1, ob->type))) {
       RNA_id_pointer_create(ob->data, &path->ptr[path->len]);
       path->len++;
 
@@ -986,7 +986,9 @@ int /*eContextResult*/ buttons_context(const bContext *C,
         if (matnr < 0) {
           matnr = 0;
         }
-        CTX_data_pointer_set(result, &ob->id, &RNA_MaterialSlot, &ob->mat[matnr]);
+        /* Keep aligned with rna_Object_material_slots_get. */
+        CTX_data_pointer_set(
+            result, &ob->id, &RNA_MaterialSlot, (void *)(matnr + (uintptr_t)&ob->id));
       }
     }
 
@@ -1001,7 +1003,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
 
     if (ct->user && ct->user->ptr.data) {
       ButsTextureUser *user = ct->user;
-      CTX_data_pointer_set(result, user->ptr.owner_id, user->ptr.type, user->ptr.data);
+      CTX_data_pointer_set_ptr(result, &user->ptr);
     }
 
     return CTX_RESULT_OK;
@@ -1090,7 +1092,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     PointerRNA *ptr = get_pointer_type(path, &RNA_ParticleSettings);
 
     if (ptr && ptr->data) {
-      CTX_data_pointer_set(result, ptr->owner_id, &RNA_ParticleSettings, ptr->data);
+      CTX_data_pointer_set_ptr(result, ptr);
       return CTX_RESULT_OK;
     }
 
@@ -1223,14 +1225,14 @@ static void buttons_panel_context_draw(const bContext *C, Panel *panel)
 
     /* Add > triangle. */
     if (!first) {
-      uiItemL(row, "", ICON_SMALL_TRI_RIGHT_VEC);
+      uiItemL(row, "", ICON_RIGHTARROW);
     }
 
     if (ptr->data == NULL) {
       continue;
     }
 
-    /* Add icon and name .*/
+    /* Add icon and name. */
     int icon = RNA_struct_ui_icon(ptr->type);
     char namebuf[128];
     char *name = RNA_struct_name_get_alloc(ptr, namebuf, sizeof(namebuf), NULL);
@@ -1283,7 +1285,7 @@ ID *buttons_context_id_path(const bContext *C)
   for (int i = path->len - 1; i >= 0; i--) {
     PointerRNA *ptr = &path->ptr[i];
 
-    /* pin particle settings instead of system, since only settings are an idblock*/
+    /* Pin particle settings instead of system, since only settings are an idblock. */
     if (sbuts->mainb == BCONTEXT_PARTICLE && sbuts->flag & SB_PIN_CONTEXT) {
       if (ptr->type == &RNA_ParticleSystem && ptr->data) {
         ParticleSystem *psys = ptr->data;
@@ -1291,7 +1293,7 @@ ID *buttons_context_id_path(const bContext *C)
       }
     }
 
-    /* There is no valid image ID panel, Image Empty objects need this workaround.*/
+    /* There is no valid image ID panel, Image Empty objects need this workaround. */
     if (sbuts->mainb == BCONTEXT_DATA && sbuts->flag & SB_PIN_CONTEXT) {
       if (ptr->type == &RNA_Image && ptr->data) {
         continue;

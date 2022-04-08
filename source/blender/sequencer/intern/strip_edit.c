@@ -30,6 +30,7 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
+#include "BLI_string_utf8.h"
 
 #include "BLT_translation.h"
 
@@ -39,10 +40,13 @@
 #include "BKE_sound.h"
 
 #include "strip_time.h"
+#include "utils.h"
 
 #include "SEQ_add.h"
+#include "SEQ_animation.h"
 #include "SEQ_edit.h"
 #include "SEQ_effects.h"
+#include "SEQ_iterator.h"
 #include "SEQ_relations.h"
 #include "SEQ_sequencer.h"
 #include "SEQ_time.h"
@@ -109,8 +113,8 @@ static void seq_update_muting_recursive(ListBase *seqbasep, Sequence *metaseq, i
   Sequence *seq;
   int seqmute;
 
-  /* for sound we go over full meta tree to update muted state,
-   * since sound is played outside of evaluating the imbufs, */
+  /* For sound we go over full meta tree to update muted state,
+   * since sound is played outside of evaluating the imbufs. */
   for (seq = seqbasep->first; seq; seq = seq->next) {
     seqmute = (mute || (seq->flag & SEQ_MUTE));
 
@@ -149,7 +153,7 @@ void SEQ_edit_update_muting(Editing *ed)
 static void sequencer_flag_users_for_removal(Scene *scene, ListBase *seqbase, Sequence *seq)
 {
   LISTBASE_FOREACH (Sequence *, user_seq, seqbase) {
-    /* Look in metas for usage of seq. */
+    /* Look in meta-strips for usage of seq. */
     if (user_seq->type == SEQ_TYPE_META) {
       sequencer_flag_users_for_removal(scene, &user_seq->seqbase, seq);
     }
@@ -172,7 +176,6 @@ static void sequencer_flag_users_for_removal(Scene *scene, ListBase *seqbase, Se
   }
 }
 
-/* Flag seq and its users (effects) for removal. */
 void SEQ_edit_flag_for_removal(Scene *scene, ListBase *seqbase, Sequence *seq)
 {
   if (seq == NULL || (seq->flag & SEQ_FLAG_DELETE) != 0) {
@@ -190,7 +193,6 @@ void SEQ_edit_flag_for_removal(Scene *scene, ListBase *seqbase, Sequence *seq)
   sequencer_flag_users_for_removal(scene, seqbase, seq);
 }
 
-/* Remove all flagged sequences, return true if sequence is removed. */
 void SEQ_edit_remove_flagged_sequences(Scene *scene, ListBase *seqbase)
 {
   LISTBASE_FOREACH_MUTABLE (Sequence *, seq, seqbase) {
@@ -198,8 +200,10 @@ void SEQ_edit_remove_flagged_sequences(Scene *scene, ListBase *seqbase)
       if (seq->type == SEQ_TYPE_META) {
         SEQ_edit_remove_flagged_sequences(scene, &seq->seqbase);
       }
+      SEQ_free_animdata(scene, seq);
       BLI_remlink(seqbase, seq);
-      SEQ_sequence_free(scene, seq, true);
+      SEQ_sequence_free(scene, seq);
+      SEQ_sequence_lookup_tag(scene, SEQ_LOOKUP_TAG_INVALID);
     }
   }
 }
@@ -217,13 +221,31 @@ static bool seq_exists_in_seqbase(Sequence *seq, ListBase *seqbase)
   return false;
 }
 
+bool SEQ_edit_move_strip_to_seqbase(Scene *scene,
+                                    ListBase *seqbase,
+                                    Sequence *seq,
+                                    ListBase *dst_seqbase)
+{
+  /* Move to meta. */
+  BLI_remlink(seqbase, seq);
+  BLI_addtail(dst_seqbase, seq);
+  SEQ_relations_invalidate_cache_preprocessed(scene, seq);
+
+  /* Update meta. */
+  if (SEQ_transform_test_overlap(dst_seqbase, seq)) {
+    SEQ_transform_seqbase_shuffle(dst_seqbase, seq, scene);
+  }
+
+  return true;
+}
+
 bool SEQ_edit_move_strip_to_meta(Scene *scene,
                                  Sequence *src_seq,
                                  Sequence *dst_seqm,
                                  const char **error_str)
 {
   /* Find the appropriate seqbase */
-  Editing *ed = SEQ_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene);
   ListBase *seqbase = SEQ_get_seqbase_by_seq(&ed->seqbase, src_seq);
 
   if (dst_seqm->type != SEQ_TYPE_META) {
@@ -251,21 +273,17 @@ bool SEQ_edit_move_strip_to_meta(Scene *scene,
     return false;
   }
 
-  /* Remove users of src_seq. Ideally these could be moved into meta as well, but this would be
-   * best to do with generalized iterator as described in D10337. */
-  sequencer_flag_users_for_removal(scene, seqbase, src_seq);
-  SEQ_edit_remove_flagged_sequences(scene, seqbase);
+  SeqCollection *collection = SEQ_collection_create(__func__);
+  SEQ_collection_append_strip(src_seq, collection);
+  SEQ_collection_expand(seqbase, collection, SEQ_query_strip_effect_chain);
 
-  /* Move to meta. */
-  BLI_remlink(seqbase, src_seq);
-  BLI_addtail(&dst_seqm->seqbase, src_seq);
-  SEQ_relations_invalidate_cache_preprocessed(scene, src_seq);
-
-  /* Update meta. */
-  SEQ_time_update_sequence(scene, dst_seqm);
-  if (SEQ_transform_test_overlap(&dst_seqm->seqbase, src_seq)) {
-    SEQ_transform_seqbase_shuffle(&dst_seqm->seqbase, src_seq, scene);
+  Sequence *seq;
+  SEQ_ITERATOR_FOREACH (seq, collection) {
+    /* Move to meta. */
+    SEQ_edit_move_strip_to_seqbase(scene, seqbase, seq, &dst_seqm->seqbase);
   }
+
+  SEQ_collection_free(collection);
 
   return true;
 }
@@ -343,66 +361,176 @@ static void seq_split_set_left_offset(Sequence *seq, int timeline_frame)
   SEQ_transform_set_left_handle_frame(seq, timeline_frame);
 }
 
-/**
- * Split Sequence at timeline_frame in two.
- *
- * \param bmain: Main in which Sequence is located
- * \param scene: Scene in which Sequence is located
- * \param seqbase: ListBase in which Sequence is located
- * \param seq: Sequence to be split
- * \param timeline_frame: frame at which seq is split.
- * \param method: affects type of offset to be applied to resize Sequence
- * \return The newly created sequence strip. This is always Sequence on right side.
- */
+static bool seq_edit_split_effect_intersect_check(const Sequence *seq, const int timeline_frame)
+{
+  return timeline_frame > seq->startdisp && timeline_frame < seq->enddisp;
+}
+
+static void seq_edit_split_handle_strip_offsets(Main *bmain,
+                                                Scene *scene,
+                                                ListBase *seqbase,
+                                                Sequence *left_seq,
+                                                Sequence *right_seq,
+                                                const int timeline_frame,
+                                                const eSeqSplitMethod method)
+{
+  if (seq_edit_split_effect_intersect_check(right_seq, timeline_frame)) {
+    switch (method) {
+      case SEQ_SPLIT_SOFT:
+        seq_split_set_left_offset(right_seq, timeline_frame);
+        break;
+      case SEQ_SPLIT_HARD:
+        seq_split_set_left_hold_offset(right_seq, timeline_frame);
+        SEQ_add_reload_new_file(bmain, scene, right_seq, false);
+        break;
+    }
+    SEQ_time_update_sequence(scene, seqbase, right_seq);
+  }
+
+  if (seq_edit_split_effect_intersect_check(left_seq, timeline_frame)) {
+    switch (method) {
+      case SEQ_SPLIT_SOFT:
+        seq_split_set_right_offset(left_seq, timeline_frame);
+        break;
+      case SEQ_SPLIT_HARD:
+        seq_split_set_right_hold_offset(left_seq, timeline_frame);
+        SEQ_add_reload_new_file(bmain, scene, left_seq, false);
+        break;
+    }
+    SEQ_time_update_sequence(scene, seqbase, left_seq);
+  }
+}
+
+static bool seq_edit_split_effect_inputs_intersect(const Sequence *seq, const int timeline_frame)
+{
+  bool input_does_intersect = false;
+  if (seq->seq1) {
+    input_does_intersect |= seq_edit_split_effect_intersect_check(seq->seq1, timeline_frame);
+    if ((seq->seq1->type & SEQ_TYPE_EFFECT) != 0) {
+      input_does_intersect |= seq_edit_split_effect_inputs_intersect(seq->seq1, timeline_frame);
+    }
+  }
+  if (seq->seq2) {
+    input_does_intersect |= seq_edit_split_effect_intersect_check(seq->seq2, timeline_frame);
+    if ((seq->seq1->type & SEQ_TYPE_EFFECT) != 0) {
+      input_does_intersect |= seq_edit_split_effect_inputs_intersect(seq->seq2, timeline_frame);
+    }
+  }
+  if (seq->seq3) {
+    input_does_intersect |= seq_edit_split_effect_intersect_check(seq->seq3, timeline_frame);
+    if ((seq->seq1->type & SEQ_TYPE_EFFECT) != 0) {
+      input_does_intersect |= seq_edit_split_effect_inputs_intersect(seq->seq3, timeline_frame);
+    }
+  }
+  return input_does_intersect;
+}
+
+static bool seq_edit_split_operation_permitted_check(SeqCollection *strips,
+                                                     const int timeline_frame,
+                                                     const char **r_error)
+{
+  Sequence *seq;
+  SEQ_ITERATOR_FOREACH (seq, strips) {
+    if ((seq->type & SEQ_TYPE_EFFECT) == 0) {
+      continue;
+    }
+    if (!seq_edit_split_effect_intersect_check(seq, timeline_frame)) {
+      continue;
+    }
+    if (SEQ_effect_get_num_inputs(seq->type) <= 1) {
+      continue;
+    }
+    if (ELEM(seq->type, SEQ_TYPE_CROSS, SEQ_TYPE_GAMCROSS, SEQ_TYPE_WIPE)) {
+      *r_error = "Splitting transition effect is not permitted.";
+      return false;
+    }
+    if (!seq_edit_split_effect_inputs_intersect(seq, timeline_frame)) {
+      *r_error = "Effect inputs don't overlap. Can not split such effect.";
+      return false;
+    }
+  }
+  return true;
+}
+
 Sequence *SEQ_edit_strip_split(Main *bmain,
                                Scene *scene,
                                ListBase *seqbase,
                                Sequence *seq,
                                const int timeline_frame,
-                               const eSeqSplitMethod method)
+                               const eSeqSplitMethod method,
+                               const char **r_error)
 {
-  if (timeline_frame <= seq->startdisp || timeline_frame >= seq->enddisp) {
+  if (!seq_edit_split_effect_intersect_check(seq, timeline_frame)) {
     return NULL;
   }
 
-  if (method == SEQ_SPLIT_HARD) {
-    /* Precaution, needed because the length saved on-disk may not match the length saved in the
-     * blend file, or our code may have minor differences reading file length between versions.
-     * This causes hard-split to fail, see: T47862. */
-    SEQ_add_reload_new_file(bmain, scene, seq, true);
-    SEQ_time_update_sequence(scene, seq);
+  /* Whole strip chain must be duplicated in order to preserve relationships. */
+  SeqCollection *collection = SEQ_collection_create(__func__);
+  SEQ_collection_append_strip(seq, collection);
+  SEQ_collection_expand(seqbase, collection, SEQ_query_strip_effect_chain);
+
+  if (!seq_edit_split_operation_permitted_check(collection, timeline_frame, r_error)) {
+    SEQ_collection_free(collection);
+    return NULL;
   }
 
-  Sequence *left_seq = seq;
-  Sequence *right_seq = SEQ_sequence_dupli_recursive(
-      scene, scene, seqbase, seq, SEQ_DUPE_UNIQUE_NAME | SEQ_DUPE_ANIM);
-
-  switch (method) {
-    case SEQ_SPLIT_SOFT:
-      seq_split_set_left_offset(right_seq, timeline_frame);
-      seq_split_set_right_offset(left_seq, timeline_frame);
-      break;
-    case SEQ_SPLIT_HARD:
-      seq_split_set_right_hold_offset(left_seq, timeline_frame);
-      seq_split_set_left_hold_offset(right_seq, timeline_frame);
-      SEQ_add_reload_new_file(bmain, scene, left_seq, false);
-      SEQ_add_reload_new_file(bmain, scene, right_seq, false);
-      break;
+  /* Move strips in collection from seqbase to new ListBase. */
+  ListBase left_strips = {NULL, NULL};
+  SEQ_ITERATOR_FOREACH (seq, collection) {
+    BLI_remlink(seqbase, seq);
+    BLI_addtail(&left_strips, seq);
   }
-  SEQ_time_update_sequence(scene, left_seq);
-  SEQ_time_update_sequence(scene, right_seq);
-  return right_seq;
+
+  SEQ_collection_free(collection);
+
+  /* Sort list, so that no strip can depend on next strip in list.
+   * This is important for SEQ_time_update_sequence functionality. */
+  SEQ_sort(&left_strips);
+
+  /* Duplicate ListBase. */
+  ListBase right_strips = {NULL, NULL};
+  SEQ_sequence_base_dupli_recursive(scene, scene, &right_strips, &left_strips, SEQ_DUPE_ALL, 0);
+
+  Sequence *left_seq = left_strips.first;
+  Sequence *right_seq = right_strips.first;
+  Sequence *return_seq = NULL;
+
+  /* Move strips from detached `ListBase`, otherwise they can't be flagged for removal,
+   * SEQ_time_update_sequence can fail to update meta strips and they can't be renamed.
+   * This is because these functions check all strips in `Editing` to manage relationships. */
+  BLI_movelisttolist(seqbase, &left_strips);
+  BLI_movelisttolist(seqbase, &right_strips);
+
+  /* Split strips. */
+  while (left_seq && right_seq) {
+    if (left_seq->startdisp >= timeline_frame) {
+      SEQ_edit_flag_for_removal(scene, seqbase, left_seq);
+    }
+    if (right_seq->enddisp <= timeline_frame) {
+      SEQ_edit_flag_for_removal(scene, seqbase, right_seq);
+    }
+    else if (return_seq == NULL) {
+      /* Store return value - pointer to strip that will not be removed. */
+      return_seq = right_seq;
+    }
+
+    seq_edit_split_handle_strip_offsets(
+        bmain, scene, seqbase, left_seq, right_seq, timeline_frame, method);
+    left_seq = left_seq->next;
+    right_seq = right_seq->next;
+  }
+
+  SEQ_edit_remove_flagged_sequences(scene, seqbase);
+
+  /* Rename duplicated strips. */
+  Sequence *seq_rename = return_seq;
+  for (; seq_rename; seq_rename = seq_rename->next) {
+    SEQ_ensure_unique_name(seq_rename, scene);
+  }
+
+  return return_seq;
 }
 
-/**
- * Find gap after initial_frame and move strips on right side to close the gap
- *
- * \param scene: Scene in which strips are located
- * \param seqbase: ListBase in which strips are located
- * \param initial_frame: frame on timeline from where gaps are searched for
- * \param remove_all_gaps: remove all gaps instead of one gap
- * \return true if gap is removed, otherwise false
- */
 bool SEQ_edit_remove_gaps(Scene *scene,
                           ListBase *seqbase,
                           const int initial_frame,
@@ -427,4 +555,11 @@ bool SEQ_edit_remove_gaps(Scene *scene,
         scene, seqbase, -gap_info.gap_length, gap_info.gap_start_frame);
   }
   return true;
+}
+
+void SEQ_edit_sequence_name_set(Scene *scene, Sequence *seq, const char *new_name)
+{
+  BLI_strncpy_utf8(seq->name + 2, new_name, MAX_NAME - 2);
+  BLI_str_utf8_invalid_strip(seq->name + 2, strlen(seq->name + 2));
+  SEQ_sequence_lookup_tag(scene, SEQ_LOOKUP_TAG_INVALID);
 }

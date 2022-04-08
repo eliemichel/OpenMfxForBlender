@@ -161,9 +161,9 @@ class Vector {
   }
 
   /**
-   * Create a vector from an array ref. The values in the vector are copy constructed.
+   * Create a vector from a span. The values in the vector are copy constructed.
    */
-  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  template<typename U, BLI_ENABLE_IF((std::is_convertible_v<U, T>))>
   Vector(Span<U> values, Allocator allocator = {}) : Vector(NoExceptConstructor(), allocator)
   {
     const int64_t size = values.size();
@@ -178,7 +178,7 @@ class Vector {
    * This allows you to write code like:
    * Vector<int> vec = {3, 4, 5};
    */
-  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  template<typename U, BLI_ENABLE_IF((std::is_convertible_v<U, T>))>
   Vector(const std::initializer_list<U> &values) : Vector(Span<U>(values))
   {
   }
@@ -187,9 +187,7 @@ class Vector {
   {
   }
 
-  template<typename U,
-           size_t N,
-           typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  template<typename U, size_t N, BLI_ENABLE_IF((std::is_convertible_v<U, T>))>
   Vector(const std::array<U, N> &values) : Vector(Span(values))
   {
   }
@@ -197,7 +195,7 @@ class Vector {
   template<typename InputIt,
            /* This constructor should not be called with e.g. Vector(3, 10), because that is
             * expected to produce the vector (10, 10, 10). */
-           typename std::enable_if_t<!std::is_convertible_v<InputIt, int>> * = nullptr>
+           BLI_ENABLE_IF((!std::is_convertible_v<InputIt, int>))>
   Vector(InputIt first, InputIt last, Allocator allocator = {})
       : Vector(NoExceptConstructor(), allocator)
   {
@@ -213,7 +211,8 @@ class Vector {
    * Example Usage:
    *  Vector<ModifierData *> modifiers(ob->modifiers);
    */
-  Vector(ListBase &values, Allocator allocator = {}) : Vector(NoExceptConstructor(), allocator)
+  Vector(const ListBase &values, Allocator allocator = {})
+      : Vector(NoExceptConstructor(), allocator)
   {
     LISTBASE_FOREACH (T, value, &values) {
       this->append(value);
@@ -325,13 +324,13 @@ class Vector {
     return MutableSpan<T>(begin_, this->size());
   }
 
-  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, BLI_ENABLE_IF((is_span_convertible_pointer_v<T, U>))>
   operator Span<U>() const
   {
     return Span<U>(begin_, this->size());
   }
 
-  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, BLI_ENABLE_IF((is_span_convertible_pointer_v<T, U>))>
   operator MutableSpan<U>()
   {
     return MutableSpan<U>(begin_, this->size());
@@ -437,13 +436,17 @@ class Vector {
    */
   void append(const T &value)
   {
-    this->ensure_space_for_one();
-    this->append_unchecked(value);
+    this->append_as(value);
   }
   void append(T &&value)
   {
+    this->append_as(std::move(value));
+  }
+  /* This is similar to `std::vector::emplace_back`. */
+  template<typename... ForwardValue> void append_as(ForwardValue &&...value)
+  {
     this->ensure_space_for_one();
-    this->append_unchecked(std::move(value));
+    this->append_unchecked_as(std::forward<ForwardValue>(value)...);
   }
 
   /**
@@ -474,10 +477,18 @@ class Vector {
    * behavior when not enough capacity has been reserved beforehand. Only use this in performance
    * critical code.
    */
-  template<typename ForwardT> void append_unchecked(ForwardT &&value)
+  void append_unchecked(const T &value)
+  {
+    this->append_unchecked_as(value);
+  }
+  void append_unchecked(T &&value)
+  {
+    this->append_unchecked_as(std::move(value));
+  }
+  template<typename... ForwardT> void append_unchecked_as(ForwardT &&...value)
   {
     BLI_assert(end_ < capacity_end_);
-    new (end_) T(std::forward<ForwardT>(value));
+    new (end_) T(std::forward<ForwardT>(value)...);
     end_++;
     UPDATE_VECTOR_SIZE(this);
   }
@@ -495,10 +506,10 @@ class Vector {
   }
 
   /**
-   * Enlarges the size of the internal buffer that is considered to be initialized. This invokes
-   * undefined behavior when when the new size is larger than the capacity. The method can be
-   * useful when you want to call constructors in the vector yourself. This should only be done in
-   * very rare cases and has to be justified every time.
+   * Enlarges the size of the internal buffer that is considered to be initialized.
+   * This invokes undefined behavior when the new size is larger than the capacity.
+   * The method can be useful when you want to call constructors in the vector yourself.
+   * This should only be done in very rare cases and has to be justified every time.
    */
   void increase_size_by_unchecked(const int64_t n) noexcept
   {
@@ -624,7 +635,7 @@ class Vector {
    * Insert values at the beginning of the vector. The has to move all the other elements, so it
    * has a linear running time.
    */
-  void prepend(const T &&value)
+  void prepend(const T &value)
   {
     this->insert(0, value);
   }
@@ -654,6 +665,21 @@ class Vector {
   {
     BLI_assert(this->size() > 0);
     return *(end_ - 1);
+  }
+
+  /**
+   * Return a reference to the first element in the vector.
+   * This invokes undefined behavior when the vector is empty.
+   */
+  const T &first() const
+  {
+    BLI_assert(this->size() > 0);
+    return *begin_;
+  }
+  T &first()
+  {
+    BLI_assert(this->size() > 0);
+    return *begin_;
   }
 
   /**
@@ -713,11 +739,12 @@ class Vector {
     BLI_assert(index >= 0);
     BLI_assert(index < this->size());
     T *element_to_remove = begin_ + index;
-    if (element_to_remove < end_) {
-      *element_to_remove = std::move(*(end_ - 1));
+    T *last_element = end_ - 1;
+    if (element_to_remove < last_element) {
+      *element_to_remove = std::move(*last_element);
     }
-    end_--;
-    end_->~T();
+    end_ = last_element;
+    last_element->~T();
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -935,7 +962,7 @@ class Vector {
     }
 
     /* At least double the size of the previous allocation. Otherwise consecutive calls to grow can
-     * cause a reallocation every time even though min_capacity only increments.  */
+     * cause a reallocation every time even though min_capacity only increments. */
     const int64_t min_new_capacity = this->capacity() * 2;
 
     const int64_t new_capacity = std::max(min_capacity, min_new_capacity);

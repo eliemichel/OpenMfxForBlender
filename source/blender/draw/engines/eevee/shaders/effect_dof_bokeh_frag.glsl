@@ -5,7 +5,7 @@
  * a perfect circle.
  * We correct samples spacing for polygonal bokeh shapes. However, we do not for anamorphic bokeh
  * as it is way more complex and expensive to do.
- **/
+ */
 
 #pragma BLENDER_REQUIRE(effect_dof_lib.glsl)
 
@@ -50,10 +50,10 @@ float circle_to_polygon_angle(float sides_count, float theta)
   float ratio = (local_theta - halfside_angle) / halfside_angle;
 
   float halfside_len = polygon_sides_length(sides_count) * 0.5;
-  float oposite = ratio * halfside_len;
+  float opposite = ratio * halfside_len;
 
   /* NOTE: atan(y_over_x) has output range [-M_PI_2..M_PI_2]. */
-  float final_local_theta = atan(oposite / adjacent);
+  float final_local_theta = atan(opposite / adjacent);
 
   return side * side_angle + final_local_theta;
 }

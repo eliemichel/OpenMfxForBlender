@@ -169,7 +169,7 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
         BKE_camera_params_init(&params);
         BKE_camera_params_from_object(&params, projectors[i].ob);
 
-        /* compute matrix, viewplane, .. */
+        /* Compute matrix, view-plane, etc. */
         BKE_camera_params_compute_viewplane(&params, 1, 1, aspx, aspy);
 
         /* scale the view-plane */
@@ -192,7 +192,7 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
 
     mul_m4_m4m4(projectors[i].projmat, offsetmat, tmpmat);
 
-    /* calculate worldspace projector normal (for best projector test) */
+    /* Calculate world-space projector normal (for best projector test). */
     projectors[i].normal[0] = 0;
     projectors[i].normal[1] = 0;
     projectors[i].normal[2] = 1;
@@ -208,7 +208,7 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
 
   coords = BKE_mesh_vert_coords_alloc(mesh, &numVerts);
 
-  /* convert coords to world space */
+  /* Convert coords to world-space. */
   for (i = 0, co = coords; i < numVerts; i++, co++) {
     mul_m4_v3(ob->obmat, *co);
   }
@@ -385,7 +385,6 @@ ModifierTypeInfo modifierType_UVProject = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

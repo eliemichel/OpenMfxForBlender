@@ -47,7 +47,6 @@
 #  include "BKE_collection.h"
 #  include "BKE_curve.h"
 #  include "BKE_displist.h"
-#  include "BKE_font.h"
 #  include "BKE_gpencil.h"
 #  include "BKE_hair.h"
 #  include "BKE_icons.h"
@@ -74,6 +73,7 @@
 #  include "BKE_speaker.h"
 #  include "BKE_text.h"
 #  include "BKE_texture.h"
+#  include "BKE_vfont.h"
 #  include "BKE_volume.h"
 #  include "BKE_workspace.h"
 #  include "BKE_world.h"
@@ -122,7 +122,7 @@
 static void rna_idname_validate(const char *name, char *r_name)
 {
   BLI_strncpy(r_name, name, MAX_ID_NAME - 2);
-  BLI_utf8_invalid_strip(r_name, strlen(r_name));
+  BLI_str_utf8_invalid_strip(r_name, strlen(r_name));
 }
 
 static void rna_Main_ID_remove(Main *bmain,
@@ -778,7 +778,6 @@ static Hair *rna_Main_hairs_new(Main *bmain, const char *name)
 }
 #  endif
 
-#  ifdef WITH_POINT_CLOUD
 static PointCloud *rna_Main_pointclouds_new(Main *bmain, const char *name)
 {
   char safe_name[MAX_ID_NAME - 2];
@@ -791,7 +790,6 @@ static PointCloud *rna_Main_pointclouds_new(Main *bmain, const char *name)
 
   return pointcloud;
 }
-#  endif
 
 static Volume *rna_Main_volumes_new(Main *bmain, const char *name)
 {
@@ -806,7 +804,7 @@ static Volume *rna_Main_volumes_new(Main *bmain, const char *name)
   return volume;
 }
 
-#  ifdef WITH_GEOMETRY_NODES
+#  ifdef WITH_SIMULATION_DATABLOCK
 static Simulation *rna_Main_simulations_new(Main *bmain, const char *name)
 {
   char safe_name[MAX_ID_NAME - 2];
@@ -866,11 +864,9 @@ RNA_MAIN_ID_TAG_FUNCS_DEF(lightprobes, lightprobes, ID_LP)
 #  ifdef WITH_HAIR_NODES
 RNA_MAIN_ID_TAG_FUNCS_DEF(hairs, hairs, ID_HA)
 #  endif
-#  ifdef WITH_POINT_CLOUD
 RNA_MAIN_ID_TAG_FUNCS_DEF(pointclouds, pointclouds, ID_PT)
-#  endif
 RNA_MAIN_ID_TAG_FUNCS_DEF(volumes, volumes, ID_VO)
-#  ifdef WITH_GEOMETRY_NODES
+#  ifdef WITH_SIMULATION_DATABLOCK
 RNA_MAIN_ID_TAG_FUNCS_DEF(simulations, simulations, ID_SIM)
 #  endif
 
@@ -2319,7 +2315,6 @@ void RNA_def_main_hairs(BlenderRNA *brna, PropertyRNA *cprop)
 }
 #  endif
 
-#  ifdef WITH_POINT_CLOUD
 void RNA_def_main_pointclouds(BlenderRNA *brna, PropertyRNA *cprop)
 {
   StructRNA *srna;
@@ -2366,7 +2361,6 @@ void RNA_def_main_pointclouds(BlenderRNA *brna, PropertyRNA *cprop)
   parm = RNA_def_boolean(func, "value", 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 }
-#  endif
 
 void RNA_def_main_volumes(BlenderRNA *brna, PropertyRNA *cprop)
 {
@@ -2412,7 +2406,7 @@ void RNA_def_main_volumes(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 }
 
-#  ifdef WITH_GEOMETRY_NODES
+#  ifdef WITH_SIMULATION_DATABLOCK
 void RNA_def_main_simulations(BlenderRNA *brna, PropertyRNA *cprop)
 {
   StructRNA *srna;

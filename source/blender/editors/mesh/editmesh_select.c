@@ -32,9 +32,12 @@
 #include "BLI_math.h"
 #include "BLI_math_bits.h"
 #include "BLI_rand.h"
+#include "BLI_string.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BKE_context.h"
+#include "BKE_customdata.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_report.h"
@@ -52,6 +55,8 @@
 #include "ED_select_utils.h"
 #include "ED_transform.h"
 #include "ED_view3d.h"
+
+#include "BLT_translation.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -265,17 +270,6 @@ static void findnearestvert__doClosest(void *userData,
   }
 }
 
-/**
- * Nearest vertex under the cursor.
- *
- * \param dist_px_manhattan_p: (in/out), minimal distance to the nearest and at the end,
- * actual distance.
- * \param use_select_bias:
- * - When true, selected vertices are given a 5 pixel bias
- *   to make them further than unselect verts.
- * - When false, unselected vertices are given the bias.
- * \param use_cycle: Cycle over elements within #FIND_NEAR_CYCLE_THRESHOLD_MIN in order of index.
- */
 BMVert *EDBM_vert_find_nearest_ex(ViewContext *vc,
                                   float *dist_px_manhattan_p,
                                   const bool use_select_bias,
@@ -434,7 +428,7 @@ struct NearestEdgeUserData {
   struct NearestEdgeUserData_Hit hit_cycle;
 };
 
-/* note; uses v3d, so needs active 3d window */
+/* NOTE: uses v3d, so needs active 3d window. */
 static void find_nearest_edge__doClosest(
     void *userData, BMEdge *eed, const float screen_co_a[2], const float screen_co_b[2], int index)
 {
@@ -547,8 +541,10 @@ BMEdge *EDBM_edge_find_nearest_ex(ViewContext *vc,
 
       ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
 
-      mesh_foreachScreenEdge(
-          vc, find_nearest_edge_center__doZBuf, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+      mesh_foreachScreenEdge(vc,
+                             find_nearest_edge_center__doZBuf,
+                             &data,
+                             V3D_PROJ_TEST_CLIP_DEFAULT | V3D_PROJ_TEST_CLIP_CONTENT_DEFAULT);
 
       *r_dist_center_px_manhattan = data.dist;
     }
@@ -601,7 +597,8 @@ BMEdge *EDBM_edge_find_nearest_ex(ViewContext *vc,
         *dist_px_manhattan_p;
 
     ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
-    mesh_foreachScreenEdge(vc, find_nearest_edge__doClosest, &data, clip_flag);
+    mesh_foreachScreenEdge(
+        vc, find_nearest_edge__doClosest, &data, clip_flag | V3D_PROJ_TEST_CLIP_CONTENT_DEFAULT);
 
     hit = (data.use_cycle && data.hit_cycle.edge) ? &data.hit_cycle : &data.hit;
 
@@ -708,13 +705,6 @@ static void findnearestface__doClosest(void *userData,
   }
 }
 
-/**
- * \param use_zbuf_single_px: Special case, when using the back-buffer selection,
- * only use the pixel at `vc->mval` instead of using `dist_px_manhattan_p` to search over a larger
- * region. This is needed because historically selection worked this way for a long time, however
- * it's reasonable that some callers might want to expand the region too. So add an argument to do
- * this,
- */
 BMFace *EDBM_face_find_nearest_ex(ViewContext *vc,
                                   float *dist_px_manhattan_p,
                                   float *r_dist_center,
@@ -879,9 +869,8 @@ static bool unified_findnearest(ViewContext *vc,
                                 BMFace **r_efa)
 {
   BMEditMesh *em = vc->em;
-  static short mval_prev[2] = {-1, -1};
-  /* only cycle while the mouse remains still */
-  const bool use_cycle = ((mval_prev[0] == vc->mval[0]) && (mval_prev[1] == vc->mval[1]));
+
+  const bool use_cycle = !WM_cursor_test_motion_and_update(vc->mval);
   const float dist_init = ED_view3d_select_dist_px();
   /* since edges select lines, we give dots advantage of ~20 pix */
   const float dist_margin = (dist_init / 2);
@@ -961,7 +950,7 @@ static bool unified_findnearest(ViewContext *vc,
     }
   }
 
-  /* return only one of 3 pointers, for frontbuffer redraws */
+  /* Return only one of 3 pointers, for front-buffer redraws. */
   if (hit.v.ele) {
     hit.f.ele = NULL;
     hit.e.ele = NULL;
@@ -982,9 +971,6 @@ static bool unified_findnearest(ViewContext *vc,
       hit.f.ele = hit.f_zbuf.ele;
     }
   }
-
-  mval_prev[0] = vc->mval[0];
-  mval_prev[1] = vc->mval[1];
 
   /* Only one element type will be non-null. */
   BLI_assert(((hit.v.ele != NULL) + (hit.e.ele != NULL) + (hit.f.ele != NULL)) <= 1);
@@ -1406,6 +1392,36 @@ static int edbm_select_mode_invoke(bContext *C, wmOperator *op, const wmEvent *e
   return edbm_select_mode_exec(C, op);
 }
 
+static char *edbm_select_mode_get_description(struct bContext *UNUSED(C),
+                                              struct wmOperatorType *UNUSED(op),
+                                              struct PointerRNA *values)
+{
+  const int type = RNA_enum_get(values, "type");
+
+  /* Because the special behavior for shift and ctrl click depend on user input, they may be
+   * incorrect if the operator is used from a script or from a special button. So only return the
+   * specialized descriptions if only the "type" is set, which conveys that the operator is meant
+   * to be used with the logic in the `invoke` method. */
+  if (RNA_struct_property_is_set(values, "type") &&
+      !RNA_struct_property_is_set(values, "use_extend") &&
+      !RNA_struct_property_is_set(values, "use_expand") &&
+      !RNA_struct_property_is_set(values, "action"))
+    switch (type) {
+      case SCE_SELECT_VERTEX:
+        return BLI_strdup(
+            N_("Vertex select - Shift-Click for multiple modes, Ctrl-Click contracts selection"));
+      case SCE_SELECT_EDGE:
+        return BLI_strdup(
+            N_("Edge select - Shift-Click for multiple modes, "
+               "Ctrl-Click expands/contracts selection depending on the current mode"));
+      case SCE_SELECT_FACE:
+        return BLI_strdup(
+            N_("Face select - Shift-Click for multiple modes, Ctrl-Click expands selection"));
+    }
+
+  return NULL;
+}
+
 void MESH_OT_select_mode(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -1426,6 +1442,7 @@ void MESH_OT_select_mode(wmOperatorType *ot)
   ot->invoke = edbm_select_mode_invoke;
   ot->exec = edbm_select_mode_exec;
   ot->poll = ED_operator_editmesh;
+  ot->get_description = edbm_select_mode_get_description;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -1802,7 +1819,7 @@ static bool mouse_mesh_loop(
               V3D_PROJ_RET_OK) {
             tdist = len_squared_v2v2(mvalf, co);
             if (tdist < best_dist) {
-              /*                          printf("Best face: %p (%f)\n", f, tdist);*/
+              // printf("Best face: %p (%f)\n", f, tdist);
               best_dist = tdist;
               efa = f;
             }
@@ -1855,10 +1872,16 @@ void MESH_OT_loop_select(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "Extend the selection");
-  RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
-  RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
-  RNA_def_boolean(ot->srna, "ring", 0, "Select Ring", "Select ring");
+  PropertyRNA *prop;
+
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "Extend the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "ring", 0, "Select Ring", "Select ring");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 void MESH_OT_edgering_select(wmOperatorType *ot)
@@ -1875,10 +1898,16 @@ void MESH_OT_edgering_select(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_UNDO;
 
-  RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend the selection");
-  RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
-  RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
-  RNA_def_boolean(ot->srna, "ring", 1, "Select Ring", "Select ring");
+  /* Properties. */
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna, "ring", 1, "Select Ring", "Select ring");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 /** \} */
@@ -2204,8 +2233,6 @@ static void edbm_strip_selections(BMEditMesh *em)
   }
 }
 
-/* when switching select mode, makes sure selection is consistent for editing */
-/* also for paranoia checks to make sure edge or face mode works */
 void EDBM_selectmode_set(BMEditMesh *em)
 {
   BMVert *eve;
@@ -2260,20 +2287,6 @@ void EDBM_selectmode_set(BMEditMesh *em)
   }
 }
 
-/**
- * Expand & Contract the Selection
- * (used when changing modes and Ctrl key held)
- *
- * Flush the selection up:
- * - vert -> edge
- * - vert -> face
- * - edge -> face
- *
- * Flush the selection down:
- * - face -> edge
- * - face -> vert
- * - edge -> vert
- */
 void EDBM_selectmode_convert(BMEditMesh *em,
                              const short selectmode_old,
                              const short selectmode_new)
@@ -2380,7 +2393,6 @@ void EDBM_selectmode_convert(BMEditMesh *em,
   }
 }
 
-/* user facing function, does notification */
 bool EDBM_selectmode_toggle_multi(bContext *C,
                                   const short selectmode_new,
                                   const int action,
@@ -2556,19 +2568,13 @@ bool EDBM_selectmode_set_multi(bContext *C, const short selectmode)
   return changed;
 }
 
-/**
- * Use to disable a selectmode if its enabled, Using another mode as a fallback
- * if the disabled mode is the only mode set.
- *
- * \return true if the mode is changed.
- */
 bool EDBM_selectmode_disable(Scene *scene,
                              BMEditMesh *em,
                              const short selectmode_disable,
                              const short selectmode_fallback)
 {
   /* note essential, but switch out of vertex mode since the
-   * selected regions wont be nicely isolated after flushing */
+   * selected regions won't be nicely isolated after flushing */
   if (em->selectmode & selectmode_disable) {
     if (em->selectmode == selectmode_disable) {
       em->selectmode = selectmode_fallback;
@@ -2980,7 +2986,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
           int i_b = BM_elem_index_get(l_pair[1]->f);
           if (i_a != i_b) {
             /* Only for predictable results that don't depend on the order of radial loops,
-             * not essential.  */
+             * not essential. */
             if (i_a > i_b) {
               SWAP(int, i_a, i_b);
             }
@@ -3443,7 +3449,7 @@ static void edbm_select_linked_pick_ex(BMEditMesh *em, BMElem *ele, bool sel, in
     select_linked_delimit_begin(bm, delimit);
   }
 
-  /* Note: logic closely matches 'edbm_select_linked_exec', keep in sync */
+  /* NOTE: logic closely matches #edbm_select_linked_exec, keep in sync. */
 
   if (ele->head.htype == BM_VERT) {
     BMVert *eve = (BMVert *)ele;
@@ -3639,8 +3645,9 @@ static int edbm_select_linked_pick_exec(bContext *C, wmOperator *op)
 
   {
     ViewLayer *view_layer = CTX_data_view_layer(C);
-    const int object_index = RNA_int_get(op->ptr, "object_index");
-    const int index = RNA_int_get(op->ptr, "index");
+    /* Intentionally wrap negative values so the lookup fails. */
+    const uint object_index = (uint)RNA_int_get(op->ptr, "object_index");
+    const uint index = (uint)RNA_int_get(op->ptr, "index");
     ele = EDBM_elem_from_index_any_multi(view_layer, object_index, index, &obedit);
   }
 
@@ -4270,7 +4277,12 @@ static int edbm_select_nth_exec(bContext *C, wmOperator *op)
 
     if (edbm_deselect_nth(em, &op_params) == true) {
       found_active_elt = true;
-      EDBM_update_generic(obedit->data, false, false);
+      EDBM_update(obedit->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = false,
+                      .is_destructive = false,
+                  });
     }
   }
   MEM_freeN(objects);
@@ -4730,10 +4742,11 @@ static bool edbm_select_ungrouped_poll(bContext *C)
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
+    const ListBase *defbase = BKE_object_defgroup_list(obedit);
     if ((em->selectmode & SCE_SELECT_VERTEX) == 0) {
       CTX_wm_operator_poll_msg_set(C, "Must be in vertex selection mode");
     }
-    else if (BLI_listbase_is_empty(&obedit->defbase) || cd_dvert_offset == -1) {
+    else if (BLI_listbase_is_empty(defbase) || cd_dvert_offset == -1) {
       CTX_wm_operator_poll_msg_set(C, "No weights/vertex groups on object");
     }
     else {
@@ -4847,8 +4860,15 @@ static int edbm_select_axis_exec(bContext *C, wmOperator *op)
   float axis_mat[3][3];
 
   /* 3D view variables may be NULL, (no need to check in poll function). */
-  ED_transform_calc_orientation_from_type_ex(
-      C, axis_mat, scene, CTX_wm_region_view3d(C), obedit, obedit, orientation, V3D_AROUND_ACTIVE);
+  ED_transform_calc_orientation_from_type_ex(scene,
+                                             view_layer,
+                                             CTX_wm_view3d(C),
+                                             CTX_wm_region_view3d(C),
+                                             obedit,
+                                             obedit,
+                                             orientation,
+                                             V3D_AROUND_ACTIVE,
+                                             axis_mat);
 
   const float *axis_vector = axis_mat[axis];
 

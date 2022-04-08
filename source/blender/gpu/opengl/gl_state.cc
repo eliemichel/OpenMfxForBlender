@@ -52,6 +52,7 @@ GLStateManager::GLStateManager()
   glDisable(GL_DITHER);
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
   glPrimitiveRestartIndex((GLuint)0xFFFFFFFF);
@@ -83,7 +84,6 @@ void GLStateManager::apply_state()
   active_fb->apply_state();
 };
 
-/* Will set all the states regardless of the current ones. */
 void GLStateManager::force_state()
 {
   /* Little exception for clip distances since they need to keep the old count correct. */
@@ -131,7 +131,7 @@ void GLStateManager::set_state(const GPUState &state)
     set_shadow_bias(state.shadow_bias);
   }
 
-  /* TODO remove */
+  /* TODO: remove. */
   if (changed.polygon_smooth) {
     if (state.polygon_smooth) {
       glEnable(GL_POLYGON_SMOOTH);
@@ -156,7 +156,7 @@ void GLStateManager::set_mutable_state(const GPUStateMutable &state)
 {
   GPUStateMutable changed = state ^ current_mutable_;
 
-  /* TODO remove, should be uniform. */
+  /* TODO: remove, should be uniform. */
   if (float_as_uint(changed.point_size) != 0) {
     if (state.point_size > 0.0f) {
       glEnable(GL_PROGRAM_POINT_SIZE);
@@ -168,12 +168,12 @@ void GLStateManager::set_mutable_state(const GPUStateMutable &state)
   }
 
   if (changed.line_width != 0) {
-    /* TODO remove, should use wide line shader. */
+    /* TODO: remove, should use wide line shader. */
     glLineWidth(clamp_f(state.line_width, line_width_range_[0], line_width_range_[1]));
   }
 
   if (changed.depth_range[0] != 0 || changed.depth_range[1] != 0) {
-    /* TODO remove, should modify the projection matrix instead. */
+    /* TODO: remove, should modify the projection matrix instead. */
     glDepthRange(UNPACK2(state.depth_range));
   }
 
@@ -377,7 +377,7 @@ void GLStateManager::set_blend(const eGPUBlend value)
       break;
     }
     case GPU_BLEND_ADDITIVE: {
-      /* Do not let alpha accumulate but premult the source RGB by it. */
+      /* Do not let alpha accumulate but pre-multiply the source RGB by it. */
       src_rgb = GL_SRC_ALPHA;
       dst_rgb = GL_ONE;
       src_alpha = GL_ZERO;
@@ -481,7 +481,6 @@ void GLStateManager::texture_bind(Texture *tex_, eGPUSamplerState sampler_type, 
   dirty_texture_binds_ |= 1ULL << unit;
 }
 
-/* Bind the texture to slot 0 for editing purpose. Used by legacy pipeline. */
 void GLStateManager::texture_bind_temp(GLTexture *tex)
 {
   glActiveTexture(GL_TEXTURE0);

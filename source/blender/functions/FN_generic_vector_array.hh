@@ -82,6 +82,8 @@ class GVectorArray : NonCopyable, NonMovable {
   void extend(IndexMask mask, const GVVectorArray &values);
   void extend(IndexMask mask, const GVectorArray &values);
 
+  void clear(IndexMask mask);
+
   GMutableSpan operator[](int64_t index);
   GSpan operator[](int64_t index) const;
 
@@ -123,8 +125,7 @@ template<typename T> class GVectorArray_TypedMutableRef {
 
   void extend(const int64_t index, const VArray<T> &values)
   {
-    GVArrayForVArray<T> array{values};
-    this->extend(index, array);
+    vector_array_->extend(index, values);
   }
 
   MutableSpan<T> operator[](const int64_t index)
@@ -134,12 +135,12 @@ template<typename T> class GVectorArray_TypedMutableRef {
 };
 
 /* A generic virtual vector array implementation for a `GVectorArray`. */
-class GVVectorArrayForGVectorArray : public GVVectorArray {
+class GVVectorArray_For_GVectorArray : public GVVectorArray {
  private:
   const GVectorArray &vector_array_;
 
  public:
-  GVVectorArrayForGVectorArray(const GVectorArray &vector_array)
+  GVVectorArray_For_GVectorArray(const GVectorArray &vector_array)
       : GVVectorArray(vector_array.type(), vector_array.size()), vector_array_(vector_array)
   {
   }
@@ -154,7 +155,7 @@ class GVVectorArrayForGVectorArray : public GVVectorArray {
                                const int64_t index_in_vector,
                                void *r_value) const override
   {
-    type_->copy_to_initialized(vector_array_[index][index_in_vector], r_value);
+    type_->copy_assign(vector_array_[index][index_in_vector], r_value);
   }
 };
 

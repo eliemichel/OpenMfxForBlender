@@ -25,14 +25,22 @@
 #include "BKE_main.h"
 
 #include "DNA_collection_types.h"
+#include "DNA_space_types.h"
 
 #include "BLT_translation.h"
 
-#include "../outliner_intern.h"
+#include "../outliner_intern.hh"
+#include "common.hh"
 #include "tree_display.hh"
+#include "tree_element.hh"
 
 namespace blender::ed::outliner {
 
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
 /* Convenience/readability. */
 template<typename T> using List = ListBaseWrapper<T>;
 
@@ -107,7 +115,7 @@ ListBase TreeDisplayOverrideLibrary::buildTree(const TreeSourceData &source_data
 
 TreeElement *TreeDisplayOverrideLibrary::add_library_contents(Main &mainvar,
                                                               ListBase &lb,
-                                                              Library *lib) const
+                                                              Library *lib)
 {
   const short filter_id_type = id_filter_get();
 
@@ -147,30 +155,31 @@ TreeElement *TreeDisplayOverrideLibrary::add_library_contents(Main &mainvar,
           tenlib = outliner_add_element(&space_outliner_, &lb, &mainvar, nullptr, TSE_ID_BASE, 0);
           tenlib->name = IFACE_("Current File");
         }
+        if (tenlib->flag & TE_HAS_WARNING) {
+          has_warnings = true;
+        }
       }
 
       /* Create data-block list parent element on demand. */
-      if (id != nullptr) {
-        TreeElement *ten;
+      TreeElement *ten;
 
-        if (filter_id_type) {
-          ten = tenlib;
-        }
-        else {
-          ten = outliner_add_element(
-              &space_outliner_, &tenlib->subtree, lbarray[a], nullptr, TSE_ID_BASE, 0);
-          ten->directdata = lbarray[a];
-          ten->name = outliner_idcode_to_plural(GS(id->name));
-        }
+      if (filter_id_type) {
+        ten = tenlib;
+      }
+      else {
+        ten = outliner_add_element(
+            &space_outliner_, &tenlib->subtree, lbarray[a], nullptr, TSE_ID_BASE, 0);
+        ten->directdata = lbarray[a];
+        ten->name = outliner_idcode_to_plural(GS(id->name));
+      }
 
-        for (ID *id : List<ID>(lbarray[a])) {
-          if (override_library_id_filter_poll(lib, id)) {
-            TreeElement *override_tree_element = outliner_add_element(
-                &space_outliner_, &ten->subtree, id, ten, TSE_LIBRARY_OVERRIDE_BASE, 0);
+      for (ID *id : List<ID>(lbarray[a])) {
+        if (override_library_id_filter_poll(lib, id)) {
+          TreeElement *override_tree_element = outliner_add_element(
+              &space_outliner_, &ten->subtree, id, ten, TSE_LIBRARY_OVERRIDE_BASE, 0);
 
-            if (BLI_listbase_is_empty(&override_tree_element->subtree)) {
-              outliner_free_tree_element(override_tree_element, &ten->subtree);
-            }
+          if (BLI_listbase_is_empty(&override_tree_element->subtree)) {
+            outliner_free_tree_element(override_tree_element, &ten->subtree);
           }
         }
       }
@@ -188,7 +197,7 @@ short TreeDisplayOverrideLibrary::id_filter_get() const
   return 0;
 }
 
-bool TreeDisplayOverrideLibrary::override_library_id_filter_poll(Library *lib, ID *id) const
+bool TreeDisplayOverrideLibrary::override_library_id_filter_poll(const Library *lib, ID *id) const
 {
   if (id->lib != lib) {
     return false;

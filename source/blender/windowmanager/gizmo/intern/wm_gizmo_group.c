@@ -63,9 +63,6 @@
 /** \name wmGizmoGroup
  * \{ */
 
-/**
- * Create a new gizmo-group from \a gzgt.
- */
 wmGizmoGroup *wm_gizmogroup_new_from_type(wmGizmoMap *gzmap, wmGizmoGroupType *gzgt)
 {
   wmGizmoGroup *gzgroup = MEM_callocN(sizeof(*gzgroup), "gizmo-group");
@@ -148,9 +145,6 @@ void WM_gizmo_group_tag_remove(wmGizmoGroup *gzgroup)
   }
 }
 
-/**
- * Add \a gizmo to \a gzgroup and make sure its name is unique within the group.
- */
 void wm_gizmogroup_gizmo_register(wmGizmoGroup *gzgroup, wmGizmo *gz)
 {
   BLI_assert(BLI_findindex(&gzgroup->gizmos, gz) == -1);
@@ -234,10 +228,6 @@ wmGizmo *wm_gizmogroup_find_intersected_gizmo(wmWindowManager *wm,
   return NULL;
 }
 
-/**
- * Adds all gizmos of \a gzgroup that can be selected to the head of \a listbase.
- * Added items need freeing!
- */
 void wm_gizmogroup_intersectable_gizmos_to_list(wmWindowManager *wm,
                                                 const wmGizmoGroup *gzgroup,
                                                 const int event_modifier,
@@ -265,6 +255,7 @@ void WM_gizmogroup_ensure_init(const bContext *C, wmGizmoGroup *gzgroup)
 {
   /* prepare for first draw */
   if (UNLIKELY((gzgroup->init_flag & WM_GIZMOGROUP_INIT_SETUP) == 0)) {
+
     gzgroup->type->setup(C, gzgroup);
 
     /* Not ideal, initialize keymap here, needed for RNA runtime generated gizmos. */
@@ -344,10 +335,9 @@ bool wm_gizmogroup_is_any_selected(const wmGizmoGroup *gzgroup)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Gizmo operators
+/** \name Gizmo Operators
  *
  * Basic operators for gizmo interaction with user configurable keymaps.
- *
  * \{ */
 
 static int gizmo_select_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -548,8 +538,8 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
     if (event->type == EVT_MODAL_MAP) {
       event_modal_val = evil_event->val;
-      evil_event->type = evil_event->prevtype;
-      evil_event->val = evil_event->prevval;
+      evil_event->type = evil_event->prev_type;
+      evil_event->val = evil_event->prev_val;
     }
 
     int modal_retval = modal_fn(C, gz, event, mtweak->flag);
@@ -639,8 +629,6 @@ void GIZMOGROUP_OT_gizmo_tweak(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 #endif
 }
-
-/** \} */
 
 wmKeyMap *wm_gizmogroup_tweak_modal_keymap(wmKeyConfig *keyconf)
 {
@@ -773,11 +761,12 @@ wmKeyMap *WM_gizmogroup_setup_keymap_generic_select(const wmGizmoGroupType *UNUS
   return WM_gizmogroup_keymap_template_select_ex(kc, "Generic Gizmo Select", &params);
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name wmGizmo (Key-map access)
  *
  * Key config version so these can be called from #wmGizmoGroupFnSetupKeymap.
- *
  * \{ */
 
 struct wmKeyMap *WM_gizmo_keymap_generic_with_keyconfig(wmKeyConfig *kc)
@@ -820,7 +809,6 @@ struct wmKeyMap *WM_gizmo_keymap_generic_click_drag(wmWindowManager *wm)
   return WM_gizmo_keymap_generic_click_drag_with_keyconfig(wm->defaultconf);
 }
 
-/** Drag or press depending on preference. */
 struct wmKeyMap *WM_gizmo_keymap_generic_maybe_drag_with_keyconfig(wmKeyConfig *kc)
 {
   const char *idname = "Generic Gizmo Maybe Drag";
@@ -861,10 +849,6 @@ struct wmGizmoGroupTypeRef *WM_gizmomaptype_group_find(struct wmGizmoMapType *gz
   return NULL;
 }
 
-/**
- * Use this for registering gizmos on startup.
- * For runtime, use #WM_gizmomaptype_group_link_runtime.
- */
 wmGizmoGroupTypeRef *WM_gizmomaptype_group_link(wmGizmoMapType *gzmap_type, const char *idname)
 {
   wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(idname, false);
@@ -938,9 +922,6 @@ wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(wmGizmoMapType *gzm
   return gzgroup;
 }
 
-/**
- * Unlike #WM_gizmomaptype_group_unlink this doesn't maintain correct state, simply free.
- */
 void WM_gizmomaptype_group_free(wmGizmoGroupTypeRef *gzgt_ref)
 {
   MEM_freeN(gzgt_ref);
@@ -981,10 +962,10 @@ void WM_gizmomaptype_group_unlink(bContext *C,
     WM_gizmomaptype_group_free(gzgt_ref);
   }
 
-  /* TODO(campbell): Gizmos may share keymaps, for now don't
+  /* TODO(campbell): Gizmos may share key-maps, for now don't
    * remove however we could flag them as temporary/owned by the gizmo. */
 #if 0
-  /* Note, we may want to keep this keymap for editing */
+  /* NOTE: we may want to keep this key-map for editing. */
   WM_keymap_remove(gzgt->keyconf, gzgt->keymap);
 #endif
 
@@ -1016,7 +997,6 @@ void wm_gizmogrouptype_setup_keymap(wmGizmoGroupType *gzgt, wmKeyConfig *keyconf
  * but for general purpose API this is too detailed & annoying.
  *
  * \note We may want to return a value if there is nothing to remove.
- *
  * \{ */
 
 void WM_gizmo_group_type_add_ptr_ex(wmGizmoGroupType *gzgt, wmGizmoMapType *gzmap_type)
@@ -1058,9 +1038,6 @@ bool WM_gizmo_group_type_ensure(const char *idname)
   return WM_gizmo_group_type_ensure_ptr(gzgt);
 }
 
-/**
- * Call #WM_gizmo_group_type_free_ptr after to remove & free.
- */
 void WM_gizmo_group_type_remove_ptr_ex(struct Main *bmain,
                                        wmGizmoGroupType *gzgt,
                                        wmGizmoMapType *gzmap_type)
