@@ -439,6 +439,7 @@ DefNode(GeometryNode, GEO_NODE_TRIANGULATE, def_geo_triangulate, "TRIANGULATE", 
 DefNode(GeometryNode, GEO_NODE_TRIM_CURVE, def_geo_curve_trim, "TRIM_CURVE", TrimCurve, "Trim Curve", "")
 DefNode(GeometryNode, GEO_NODE_VIEWER, def_geo_viewer, "VIEWER", Viewer, "Viewer", "")
 DefNode(GeometryNode, GEO_NODE_VOLUME_TO_MESH, def_geo_volume_to_mesh, "VOLUME_TO_MESH", VolumeToMesh, "Volume to Mesh", "")
+DefNode(GeometryNode, GEO_NODE_OPEN_MFX, def_geo_open_mfx, "OPEN_MFX", OpenMfx, "Pizza", "")
 
 /* undefine macros */
 #undef DefNode

@@ -1642,6 +1642,10 @@ typedef struct NodeGeometryViewer {
   int8_t data_type;
 } NodeGeometryViewer;
 
+typedef struct NodeGeometryOpenMfx {
+  uint8_t olive_count;
+} NodeGeometryOpenMfx;
+
 typedef struct NodeFunctionCompare {
   /* NodeCompareOperation */
   int8_t operation;

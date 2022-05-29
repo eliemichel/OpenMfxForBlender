@@ -184,6 +184,7 @@ void register_node_type_geo_translate_instances(void);
 void register_node_type_geo_triangulate(void);
 void register_node_type_geo_viewer(void);
 void register_node_type_geo_volume_to_mesh(void);
+void register_node_type_geo_open_mfx(void);
 
 #ifdef __cplusplus
 }

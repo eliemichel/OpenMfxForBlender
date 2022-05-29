@@ -11588,6 +11588,19 @@ static void def_geo_scale_elements(StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
 }
 
+static void def_geo_open_mfx(StructRNA *srna)
+{
+  PropertyRNA *prop;
+
+  RNA_def_struct_sdna_from(srna, "NodeGeometryOpenMfx", "storage");
+
+  prop = RNA_def_property(srna, "olive_count", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, NULL, "olive_count");
+  RNA_def_property_range(prop, 0, 1000);
+  RNA_def_property_ui_text(prop, "Olive Count", "Number of olives topping the pizza");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
 /* -------------------------------------------------------------------------- */
 
 static void rna_def_shader_node(BlenderRNA *brna)
