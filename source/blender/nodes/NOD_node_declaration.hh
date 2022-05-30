@@ -294,9 +294,10 @@ class NodeDeclarationBuilder {
  private:
   NodeDeclaration &declaration_;
   Vector<std::unique_ptr<BaseSocketDeclarationBuilder>> builders_;
+  const bNode *node_; /* Only available in dynamic declarations */
 
  public:
-  NodeDeclarationBuilder(NodeDeclaration &declaration);
+  NodeDeclarationBuilder(NodeDeclaration &declaration, const bNode *node = nullptr);
 
   /**
    * All inputs support fields, and all outputs are fields if any of the inputs is a field.
@@ -314,6 +315,8 @@ class NodeDeclarationBuilder {
   typename DeclType::Builder &add_input(StringRef name, StringRef identifier = "");
   template<typename DeclType>
   typename DeclType::Builder &add_output(StringRef name, StringRef identifier = "");
+
+  const bNode *node() const;
 
  private:
   template<typename DeclType>
@@ -455,8 +458,9 @@ inline void SocketDeclaration::make_available(bNode &node) const
 /** \name #NodeDeclarationBuilder Inline Methods
  * \{ */
 
-inline NodeDeclarationBuilder::NodeDeclarationBuilder(NodeDeclaration &declaration)
-    : declaration_(declaration)
+inline NodeDeclarationBuilder::NodeDeclarationBuilder(NodeDeclaration &declaration,
+                                                      const bNode *node)
+    : declaration_(declaration), node_(node)
 {
 }
 
@@ -472,6 +476,11 @@ inline typename DeclType::Builder &NodeDeclarationBuilder::add_output(StringRef 
                                                                       StringRef identifier)
 {
   return this->add_socket<DeclType>(name, identifier, SOCK_OUT);
+}
+
+inline const bNode *NodeDeclarationBuilder::node() const
+{
+  return this->node_;
 }
 
 template<typename DeclType>

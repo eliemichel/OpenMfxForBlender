@@ -36,14 +36,20 @@ NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Float>(N_("Radius"))
-      .default_value(1.0f)
-      .min(0.0f)
-      .subtype(PROP_DISTANCE)
-      .description(N_("Size of the pizza"));
-  b.add_output<decl::Geometry>("Mesh");
-  b.add_output<decl::Bool>(N_("Base")).field_source();
-  b.add_output<decl::Bool>(N_("Olives")).field_source();
+  const bNode *node = b.node();
+  if (node == nullptr || node->storage == nullptr)
+    return;
+  const NodeGeometryOpenMfx &storage = node_storage(*node);
+  if (BLI_str_endswith(storage.plugin_path, ".ofx")) {
+    b.add_input<decl::Float>(N_("Radius"))
+        .default_value(1.0f)
+        .min(0.0f)
+        .subtype(PROP_DISTANCE)
+        .description(N_("Size of the pizza"));
+    b.add_output<decl::Geometry>("Mesh");
+    b.add_output<decl::Bool>(N_("Base")).field_source();
+    b.add_output<decl::Bool>(N_("Olives")).field_source();
+  }
 }
 
 static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -64,6 +70,8 @@ static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 
 static void node_update(bNodeTree *ntree, bNode *node)
 {
+  if (node->outputs.first == nullptr)
+    return;
   const NodeGeometryOpenMfx &storage = node_storage(*node);
 
   bNodeSocket *out_socket_geometry = (bNodeSocket *)node->outputs.first;
@@ -180,6 +188,8 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
+  if (params.node().outputs.first == nullptr)
+    return;
   // We first retrieve the property (olive count) and the input socket (radius)
   const NodeGeometryOpenMfx &storage = node_storage(params.node());
   const int olive_count = storage.olive_count;
@@ -211,6 +221,7 @@ void register_node_type_geo_open_mfx()
     static bNodeType ntype;
     geo_node_type_base(&ntype, GEO_NODE_OPEN_MFX, "OpenMfx Plugin", NODE_CLASS_GEOMETRY);
     ntype.declare = file_ns::node_declare;
+    ntype.declaration_is_dynamic = true;
     node_type_init(&ntype, file_ns::node_init);
     node_type_update(&ntype, file_ns::node_update);
     ntype.geometry_node_execute = file_ns::node_geo_exec;
