@@ -28,6 +28,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "NOD_socket.h"
+
 #include "node_geometry_util.hh"
 
 namespace blender::nodes::node_geo_open_mfx_cc {
@@ -50,6 +52,9 @@ static void node_declare(NodeDeclarationBuilder &b)
     b.add_output<decl::Bool>(N_("Base")).field_source();
     b.add_output<decl::Bool>(N_("Olives")).field_source();
   }
+  else {
+    b.add_input<decl::Float>(N_("Nothing"));
+  }
 }
 
 static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -68,8 +73,20 @@ static void node_init(bNodeTree *UNUSED(tree), bNode *node)
   node->storage = data;
 }
 
+static void force_redeclare(bNodeTree *ntree, bNode *node)
+{
+  BLI_assert(node->typeinfo->declaration_is_dynamic);
+  if (node->declaration != nullptr)
+  {
+    delete node->declaration;
+    node->declaration = nullptr;
+  }
+  node_verify_sockets(ntree, node, true);
+}
+
 static void node_update(bNodeTree *ntree, bNode *node)
 {
+  force_redeclare(ntree, node);
   if (node->outputs.first == nullptr)
     return;
   const NodeGeometryOpenMfx &storage = node_storage(*node);
