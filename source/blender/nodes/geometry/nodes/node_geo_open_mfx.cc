@@ -50,6 +50,8 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
+  uiItemR(layout, ptr, "plugin_path", 0, "", ICON_NONE);
+  uiItemR(layout, ptr, "effect_index", 0, "", ICON_NONE);
   uiItemR(layout, ptr, "olive_count", 0, "", ICON_NONE);
 }
 
@@ -76,13 +78,14 @@ static void node_update(bNodeTree *ntree, bNode *node)
 
 static Mesh *create_pizza_mesh(const int olive_count,
                                const float radius,
+                               const int base_div,
                                IndexRange &base_polys,
                                IndexRange &olives_polys)
 {
   // (i) compute element counts
-  int vert_count = 32 + olive_count * 4;
-  int edge_count = 32 + olive_count * 4;
-  int corner_count = 32 + olive_count * 4;
+  int vert_count = base_div + olive_count * 4;
+  int edge_count = base_div + olive_count * 4;
+  int corner_count = base_div + olive_count * 4;
   int face_count = 1 + olive_count;
 
   // (ii) allocate memory
@@ -97,8 +100,8 @@ static Mesh *create_pizza_mesh(const int olive_count,
   olives_polys = IndexRange{1, olive_count};
 
   // Base
-  const float angle_delta = 2 * M_PI / 32;
-  for (const int i : IndexRange(32)) {
+  const float angle_delta = 2.0f * (M_PI / static_cast<float>(base_div));
+  for (const int i : IndexRange(base_div)) {
     // Vertex coordinates
     const float angle = i * angle_delta;
     copy_v3_v3(verts[i].co, float3(std::cos(angle) * radius, std::sin(angle) * radius, 0.0f));
@@ -106,7 +109,7 @@ static Mesh *create_pizza_mesh(const int olive_count,
     // Edge
     MEdge &edge = edges[i];
     edge.v1 = i;
-    edge.v2 = (i + 1) % 32;
+    edge.v2 = (i + 1) % base_div;
     edge.flag = ME_EDGEDRAW | ME_EDGERENDER;
 
     // Corner
@@ -117,12 +120,12 @@ static Mesh *create_pizza_mesh(const int olive_count,
   // Face
   MPoly &poly = polys[0];
   poly.loopstart = 0;
-  poly.totloop = 32;
+  poly.totloop = base_div;
 
   // Olives
   const float angle_delta_olive = 2.0f * (M_PI / static_cast<float>(olive_count - 1));
   for (const int i : IndexRange(olive_count)) {
-    const int offset = 32 + 4 * i;
+    const int offset = base_div + 4 * i;
 
     // Vertex coordinates
     float cx = 0, cy = 0;
@@ -159,6 +162,22 @@ static Mesh *create_pizza_mesh(const int olive_count,
   return mesh;
 }
 
+static void set_bool_face_field_output(GeoNodeExecParams &params, const char* attribute_name, const IndexRange &poly_range, Mesh *mesh)
+{
+  MeshComponent component;
+  component.replace(mesh, GeometryOwnershipType::Editable);
+
+  StrongAnonymousAttributeID id(attribute_name);
+  OutputAttribute_Typed<bool> attribute = component.attribute_try_get_for_output_only<bool>(
+      id.get(), ATTR_DOMAIN_FACE);
+  attribute.as_span().slice(poly_range).fill(true);
+  attribute.save();
+
+  params.set_output(
+      attribute_name,
+      AnonymousAttributeFieldInput::Create<bool>(std::move(id), params.attribute_producer_name()));
+}
+
 static void node_geo_exec(GeoNodeExecParams params)
 {
   // We first retrieve the property (olive count) and the input socket (radius)
@@ -168,36 +187,14 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   // Then we create the mesh (let's put it in a separate function)
   IndexRange base_polys, olives_polys;
-  Mesh *mesh = create_pizza_mesh(olive_count, radius, base_polys, olives_polys);
+  Mesh *mesh = create_pizza_mesh(olive_count, radius, 32, base_polys, olives_polys);
 
   if (params.output_is_required("Base")) {
-    MeshComponent component;
-    component.replace(mesh, GeometryOwnershipType::Editable);
-
-    StrongAnonymousAttributeID id("Base");
-    OutputAttribute_Typed<bool> attribute = component.attribute_try_get_for_output_only<bool>(
-        id.get(), ATTR_DOMAIN_FACE);
-    attribute.as_span().slice(base_polys).fill(true);
-    attribute.save();
-    
-    params.set_output("Base",
-                      AnonymousAttributeFieldInput::Create<bool>(
-                          std::move(id), params.attribute_producer_name()));
+    set_bool_face_field_output(params, "Base", base_polys, mesh);
   }
 
   if (params.output_is_required("Olives")) {
-    MeshComponent component;
-    component.replace(mesh, GeometryOwnershipType::Editable);
-
-    StrongAnonymousAttributeID id("Olives");
-    OutputAttribute_Typed<bool> attribute = component.attribute_try_get_for_output_only<bool>(
-        id.get(), ATTR_DOMAIN_FACE);
-    attribute.as_span().slice(olives_polys).fill(true);
-    attribute.save();
-
-    params.set_output("Olives",
-                      AnonymousAttributeFieldInput::Create<bool>(
-                          std::move(id), params.attribute_producer_name()));
+    set_bool_face_field_output(params, "Olives", base_polys, mesh);
   }
 
   // We build a geometry set to wrap the mesh and set it as the output value
@@ -210,14 +207,16 @@ void register_node_type_geo_open_mfx()
 {
   namespace file_ns = blender::nodes::node_geo_open_mfx_cc;
 
-  static bNodeType ntype;
-  geo_node_type_base(&ntype, GEO_NODE_OPEN_MFX, "Pizza", NODE_CLASS_GEOMETRY);
-  ntype.declare = file_ns::node_declare;
-  node_type_init(&ntype, file_ns::node_init);
-  node_type_update(&ntype, file_ns::node_update);
-  ntype.geometry_node_execute = file_ns::node_geo_exec;
-  node_type_storage(
-      &ntype, "NodeGeometryOpenMfx", node_free_standard_storage, node_copy_standard_storage);
-  ntype.draw_buttons = file_ns::node_layout;
-  nodeRegisterType(&ntype);
+  {
+    static bNodeType ntype;
+    geo_node_type_base(&ntype, GEO_NODE_OPEN_MFX, "OpenMfx Plugin", NODE_CLASS_GEOMETRY);
+    ntype.declare = file_ns::node_declare;
+    node_type_init(&ntype, file_ns::node_init);
+    node_type_update(&ntype, file_ns::node_update);
+    ntype.geometry_node_execute = file_ns::node_geo_exec;
+    node_type_storage(
+        &ntype, "NodeGeometryOpenMfx", node_free_standard_storage, node_copy_standard_storage);
+    ntype.draw_buttons = file_ns::node_layout;
+    nodeRegisterType(&ntype);
+  }
 }

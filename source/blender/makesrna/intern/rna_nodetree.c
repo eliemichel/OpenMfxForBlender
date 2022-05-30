@@ -11594,6 +11594,41 @@ static void def_geo_open_mfx(StructRNA *srna)
 
   RNA_def_struct_sdna_from(srna, "NodeGeometryOpenMfx", "storage");
 
+  prop = RNA_def_property(srna, "plugin_path", PROP_STRING, PROP_FILEPATH);
+  RNA_def_property_ui_text(prop,
+                           "Plugin Path",
+                           "Path to the OpenMfx plugin to use (.ofx)");
+  //RNA_def_property_string_funcs(prop, NULL, NULL, "rna_OpenMfxNode_plugin_path_set");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
+
+  prop = RNA_def_property(srna, "effect_index", PROP_INT, PROP_NONE);
+  RNA_def_property_ui_text(prop,
+                           "Active Effect",
+                           "Index of the effect to use within the current OpenMfx plugin");
+  /* RNA_def_property_int_funcs(prop,
+                             NULL,
+                             "rna_OpenMfxNode_active_effect_index_set",
+                             "rna_OpenMfxNode_active_effect_index_range");*/
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
+
+  /* Same as effect_index but exposed as an enum */
+  #if 0
+  prop = RNA_def_enum(srna,
+                      "effect_enum",
+                      rna_enum_openmfx_effect_items,
+                      -1,
+                      "Select an effect",
+                      "Effect to use within the current OpenMfx plugin");
+  RNA_def_property_enum_sdna(prop, NULL, "effect_index");
+  RNA_def_property_enum_funcs(prop,
+                              NULL,
+                              "rna_OpenMfxNode_active_effect_index_set",
+                              "rna_OpenMfxNode_effect_enum_item");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
+  #endif
+
+  /* legacy */
+
   prop = RNA_def_property(srna, "olive_count", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "olive_count");
   RNA_def_property_range(prop, 0, 1000);

@@ -1643,7 +1643,12 @@ typedef struct NodeGeometryViewer {
 } NodeGeometryViewer;
 
 typedef struct NodeGeometryOpenMfx {
-  uint8_t olive_count;
+  /** 1024 = FILE_MAX. */
+  char plugin_path[1024];
+  uint8_t effect_index, _pad0[1];
+
+  /* legacy */
+  uint8_t olive_count, _pad1[1];
 } NodeGeometryOpenMfx;
 
 typedef struct NodeFunctionCompare {
