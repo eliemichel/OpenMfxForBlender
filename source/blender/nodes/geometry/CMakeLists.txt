@@ -35,6 +35,8 @@ set(INC
   ../../render
   ../../windowmanager
   ../../../../intern/guardedalloc
+  ../../../../intern/openmfx
+  ../../../../intern/openmfx/openfx
 )
 
 
@@ -207,6 +209,7 @@ set(LIB
   bf_bmesh
   bf_functions
   bf_geometry
+  bf_intern_openmfx
 )
 
 if(WITH_BULLET)

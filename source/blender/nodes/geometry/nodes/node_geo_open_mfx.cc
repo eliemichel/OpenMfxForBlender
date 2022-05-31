@@ -24,6 +24,9 @@
 #include "BKE_attribute_math.hh"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_main.h" // BKE_main_blendfile_path_from_global
+
+#include "BLI_path_util.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -32,19 +35,107 @@
 
 #include "node_geometry_util.hh"
 
+#include "host/mfxPluginRegistryPool.h"
+
 namespace blender::nodes::node_geo_open_mfx_cc {
+
+// ----------------------------------------------------------------------------
+// OpenMfx Runtime definition
 
 class RuntimeData {
   public:
+  // These two setters return true iff they changed the value
+  bool setPluginPath(const char *plugin_path);
+  bool setEffectIndex(int effect_index);
+
+  // Release the current plugin registry and reset
+  void unloadPlugin();
+  bool isPluginLoaded() const;
+
+  public:
+  char loaded_plugin_path[1024];
   int loaded_effect_index;
-   /*
-  RuntimeData& operator=(const RuntimeData &other)
-  {
-    loaded_effect_index = other.loaded_effect_index;
-    return *this;
-  }
-  */
+
+  private:
+  PluginRegistry *m_registry;
 };
+
+static void MFX_normalize_plugin_path(char *dest_path, const char *src_path)
+{
+  BLI_strncpy(dest_path, src_path, FILE_MAX);
+  const char *base_path =
+      BKE_main_blendfile_path_from_global();  // TODO: How to get a bMain object here to avoid
+                                              // "from_global()"?
+  if (NULL != base_path) {
+    BLI_path_abs(dest_path, base_path);
+  }
+}
+
+bool RuntimeData::setPluginPath(const char *plugin_path)
+{
+  if (0 == strcmp(loaded_plugin_path, plugin_path)) {
+    return false;
+  }
+
+  unloadPlugin();
+
+  BLI_strncpy(loaded_plugin_path, plugin_path, sizeof(loaded_plugin_path));
+
+  if (0 == strcmp(loaded_plugin_path, "")) {
+    return true;
+  }
+
+  printf("Loading OFX plugin %s\n", loaded_plugin_path);
+
+  char abs_path[FILE_MAX];
+  MFX_normalize_plugin_path(abs_path, loaded_plugin_path);
+
+  m_registry = get_registry(abs_path);
+  return true;
+}
+
+bool RuntimeData::setEffectIndex(int effect_index)
+{
+  if (loaded_effect_index == effect_index) {
+    return false;
+  }
+
+  if (-1 != loaded_effect_index) {
+    //free_effect_instance();
+  }
+
+  if (isPluginLoaded()) {
+    loaded_effect_index = min_ii(max_ii(-1, effect_index), m_registry->num_plugins - 1);
+  }
+  else {
+    loaded_effect_index = -1;
+  }
+
+  if (-1 != loaded_effect_index) {
+    //ensure_effect_instance();
+  }
+  return true;
+}
+
+void RuntimeData::unloadPlugin()
+{
+  if (isPluginLoaded()) {
+    printf("Unloading OFX plugin %s\n", loaded_plugin_path);
+    //free_effect_instance();
+
+    release_registry(m_registry);
+  }
+  loaded_plugin_path[0] = '\0';
+  loaded_effect_index = -1;
+}
+
+inline bool RuntimeData::isPluginLoaded() const
+{
+  return m_registry != nullptr;
+}
+
+// ----------------------------------------------------------------------------
+// Blender Geometry Node callbacks
 
 NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
 
@@ -123,10 +214,20 @@ static void force_redeclare(bNodeTree *ntree, bNode *node)
 
 static void node_update(bNodeTree *ntree, bNode *node)
 {
-  force_redeclare(ntree, node);
-  if (node->outputs.first == nullptr)
+  if (node == nullptr || node->storage == nullptr)
     return;
   const NodeGeometryOpenMfx &storage = node_storage(*node);
+
+  bool changed = false;
+  changed = storage.runtime->setPluginPath(storage.plugin_path) || changed;
+  changed = storage.runtime->setEffectIndex(storage.effect_index) || changed;
+
+  if (changed) {
+    force_redeclare(ntree, node);
+  }
+  
+  if (node->outputs.first == nullptr)
+    return;
 
   bNodeSocket *out_socket_geometry = (bNodeSocket *)node->outputs.first;
   bNodeSocket *out_socket_base = out_socket_geometry->next;
@@ -267,23 +368,24 @@ static void node_geo_exec(GeoNodeExecParams params)
 
 }  // namespace blender::nodes::node_geo_open_mfx_cc
 
+// ----------------------------------------------------------------------------
+// Registration (main entry point)
+
 void register_node_type_geo_open_mfx()
 {
   namespace file_ns = blender::nodes::node_geo_open_mfx_cc;
 
-  {
-    static bNodeType ntype;
-    geo_node_type_base(&ntype, GEO_NODE_OPEN_MFX, "OpenMfx Plugin", NODE_CLASS_GEOMETRY);
-    ntype.declare = file_ns::node_declare;
-    ntype.declaration_is_dynamic = true;
-    node_type_init(&ntype, file_ns::node_init);
-    node_type_update(&ntype, file_ns::node_update);
-    ntype.geometry_node_execute = file_ns::node_geo_exec;
-    node_type_storage(&ntype,
-                      "NodeGeometryOpenMfx",
-                      file_ns::node_free_storage,
-                      file_ns::node_copy_storage);
-    ntype.draw_buttons = file_ns::node_layout;
-    nodeRegisterType(&ntype);
-  }
+  static bNodeType ntype;
+  geo_node_type_base(&ntype, GEO_NODE_OPEN_MFX, "OpenMfx Plugin", NODE_CLASS_GEOMETRY);
+  ntype.declare = file_ns::node_declare;
+  ntype.declaration_is_dynamic = true;
+  node_type_init(&ntype, file_ns::node_init);
+  node_type_update(&ntype, file_ns::node_update);
+  ntype.geometry_node_execute = file_ns::node_geo_exec;
+  node_type_storage(&ntype,
+                    "NodeGeometryOpenMfx",
+                    file_ns::node_free_storage,
+                    file_ns::node_copy_storage);
+  ntype.draw_buttons = file_ns::node_layout;
+  nodeRegisterType(&ntype);
 }
