@@ -89,9 +89,14 @@ class SocketDeclaration;
 }  // namespace blender::nodes
 using NodeDeclarationHandle = blender::nodes::NodeDeclaration;
 using SocketDeclarationHandle = blender::nodes::SocketDeclaration;
+namespace blender::nodes::node_geo_open_mfx_cc {
+class RuntimeData;
+}  // namespace blender::nodes::node_geo_open_mfx_cc
+using NodeGeometryOpenMfxRuntimeHandle = blender::nodes::node_geo_open_mfx_cc::RuntimeData;
 #else
 typedef struct NodeDeclarationHandle NodeDeclarationHandle;
 typedef struct SocketDeclarationHandle SocketDeclarationHandle;
+typedef struct NodeGeometryOpenMfxRuntimeHandle NodeGeometryOpenMfxRuntimeHandle;
 #endif
 
 typedef struct bNodeSocket {
@@ -1645,10 +1650,12 @@ typedef struct NodeGeometryViewer {
 typedef struct NodeGeometryOpenMfx {
   /** 1024 = FILE_MAX. */
   char plugin_path[1024];
-  uint8_t effect_index, _pad0[1];
+  int effect_index, _pad0;
+
+  NodeGeometryOpenMfxRuntimeHandle *runtime;
 
   /* legacy */
-  uint8_t olive_count, _pad1[1];
+  int olive_count, _pad1;
 } NodeGeometryOpenMfx;
 
 typedef struct NodeFunctionCompare {

@@ -34,6 +34,18 @@
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
+class RuntimeData {
+  public:
+  int loaded_effect_index;
+   /*
+  RuntimeData& operator=(const RuntimeData &other)
+  {
+    loaded_effect_index = other.loaded_effect_index;
+    return *this;
+  }
+  */
+};
+
 NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
 
 static void node_declare(NodeDeclarationBuilder &b)
@@ -42,6 +54,7 @@ static void node_declare(NodeDeclarationBuilder &b)
   if (node == nullptr || node->storage == nullptr)
     return;
   const NodeGeometryOpenMfx &storage = node_storage(*node);
+  printf("TEST: loaded_effect_index = %d\n", storage.runtime->loaded_effect_index);
   if (BLI_str_endswith(storage.plugin_path, ".ofx")) {
     b.add_input<decl::Float>(N_("Radius"))
         .default_value(1.0f)
@@ -70,7 +83,31 @@ static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
   NodeGeometryOpenMfx *data = MEM_cnew<NodeGeometryOpenMfx>(__func__);
   data->olive_count = 5;
+  data->runtime = MEM_new<RuntimeData>(__func__);
+  data->runtime->loaded_effect_index = 42;
   node->storage = data;
+}
+
+/* We use custom free and copy function because of manually allocated runtime data */
+static void node_free_storage(struct bNode *node)
+{
+  NodeGeometryOpenMfx &storage = node_storage(*node);
+  if (storage.runtime != nullptr) {
+    MEM_delete<RuntimeData>(storage.runtime);
+    storage.runtime = nullptr;
+  }
+  node_free_standard_storage(node);
+}
+
+static void node_copy_storage(struct bNodeTree *dest_ntree,
+                       struct bNode *dest_node,
+                       const struct bNode *src_node)
+{
+  node_copy_standard_storage(dest_ntree, dest_node, src_node);
+  NodeGeometryOpenMfx &dest_storage = node_storage(*dest_node);
+  const NodeGeometryOpenMfx &src_storage = node_storage(*src_node);
+  dest_storage.runtime = MEM_new<RuntimeData>(__func__);
+  *dest_storage.runtime = *src_storage.runtime;
 }
 
 static void force_redeclare(bNodeTree *ntree, bNode *node)
@@ -242,8 +279,10 @@ void register_node_type_geo_open_mfx()
     node_type_init(&ntype, file_ns::node_init);
     node_type_update(&ntype, file_ns::node_update);
     ntype.geometry_node_execute = file_ns::node_geo_exec;
-    node_type_storage(
-        &ntype, "NodeGeometryOpenMfx", node_free_standard_storage, node_copy_standard_storage);
+    node_type_storage(&ntype,
+                      "NodeGeometryOpenMfx",
+                      file_ns::node_free_storage,
+                      file_ns::node_copy_storage);
     ntype.draw_buttons = file_ns::node_layout;
     nodeRegisterType(&ntype);
   }
