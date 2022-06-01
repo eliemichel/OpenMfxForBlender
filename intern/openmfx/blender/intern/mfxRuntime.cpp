@@ -47,6 +47,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
+#include "MFX_util.h"
+
 #include <vector>
 #include <cassert>
 
@@ -86,7 +88,7 @@ void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
   printf("Loading OFX plugin %s\n", this->plugin_path);
   
   char abs_path[FILE_MAX];
-  normalize_plugin_path(this->plugin_path, abs_path);
+  MFX_normalize_plugin_path(this->plugin_path, abs_path);
 
   this->registry = get_registry(abs_path);
   m_is_plugin_valid = this->registry != NULL;
@@ -495,20 +497,6 @@ void OpenMfxRuntime::set_input_prop_in_rna(OpenMfxModifierData *fxmd)
 }
 
 // ----------------------------------------------------------------------------
-// Private static
-
-void OpenMfxRuntime::normalize_plugin_path(char *path, char *out_path)
-{
-  BLI_strncpy(out_path, path, FILE_MAX);
-  const char *base_path =
-      BKE_main_blendfile_path_from_global();  // TODO: How to get a bMain object here to avoid
-                                              // "from_global()"?
-  if (NULL != base_path) {
-    BLI_path_abs(out_path, base_path);
-  }
-}
-
-// ----------------------------------------------------------------------------
 // Private
 
 void OpenMfxRuntime::free_effect_instance()
@@ -549,7 +537,7 @@ void OpenMfxRuntime::reset_plugin_path()
     free_effect_instance();
 
     char abs_path[FILE_MAX];
-    normalize_plugin_path(this->plugin_path, abs_path);
+    MFX_normalize_plugin_path(this->plugin_path, abs_path);
     release_registry(this->registry);
     m_is_plugin_valid = false;
   }

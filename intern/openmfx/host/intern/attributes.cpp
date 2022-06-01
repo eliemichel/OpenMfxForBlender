@@ -19,6 +19,7 @@
 #include "ofxMeshEffect.h"
 
 #include <cstring>
+#include <algorithm>
 
 using namespace OpenMfx;
 

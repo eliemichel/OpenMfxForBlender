@@ -35,8 +35,7 @@ set(INC
   ../../render
   ../../windowmanager
   ../../../../intern/guardedalloc
-  ../../../../intern/openmfx
-  ../../../../intern/openmfx/openfx
+  ../../../../intern/openmfx/blender
 )
 
 

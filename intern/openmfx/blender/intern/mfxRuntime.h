@@ -149,12 +149,6 @@ class OpenMfxRuntime {
 
 private:
   /**
-   * Get absolute path (ui file browser returns relative path for saved files)
-   */
-  static void normalize_plugin_path(char *path, char *out_path);
-
-private:
-  /**
    * Free the descriptor and instance, if it had been allocated (otherwise does nothing)
    */
   void free_effect_instance();
