@@ -20,18 +20,18 @@
  * \ingroup openmesheffect
  */
 
-
 #include "MEM_guardedalloc.h"
 
+#include "MFX_modifier.h"
 #include "mfxCallbacks.h"
-#include "mfxRuntime.h"
 #include "mfxConvert.h"
+#include "mfxRuntime.h"
 
 #include "DNA_mesh_types.h"      // Mesh
 #include "DNA_meshdata_types.h"  // MVert
 
-#include "BKE_main.h"  // BKE_main_blendfile_path_from_global
-#include "BKE_mesh.h"  // BKE_mesh_new_nomain
+#include "BKE_main.h"      // BKE_main_blendfile_path_from_global
+#include "BKE_mesh.h"      // BKE_mesh_new_nomain
 #include "BKE_modifier.h"  // BKE_modifier_setError
 
 #include "BLI_math_vector.h"
@@ -43,8 +43,9 @@
  * this poitner, correctly casted.
  * (idempotent)
  */
-static OpenMfxRuntime *ensure_runtime(OpenMfxModifierData *fxmd) {
-  
+static OpenMfxRuntime *ensure_runtime(OpenMfxModifierData *fxmd)
+{
+
   // Init
   OpenMfxRuntime *runtime = (OpenMfxRuntime *)fxmd->modifier.runtime;
   if (NULL == runtime) {
@@ -63,50 +64,50 @@ static OpenMfxRuntime *ensure_runtime(OpenMfxModifierData *fxmd) {
   return (OpenMfxRuntime *)fxmd->modifier.runtime;
 }
 
-void mfx_Modifier_reload_effect_info(OpenMfxModifierData *fxmd) {
+void MFX_modifier_reload_effect_info(OpenMfxModifierData *fxmd)
+{
 
   OpenMfxRuntime *runtime = ensure_runtime(fxmd);
   runtime->reload_effect_info(fxmd);
-
 }
 
-void mfx_Modifier_on_plugin_changed(OpenMfxModifierData *fxmd) {
+void MFX_modifier_on_plugin_changed(OpenMfxModifierData *fxmd)
+{
 
-  mfx_Modifier_reload_effect_info(fxmd);
-  mfx_Modifier_on_effect_changed(fxmd);
-
+  MFX_modifier_reload_effect_info(fxmd);
+  MFX_modifier_on_effect_changed(fxmd);
 }
 
-void mfx_Modifier_on_effect_changed(OpenMfxModifierData *fxmd) {
-  
+void MFX_modifier_on_effect_changed(OpenMfxModifierData *fxmd)
+{
+
   OpenMfxRuntime *runtime = ensure_runtime(fxmd);
   runtime->reload_parameters(fxmd);
   runtime->reload_extra_inputs(fxmd);
 }
 
-void mfx_Modifier_free_runtime_data(void * runtime_data)
+void MFX_modifier_free_runtime_data(void *runtime_data)
 {
-  
-  OpenMfxRuntime * runtime = (OpenMfxRuntime *)runtime_data;
+
+  OpenMfxRuntime *runtime = (OpenMfxRuntime *)runtime_data;
   if (NULL != runtime) {
     delete runtime;
   }
-  
 }
 
-Mesh *mfx_Modifier_do(OpenMfxModifierData *fxmd,
+Mesh *MFX_modifier_do(OpenMfxModifierData *fxmd,
                       const Depsgraph *depsgraph,
                       Mesh *mesh,
                       Object *object)
 {
-  
+
   OpenMfxRuntime *runtime = ensure_runtime(fxmd);
   Mesh *output_mesh = runtime->cook(fxmd, depsgraph, mesh, object);
 
   return output_mesh;
 }
 
-void mfx_Modifier_copydata(OpenMfxModifierData *source, OpenMfxModifierData *destination)
+void MFX_modifier_copydata(OpenMfxModifierData *source, OpenMfxModifierData *destination)
 {
   if (source->parameters) {
     destination->parameters = (OpenMfxParameter *)MEM_dupallocN(source->parameters);
@@ -126,7 +127,7 @@ void mfx_Modifier_copydata(OpenMfxModifierData *source, OpenMfxModifierData *des
   }
 }
 
-void mfx_Modifier_before_updateDepsgraph(OpenMfxModifierData *fxmd)
+void MFX_modifier_before_update_depsgraph(OpenMfxModifierData *fxmd)
 {
   OpenMfxRuntime *runtime = ensure_runtime(fxmd);
   runtime->set_input_prop_in_rna(fxmd);

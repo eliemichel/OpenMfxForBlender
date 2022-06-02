@@ -25,7 +25,7 @@
 #include "mfxCallbacks.h"
 #include "mfxRuntime.h"
 #include "mfxConvert.h"
-#include "mfxPluginRegistryPool.h"
+#include "PluginRegistryManager.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/messages>
 #include <mfxHost/MfxHost>
@@ -51,6 +51,8 @@
 
 #include <vector>
 #include <cassert>
+
+using OpenMfx::PluginRegistryManager;
 
 // ----------------------------------------------------------------------------
 // Public
@@ -90,7 +92,7 @@ void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
   char abs_path[FILE_MAX];
   MFX_normalize_plugin_path(this->plugin_path, abs_path);
 
-  this->registry = get_registry(abs_path);
+  this->registry = PluginRegistryManager::getInstance().getRegistry(abs_path);
   m_is_plugin_valid = this->registry != NULL;
 }
 
@@ -538,7 +540,7 @@ void OpenMfxRuntime::reset_plugin_path()
 
     char abs_path[FILE_MAX];
     MFX_normalize_plugin_path(this->plugin_path, abs_path);
-    release_registry(this->registry);
+    PluginRegistryManager::getInstance().releaseRegistry(this->registry);
     m_is_plugin_valid = false;
   }
   this->plugin_path[0] = '\0';

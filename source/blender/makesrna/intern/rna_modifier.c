@@ -707,7 +707,7 @@ const EnumPropertyItem rna_enum_openmfx_effect_items[] = {
 #    include "ABC_alembic.h"
 #  endif
 
-#  include "mfxModifier.h"
+#  include "MFX_modifier.h"
 
 static void rna_UVProject_projectors_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
@@ -1700,14 +1700,14 @@ static void rna_OpenMfxModifier_plugin_path_set(PointerRNA *ptr, const char *val
 {
   OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   BLI_strncpy(fxmd->plugin_path, value, sizeof(fxmd->plugin_path));
-  mfx_Modifier_on_plugin_changed(fxmd);
+  MFX_modifier_on_plugin_changed(fxmd);
 }
 
 static void rna_OpenMfxModifier_active_effect_index_set(PointerRNA *ptr, int value)
 {
   OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   fxmd->active_effect_index = value;
-  mfx_Modifier_on_effect_changed(fxmd);
+  MFX_modifier_on_effect_changed(fxmd);
 }
 
 static void rna_OpenMfxModifier_active_effect_index_range(PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax) {

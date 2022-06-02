@@ -5,9 +5,11 @@
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
-#include "mfxPluginRegistryPool.h"
+#include "PluginRegistryManager.h"
 
 #include <stdio.h>
+
+using OpenMfx::PluginRegistryManager;
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
@@ -30,7 +32,7 @@ bool RuntimeData::setPluginPath(const char *plugin_path)
   char abs_path[FILE_MAX];
   MFX_normalize_plugin_path(abs_path, loaded_plugin_path);
 
-  m_registry = get_registry(abs_path);
+  m_registry = PluginRegistryManager::getInstance().getRegistry(abs_path);
   return true;
 }
 
@@ -63,7 +65,7 @@ void RuntimeData::unloadPlugin()
     printf("Unloading OFX plugin %s\n", loaded_plugin_path);
     // free_effect_instance();
 
-    release_registry(m_registry);
+    PluginRegistryManager::getInstance().releaseRegistry(m_registry);
   }
   loaded_plugin_path[0] = '\0';
   loaded_effect_index = -1;

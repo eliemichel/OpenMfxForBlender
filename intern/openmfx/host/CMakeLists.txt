@@ -20,7 +20,9 @@ set(SRC
   mfxHost.cpp
   mfxHost.h
   mfxPluginRegistry.h
-  mfxPluginRegistryPool.h
+  mfxPluginRegistryManager.h
+  PluginRegistryManager.h
+
   intern/Allocator.h
   intern/attributes.h
   intern/attributes.cpp
@@ -37,9 +39,8 @@ set(SRC
   intern/messages.h
   intern/messages.cpp
   intern/mfxPluginRegistry.cpp
-  intern/mfxPluginRegistryPool.cpp
-  intern/PluginRegistryPool.h
-  intern/PluginRegistryPool.cpp
+  intern/mfxPluginRegistryManager.cpp
+  intern/PluginRegistryManager.cpp
   intern/MfxHost.h
   intern/MfxHost.cpp
   intern/Collection.h

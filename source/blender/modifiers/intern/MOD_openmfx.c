@@ -46,7 +46,7 @@
 
 #include "BLO_read_write.h"
 
-#include "mfxModifier.h"
+#include "MFX_modifier.h"
 
 #include <stdio.h>
 
@@ -57,7 +57,7 @@ static Mesh *modifyMesh(ModifierData *md,
                            Mesh *mesh)
 {
   OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
-  return mfx_Modifier_do(fxmd, ctx->depsgraph, mesh, ctx->object);
+  return MFX_modifier_do(fxmd, ctx->depsgraph, mesh, ctx->object);
 }
 
 static void initData(struct ModifierData *md)
@@ -80,11 +80,11 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 
   // A bit dirty to modify the copy source, but otherwise this would have to be in readfile.c,
   // which I don't want to depend on mfxModifier.h
-  mfx_Modifier_reload_effect_info(fxmd);
+  MFX_modifier_reload_effect_info(fxmd);
 
   BKE_modifier_copydata_generic(md, target, flag);
 
-  mfx_Modifier_copydata(fxmd, tfxmd);
+  MFX_modifier_copydata(fxmd, tfxmd);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -103,7 +103,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 {
   printf("updateDepsgraph\n");
   OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
-  mfx_Modifier_before_updateDepsgraph(fxmd);
+  MFX_modifier_before_update_depsgraph(fxmd);
 
   bool do_add_own_transform = false; // TODO: if depend on main input's transform turn this true
   for (int i = 0; i < fxmd->num_extra_inputs; i++) {
@@ -156,7 +156,7 @@ static void freeRuntimeData(void *runtime_data)
   if (runtime_data == NULL) {
     return;
   }
-  mfx_Modifier_free_runtime_data(runtime_data);
+  MFX_modifier_free_runtime_data(runtime_data);
 }
 
 static void freeData(struct ModifierData *md)

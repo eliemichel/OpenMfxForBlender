@@ -1,6 +1,6 @@
 /**
  * Open Mesh Effect modifier for Blender
- * Copyright (C) 2019 - 2020 Elie Michel
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,13 +20,14 @@
  * \ingroup openmesheffect
  */
 
-#include "mfxModifier.h"
 #include "mfxHost.h"
 #include "mfxPluginRegistry.h"
 
 #include "ofxCore.h"
 
+#include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include <map>
 #include <string>
@@ -34,6 +35,7 @@
 class BlenderMfxHost;
 
 /**
+ * Runtime data for the OpenMfx MODIFIER. For the Geometry node, see MFX_node_runtime.h
  * Structure holding runtime allocated data for OpenMfx plug-in hosting.
  * It ensures communication between Blender's RNA (OpenMfxModifierData)
  * and the non-GPL mfxHost.

@@ -36,17 +36,17 @@ set(INC_SYS
 )
 
 set(SRC
-  mfxModifier.h
+  MFX_modifier.h
   MFX_node_runtime.h
   MFX_util.h
   intern/BlenderMfxHost.h
   intern/BlenderMfxHost.cpp
-  intern/mfxModifier.cpp
+  intern/node_runtime.cpp
   intern/mfxRuntime.h
   intern/mfxRuntime.cpp
   intern/mfxConvert.h
   intern/mfxConvert.cpp
-  intern/node_runtime.cpp
+  intern/modifier.cpp
   intern/util.cpp
 )
 
