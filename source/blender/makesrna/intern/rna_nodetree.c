@@ -526,6 +526,11 @@ static const EnumPropertyItem rna_node_geometry_curve_handle_side_items[] = {
     {GEO_NODE_CURVE_HANDLE_RIGHT, "RIGHT", ICON_NONE, "Right", "Use the right handles"},
     {0, NULL, 0, NULL, NULL}};
 
+const EnumPropertyItem rna_enum_openmfx_node_effect_items[] = {
+    {-1, "NONE", -1, "", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
 #ifndef RNA_RUNTIME
 static const EnumPropertyItem node_sampler_type_items[] = {
     {0, "NEAREST", 0, "Nearest", ""},
@@ -662,6 +667,8 @@ static const EnumPropertyItem rna_node_geometry_attribute_input_type_items_no_bo
 
 #  include "DNA_scene_types.h"
 #  include "WM_api.h"
+
+#  include "MFX_util.h"
 
 static void rna_Node_socket_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr);
 
@@ -4775,6 +4782,37 @@ static const EnumPropertyItem *rna_NodeConvertColorSpace_color_space_itemf(
   *r_free = true;
 
   return items;
+}
+
+static const EnumPropertyItem *rna_GeometryNodeOpenMfx_effect_enum_item(struct bContext *C,
+                                                                        struct PointerRNA *ptr,
+                                                                        struct PropertyRNA *prop,
+                                                                        bool *r_free)
+{
+  bNode *node = (bNode *)ptr->data;
+  const PluginRegistry *registry = MFX_get_plugin_registry(node);
+
+  EnumPropertyItem *item = NULL, tmp_item = {0};
+  int totitem = 0;
+
+  tmp_item.value = -1;
+  tmp_item.identifier = tmp_item.name = "(No effect selected)";
+  RNA_enum_item_add(&item, &totitem, &tmp_item);
+
+  if (registry != NULL) {
+    RNA_enum_item_add_separator(&item, &totitem);
+
+    for (int i = 0; i < registry->num_plugins; ++i) {
+      tmp_item.value = i;
+      tmp_item.identifier = tmp_item.name = registry->plugins[i]->pluginIdentifier;
+      RNA_enum_item_add(&item, &totitem, &tmp_item);
+    }
+  }
+
+  RNA_enum_item_end(&item, &totitem);
+  *r_free = true;
+
+  return item;
 }
 
 #else
@@ -11612,20 +11650,18 @@ static void def_geo_open_mfx(StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
 
   /* Same as effect_index but exposed as an enum */
-  #if 0
   prop = RNA_def_enum(srna,
                       "effect_enum",
-                      rna_enum_openmfx_effect_items,
+                      rna_enum_openmfx_node_effect_items,
                       -1,
                       "Select an effect",
                       "Effect to use within the current OpenMfx plugin");
   RNA_def_property_enum_sdna(prop, NULL, "effect_index");
   RNA_def_property_enum_funcs(prop,
                               NULL,
-                              "rna_OpenMfxNode_active_effect_index_set",
-                              "rna_OpenMfxNode_effect_enum_item");
+                              NULL,
+                              "rna_GeometryNodeOpenMfx_effect_enum_item");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_GeometryNode_socket_update");
-  #endif
 
   /* legacy */
 

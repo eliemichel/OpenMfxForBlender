@@ -86,7 +86,7 @@ class PluginRegistryManager {
   /**
    * Returns the singleton instance. Use this rather than allocating your own pool
    */
-  static PluginRegistryManager &getInstance();
+  static PluginRegistryManager &GetInstance();
 
  public:
   PluginRegistryManager();
@@ -109,6 +109,12 @@ class PluginRegistryManager {
    */
   PluginRegistry *getRegistry(const char *ofx_filepath);
   void releaseRegistry(const PluginRegistry *registry);
+
+  /**
+   * Increment the reference counter of a registry. One must call releaseRegistry() as many
+   * time as this was called (additional to the call that must be issued for getRegistry).
+   */
+  void incrementRegistryReference(const PluginRegistry *registry);
 
   /**
    * The handle remains valid until releaseRegistry() is called

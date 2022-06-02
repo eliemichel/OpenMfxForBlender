@@ -140,7 +140,7 @@ OfxMeshEffectHandle PluginRegistryManagerEntry::getDescriptor(int effectIndex)
 
 // // PluginRegistryManager
 
-PluginRegistryManager &PluginRegistryManager::getInstance()
+PluginRegistryManager &PluginRegistryManager::GetInstance()
 {
   static PluginRegistryManager s_instance;
   return s_instance;
@@ -201,6 +201,15 @@ void PluginRegistryManager::releaseRegistry(const PluginRegistry *registry)
   if (false == entry->isReferenced()) {
     remove(entry);
   }
+}
+
+void PluginRegistryManager::incrementRegistryReference(const PluginRegistry *registry)
+{
+  PluginRegistryManagerEntry *entry = find(registry);
+  if (nullptr == entry) {
+    return;
+  }
+  entry->incrementReferences();
 }
 
 OfxMeshEffectHandle PluginRegistryManager::getEffectDescriptor(const PluginRegistry *registry,

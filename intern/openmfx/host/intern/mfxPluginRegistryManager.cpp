@@ -19,10 +19,10 @@
 
 PluginRegistry *get_registry(const char *ofx_filepath)
 {
-  return OpenMfx::PluginRegistryManager::getInstance().getRegistry(ofx_filepath);
+  return OpenMfx::PluginRegistryManager::GetInstance().getRegistry(ofx_filepath);
 }
 
 void release_registry(const PluginRegistry*registry)
 {
-  OpenMfx::PluginRegistryManager::getInstance().releaseRegistry(registry);
+  OpenMfx::PluginRegistryManager::GetInstance().releaseRegistry(registry);
 }

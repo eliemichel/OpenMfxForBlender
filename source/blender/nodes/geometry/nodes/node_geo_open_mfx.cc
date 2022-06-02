@@ -34,9 +34,81 @@
 
 #include "node_geometry_util.hh"
 
+#include <mfxHost/mesheffect>
+#include <mfxHost/properties>
+
 namespace blender::nodes::node_geo_open_mfx_cc {
 
 NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
+
+static const char *MFX_input_label(const OfxMeshInputStruct &input)
+{
+  int labelIndex = input.properties.find(kOfxPropLabel);
+  return labelIndex >= 0 ? input.properties[labelIndex].value[0].as_const_char :
+                                        "Mesh";
+}
+
+static void MFX_node_add_geo_input(NodeDeclarationBuilder &b,
+                                   const OfxMeshInputStruct &input)
+{
+  const char *label = MFX_input_label(input);
+  if (kOfxMeshMainOutput == input.name()) {
+    b.add_output<decl::Geometry>(label);
+  }
+  else {
+    b.add_input<decl::Geometry>(label);
+  }
+}
+
+static void MFX_node_add_param_input(NodeDeclarationBuilder &b,
+                                     const OfxParamStruct &param)
+{
+  switch (param.type) {
+    case PARAM_TYPE_INTEGER:
+      b.add_input<decl::Int>(param.name);
+      break;
+    case PARAM_TYPE_INTEGER_2D:
+      b.add_input<decl::Int>((std::string(param.name) + ".x").c_str());
+      b.add_input<decl::Int>((std::string(param.name) + ".y").c_str());
+      break;
+    case PARAM_TYPE_INTEGER_3D:
+      b.add_input<decl::Int>((std::string(param.name) + ".x").c_str());
+      b.add_input<decl::Int>((std::string(param.name) + ".y").c_str());
+      b.add_input<decl::Int>((std::string(param.name) + ".z").c_str());
+      break;
+    case PARAM_TYPE_DOUBLE:
+      b.add_input<decl::Float>(param.name);
+      break;
+    case PARAM_TYPE_DOUBLE_2D:
+      b.add_input<decl::Vector>(param.name);
+      break;
+    case PARAM_TYPE_DOUBLE_3D:
+      b.add_input<decl::Vector>(param.name);
+      break;
+    case PARAM_TYPE_RGB:
+      b.add_input<decl::Color>(param.name);
+      break;
+    case PARAM_TYPE_RGBA:
+      b.add_input<decl::Color>(param.name);
+      break;
+    case PARAM_TYPE_BOOLEAN:
+      b.add_input<decl::Bool>(param.name);
+      break;
+    case PARAM_TYPE_CHOICE:
+      b.add_input<decl::Int>(param.name);
+      break;
+    case PARAM_TYPE_STRING:
+      b.add_input<decl::String>(param.name);
+      break;
+    case PARAM_TYPE_CUSTOM:
+    case PARAM_TYPE_PUSH_BUTTON:
+    case PARAM_TYPE_GROUP:
+    case PARAM_TYPE_PAGE:
+    case PARAM_TYPE_UNKNOWN:
+    default:
+      break;
+  }
+}
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
@@ -44,8 +116,21 @@ static void node_declare(NodeDeclarationBuilder &b)
   if (node == nullptr || node->storage == nullptr)
     return;
   const NodeGeometryOpenMfx &storage = node_storage(*node);
-  printf("TEST: loaded_effect_index = %d\n", storage.runtime->loaded_effect_index);
-  if (BLI_str_endswith(storage.plugin_path, ".ofx")) {
+
+  OfxMeshEffectHandle desc = storage.runtime->effectDescriptor();
+  if (desc != nullptr) {
+    const OfxMeshInputSetStruct &inputs = desc->inputs;
+    for (int i = 0; i < inputs.count(); ++i) {
+      MFX_node_add_geo_input(b, inputs[i]);
+    }
+
+    const OfxParamSetStruct &params = desc->parameters;
+    for (int i = 0; i < params.count(); ++i) {
+      MFX_node_add_param_input(b, params[i]);
+    }
+  }
+  #if 0
+  else {
     b.add_input<decl::Float>(N_("Radius"))
         .default_value(1.0f)
         .min(0.0f)
@@ -55,9 +140,7 @@ static void node_declare(NodeDeclarationBuilder &b)
     b.add_output<decl::Bool>(N_("Base")).field_source();
     b.add_output<decl::Bool>(N_("Olives")).field_source();
   }
-  else {
-    b.add_input<decl::Float>(N_("Nothing"));
-  }
+  #endif
 }
 
 static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -65,8 +148,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
   uiItemR(layout, ptr, "plugin_path", 0, "", ICON_NONE);
-  uiItemR(layout, ptr, "effect_index", 0, "", ICON_NONE);
-  uiItemR(layout, ptr, "olive_count", 0, "", ICON_NONE);
+  uiItemR(layout, ptr, "effect_enum", 0, "", ICON_NONE);
 }
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
@@ -74,7 +156,6 @@ static void node_init(bNodeTree *UNUSED(tree), bNode *node)
   NodeGeometryOpenMfx *data = MEM_cnew<NodeGeometryOpenMfx>(__func__);
   data->olive_count = 5;
   data->runtime = MEM_new<RuntimeData>(__func__);
-  data->runtime->loaded_effect_index = 42;
   node->storage = data;
 }
 
@@ -124,7 +205,8 @@ static void node_update(bNodeTree *ntree, bNode *node)
   if (changed) {
     force_redeclare(ntree, node);
   }
-  
+
+  #if 0
   if (node->outputs.first == nullptr)
     return;
 
@@ -136,6 +218,7 @@ static void node_update(bNodeTree *ntree, bNode *node)
   // olives, we no longer output the fields!
   nodeSetSocketAvailability(ntree, out_socket_base, storage.olive_count < 25);
   nodeSetSocketAvailability(ntree, out_socket_olives, storage.olive_count < 25);
+  #endif
 }
 
 static Mesh *create_pizza_mesh(const int olive_count,

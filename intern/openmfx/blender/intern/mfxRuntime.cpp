@@ -52,7 +52,7 @@
 #include <vector>
 #include <cassert>
 
-using OpenMfx::PluginRegistryManager;
+#define PluginManager OpenMfx::PluginRegistryManager::GetInstance()
 
 // ----------------------------------------------------------------------------
 // Public
@@ -92,7 +92,7 @@ void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
   char abs_path[FILE_MAX];
   MFX_normalize_plugin_path(this->plugin_path, abs_path);
 
-  this->registry = PluginRegistryManager::getInstance().getRegistry(abs_path);
+  this->registry = PluginManager.getRegistry(abs_path);
   m_is_plugin_valid = this->registry != NULL;
 }
 
@@ -540,7 +540,7 @@ void OpenMfxRuntime::reset_plugin_path()
 
     char abs_path[FILE_MAX];
     MFX_normalize_plugin_path(this->plugin_path, abs_path);
-    PluginRegistryManager::getInstance().releaseRegistry(this->registry);
+    PluginManager.releaseRegistry(this->registry);
     m_is_plugin_valid = false;
   }
   this->plugin_path[0] = '\0';
