@@ -26,8 +26,16 @@
 
 #include <mfxHost/MfxHost>
 
+#include <functional>
+#include <vector>
+
 struct Mesh;
 struct Object;
+struct MLoopCol;
+struct MLoopUV;
+struct MIntProperty;
+
+using CallbackList = std::vector<std::function<void()>>;
 
 class BlenderMfxHost : public OpenMfx::MfxHost {
  public:
@@ -128,16 +136,28 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
                                    MeshInternalDataNode &internalData);
 
  private:
+  struct ElementCounts {
+    int ofxPointCount = 0;
+    int ofxCornerCount = 0;
+    int ofxFaceCount = 0;
+    int ofxNoLooseEdge = 1;
+    int ofxConstantFaceSize = -1;
+    int blenderLoopCount = 0;
+    int blenderLooseEdgeCount = 0;
+  };
+
   static bool hasNoLooseEdge(int face_count, const char *face_data, int face_stride);
 
   /**
    * Copy the model to world matrix from the blender object to target mesh properties.
    * This allocate new data that must be eventually freed using propFreeTransformMatrix()
+   * @param properties Mesh properties
    */
   void propSetTransformMatrix(OfxPropertySetHandle properties, const Object *object) const;
 
   /**
    * Free data that had been allocated for transform matrix
+   * @param properties Mesh properties
    */
   void propFreeTransformMatrix(OfxPropertySetHandle properties) const;
 
@@ -146,12 +166,106 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
    * and constant face size flags.
    * (it's static because it does not use the suites)
    */
-  static void countMeshElements(Mesh *blender_mesh,
-                                int &ofx_point_count,
-                                int &ofx_corner_count,
-                                int &ofx_face_count,
-                                int &ofx_no_loose_edge,
-                                int &ofx_constant_face_size,
-                                int &blender_loop_count,
-                                int &blender_loose_edge_count);
+  static void countMeshElements(const Mesh *blenderMesh, ElementCounts &counts);
+
+  /**
+   * Initialize mesh properties for an empty mesh
+   * @param properties Mesh properties
+   */
+  OfxStatus setupElementCounts(OfxPropertySetHandle properties, const ElementCounts &counts) const;
+
+  /**
+   * Set the data pointer and stride for point position attribute
+   */
+  OfxStatus setupPointPositionAttribute(OfxMeshHandle ofxMesh, const Mesh *blenderMesh) const;
+
+  /**
+   * Set the data pointer and stride for corner point attribute
+   */
+  OfxStatus setupCornerPointAttribute(OfxMeshHandle ofxMesh,
+                                      const Mesh *blenderMesh,
+                                      const ElementCounts &counts,
+                                      CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for face size attribute
+   */
+  OfxStatus setupFaceSizeAttribute(OfxMeshHandle ofxMesh,
+                                   const Mesh *blenderMesh,
+                                   const ElementCounts &counts,
+                                   CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for all point weight attributes
+   * @param blenderData must not be null
+   */
+  OfxStatus setupPointWeightAttributes(OfxMeshHandle ofxMesh,
+                                       const char *prefix,
+                                       const Mesh *blenderMesh,
+                                       const ElementCounts &counts,
+                                       CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for all corner color attributes
+   * @param blenderData must not be null
+   */
+  OfxStatus setupCornerColorAttributes(OfxMeshHandle ofxMesh,
+                                       const char *prefix,
+                                       const Mesh *blenderMesh,
+                                       const ElementCounts &counts,
+                                       CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for all corner UV attributes
+   * @param blenderData must not be null
+   */
+  OfxStatus setupCornerUvAttributes(OfxMeshHandle ofxMesh,
+                                    const char *prefix,
+                                    const Mesh *blenderMesh,
+                                    const ElementCounts &counts,
+                                    CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for all face map attributes
+   * @param blenderData must not be null
+   */
+  OfxStatus setupFaceMapAttributes(OfxMeshHandle ofxMesh,
+                                   const char *prefix,
+                                   const Mesh *blenderMesh,
+                                   const ElementCounts &counts,
+                                   CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for a corner color attribute
+   * @param blenderData must not be null
+   */
+  OfxStatus setupCornerColorAttribute(OfxMeshHandle ofxMesh,
+                                      const char *name,
+                                      const MLoopCol *blenderData,
+                                      const ElementCounts &counts,
+                                      CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for a corner UV attribute
+   * @param blenderData must not be null
+   */
+  OfxStatus setupCornerUvAttribute(OfxMeshHandle ofxMesh,
+                                   const char *name,
+                                   const MLoopUV *blenderData,
+                                   const ElementCounts &counts,
+                                   CallbackList &afterAllocate) const;
+
+  /**
+   * Set the data pointer and stride for a face map attribute
+   * @param blenderData must not be null
+   */
+  OfxStatus setupFaceMapAttribute(OfxMeshHandle ofxMesh,
+                                  const char *name,
+                                  const MIntProperty *blenderData,
+                                  const ElementCounts &counts,
+                                  CallbackList &afterAllocate) const;
+
+ private:
+  // Avoid calling before allocate callback from within the before mesh get one
+  bool m_deactivateBeforeAllocateCb = false;
 };

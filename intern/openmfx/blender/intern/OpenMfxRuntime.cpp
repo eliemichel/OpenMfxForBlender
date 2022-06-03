@@ -91,8 +91,9 @@ void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
   printf("Loading OFX plugin %s\n", this->plugin_path);
   
   char abs_path[FILE_MAX];
-  MFX_normalize_plugin_path(this->plugin_path, abs_path);
+  MFX_normalize_plugin_path(abs_path, this->plugin_path);
 
+  PluginManager.setHost(&BlenderMfxHost::GetInstance());
   this->registry = PluginManager.getRegistry(abs_path);
   m_is_plugin_valid = this->registry != NULL;
 }
@@ -540,7 +541,7 @@ void OpenMfxRuntime::reset_plugin_path()
     free_effect_instance();
 
     char abs_path[FILE_MAX];
-    MFX_normalize_plugin_path(this->plugin_path, abs_path);
+    MFX_normalize_plugin_path(abs_path, this->plugin_path);
     PluginManager.releaseRegistry(this->registry);
     m_is_plugin_valid = false;
   }
