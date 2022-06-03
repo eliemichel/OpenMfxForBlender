@@ -1,6 +1,6 @@
 /**
  * Open Mesh Effect modifier for Blender
- * Copyright (C) 2019 - 2020 Elie Michel
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,16 +25,16 @@
 
 #include "DNA_modifier_types.h"
 
-void copy_parameter_value_from_rna(OfxParamHandle param,
-                                   const OpenMfxParameter *rna);
+void MFX_copy_parameter_value_from_rna(OfxParamHandle param,
+                                       const OpenMfxParameter *rna);
 
-void copy_parameter_value_to_rna(OpenMfxParameter *rna,
-                                 const OfxPropertyStruct * prop);
+void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna,
+                                     const OfxPropertyStruct * prop);
 
-void copy_parameter_minmax_to_rna(int rna_type,
-                                  int &int_rna,
-                                  float &float_rna,
-                                  const OfxPropertyStruct *prop);
+void MFX_copy_parameter_minmax_to_rna(int rna_type,
+                                      int &int_rna,
+                                      float &float_rna,
+                                      const OfxPropertyStruct *prop);
 
-void copy_parameter_value_to_rna(OpenMfxParameter *rna,
-                                 const OfxParamHandle param);
+void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna,
+                                     const OfxParamHandle param);

@@ -45,7 +45,6 @@ PluginRegistryManagerEntry::PluginRegistryManagerEntry(const char *filename, Mfx
 
 PluginRegistryManagerEntry::~PluginRegistryManagerEntry()
 {
-  releaseDescriptors();
   assert(m_count == 0);
   if (NULL != m_filename) {
     delete[] m_filename;
@@ -101,6 +100,15 @@ void PluginRegistryManagerEntry::releaseDescriptors()
     if (nullptr != desc) {
       m_host->ReleaseDescriptor(desc);
       desc = nullptr;
+    }
+  }
+
+  for (int i = 0; i < m_registry.num_plugins; ++i) {
+    OfxPlugin *plugin = m_registry.plugins[i];
+    OfxPluginStatus &status = m_registry.status[i];
+    if (OfxPluginStatOK == status) {
+      m_host->UnloadPlugin(plugin);
+      status = OfxPluginStatNotLoaded;
     }
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 Elie Michel
+ * Copyright 2019-2022 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -318,6 +318,17 @@ OfxStatus meshGetPropertySet(OfxMeshHandle mesh, OfxPropertySetHandle *propHandl
 OfxStatus meshAlloc(OfxMeshHandle meshHandle)
 {
   OfxStatus status;
+
+  // Call internal callback before actually allocating data
+  OfxHost *host = nullptr;
+  BeforeMeshReleaseCbFunc beforeMeshAllocateCb = nullptr;
+  propGetPointer(&meshHandle->properties, kOfxMeshPropHostHandle, 0, (void **)&host);
+  if (NULL != host) {
+    propGetPointer(host->host, kOfxHostPropBeforeMeshAllocateCb, 0, (void **)&beforeMeshAllocateCb);
+    if (NULL != beforeMeshAllocateCb) {
+      beforeMeshAllocateCb(host, meshHandle);
+    }
+  }
 
   // Get counts
 

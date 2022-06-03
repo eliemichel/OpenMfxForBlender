@@ -80,6 +80,9 @@ protected:
 	virtual OfxStatus BeforeMeshRelease(OfxMeshHandle ofxMesh) {
 		return kOfxStatReplyDefault;
 	}
+  virtual OfxStatus BeforeMeshAllocate(OfxMeshHandle ofxMesh) {
+    return kOfxStatReplyDefault;
+  }
 
 	// Initialize inputs after creating an instance (mostly fills kOfxMeshPropInternalData)
 	virtual void InitInput(OfxMeshInputStruct& input) {}
@@ -92,6 +95,7 @@ private:
 	// methods whose name is the same.
 	static OfxStatus BeforeMeshGetCb(OfxHost *ofxHost, OfxMeshHandle ofxMesh);
 	static OfxStatus BeforeMeshReleaseCb(OfxHost* ofxHost, OfxMeshHandle ofxMesh);
+  static OfxStatus BeforeMeshAllocateCb(OfxHost *ofxHost, OfxMeshHandle ofxMesh);
 
 	static const void * FetchSuite(OfxPropertySetHandle host, const char* suiteName, int suiteVersion);
 

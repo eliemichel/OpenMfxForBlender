@@ -24,6 +24,7 @@
 #define __MFX_BINARY_UTIL_H__
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <windows.h>
 #endif// _WIN32
 

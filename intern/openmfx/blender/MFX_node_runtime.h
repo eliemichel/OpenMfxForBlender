@@ -1,3 +1,25 @@
+/**
+ * OpenMfx node for Blender
+ * Copyright (C) 2019 - 2022 Elie Michel
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** \file
+ * \ingroup openmfx
+ */
+
 #pragma once
 
 #include "ofxMeshEffect.h"
@@ -21,6 +43,7 @@ class RuntimeData {
   bool setPluginPath(const char *plugin_path);
   bool setEffectIndex(int effect_index);
   OfxMeshEffectHandle effectDescriptor() const;
+  OfxMeshEffectHandle effectInstance() const;
   const PluginRegistry &registry() const;
 
  private:
@@ -28,10 +51,14 @@ class RuntimeData {
   void unloadPlugin();
   bool isPluginLoaded() const;
 
+  void ensureEffectInstance();
+  void freeEffectInstance();
+
  private:
   char m_loaded_plugin_path[1024];
   int m_loaded_effect_index;
   OfxMeshEffectHandle m_effect_descriptor;
+  OfxMeshEffectHandle m_effect_instance;
   PluginRegistry *m_registry;
 };
 

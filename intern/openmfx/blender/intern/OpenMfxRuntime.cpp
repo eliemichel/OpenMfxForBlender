@@ -1,6 +1,6 @@
 /**
- * Open Mesh Effect modifier for Blender
- * Copyright (C) 2019 - 2021 Elie Michel
+ * OpenMfx modifier for Blender
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,20 +17,20 @@
  */
 
 /** \file
- * \ingroup openmesheffect
+ * \ingroup openmfx
  */
 
 #include "MEM_guardedalloc.h"
 
-#include "mfxCallbacks.h"
-#include "mfxRuntime.h"
-#include "mfxConvert.h"
+#include "OpenMfxRuntime.h"
 #include "PluginRegistryManager.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/messages>
 #include <mfxHost/MfxHost>
 #include "ofxExtras.h"
 #include "BlenderMfxHost.h"
+
+#include "MFX_convert.h"
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_modifier_types.h"
@@ -53,6 +53,7 @@
 #include <cassert>
 
 #define PluginManager OpenMfx::PluginRegistryManager::GetInstance()
+using MeshInternalDataModifier = BlenderMfxHost::MeshInternalDataModifier;
 
 // ----------------------------------------------------------------------------
 // Public
@@ -122,7 +123,7 @@ void OpenMfxRuntime::get_parameters_from_rna(OpenMfxModifierData *fxmd)
   OfxParamSetStruct& parameters = this->effect_instance->parameters;
   assert(parameters.count() == fxmd->num_parameters);
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
-    copy_parameter_value_from_rna(&parameters[i], fxmd->parameters + i);
+    MFX_copy_parameter_value_from_rna(&parameters[i], fxmd->parameters + i);
   }
 }
 
@@ -197,7 +198,7 @@ void OpenMfxRuntime::save_rna_parameter_values(OpenMfxModifierData *fxmd)
   for (int i = 0; i < fxmd->num_parameters; ++i) {
     OpenMfxParameter* rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
-    copy_parameter_value_from_rna(&m_saved_parameter_values[key], rna);
+    MFX_copy_parameter_value_from_rna(&m_saved_parameter_values[key], rna);
   }
 }
 
@@ -207,7 +208,7 @@ void OpenMfxRuntime::try_restore_rna_parameter_values(OpenMfxModifierData *fxmd)
     OpenMfxParameter *rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
     if (m_saved_parameter_values.count(key)) {
-      copy_parameter_value_to_rna(rna, &m_saved_parameter_values[key]);
+      MFX_copy_parameter_value_to_rna(rna, &m_saved_parameter_values[key]);
     }
   }
 }
@@ -241,9 +242,9 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   }
 
   // Set input mesh data binding, used by before/after callbacks
-  MeshInternalData input_data; // must remain in scope
+  MeshInternalDataModifier input_data;  // must remain in scope
   if (NULL != input) {
-    input_data.is_input = true;
+    input_data.header.is_input = true;
     input_data.blender_mesh = mesh;
     input_data.source_mesh = NULL;
     input_data.object = object;
@@ -253,7 +254,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
 
   // Same for extra inputs
   // allocate here so that it last until after the call to ofxhost_cook
-  std::vector<MeshInternalData> extra_input_data(fxmd->num_extra_inputs);
+  std::vector<MeshInternalDataModifier> extra_input_data(fxmd->num_extra_inputs);
   for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
     OfxMeshInputHandle input;
     mfx_host->meshEffectSuite->inputGetHandle(
@@ -267,7 +268,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
       Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
       mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object_eval, false);
     }
-    extra_input_data[i].is_input = true;
+    extra_input_data[i].header.is_input = true;
     extra_input_data[i].blender_mesh = mesh;
     extra_input_data[i].source_mesh = NULL;
     extra_input_data[i].object = object;
@@ -277,8 +278,8 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   }
 
   // Set output mesh data binding, used by before/after callbacks
-  MeshInternalData output_data;
-  output_data.is_input = false;
+  MeshInternalDataModifier output_data;
+  output_data.header.is_input = false;
   output_data.blender_mesh = NULL;
   output_data.source_mesh = mesh;
   output_data.object = object;
@@ -363,7 +364,7 @@ void OpenMfxRuntime::reload_parameters(OpenMfxModifierData *fxmd)
 
     int default_idx = props.find(kOfxParamPropDefault);
     if (default_idx > -1) {
-      copy_parameter_value_to_rna(&rna, &props[default_idx]);
+      MFX_copy_parameter_value_to_rna(&rna, &props[default_idx]);
     }
 
     // Handle boundaries
@@ -379,33 +380,33 @@ void OpenMfxRuntime::reload_parameters(OpenMfxModifierData *fxmd)
 
     int min_idx = props.find(kOfxParamPropMin);
     if (min_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_min, rna.float_min, &props[min_idx]);
     }
 
     int softmin_idx = props.find(kOfxParamPropDisplayMin);
     if (softmin_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_softmin, rna.float_softmin, &props[softmin_idx]);
     }
     else if (min_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_softmin, rna.float_softmin, &props[min_idx]);
     }
 
     int max_idx = props.find(kOfxParamPropMax);
     if (max_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_max, rna.float_max, &props[max_idx]);
     }
 
     int softmax_idx = props.find(kOfxParamPropDisplayMax);
     if (softmax_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_softmax, rna.float_softmax, &props[softmax_idx]);
     }
     else if (max_idx > -1) {
-      copy_parameter_minmax_to_rna(
+      MFX_copy_parameter_minmax_to_rna(
           rna.type, rna.int_softmax, rna.float_softmax, &props[max_idx]);
     }
   }

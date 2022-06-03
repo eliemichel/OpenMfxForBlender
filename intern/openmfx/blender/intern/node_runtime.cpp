@@ -1,3 +1,25 @@
+/**
+ * OpenMfx geometry node for Blender
+ * Copyright (C) 2019 - 2022 Elie Michel
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** \file
+ * \ingroup openmfx
+ */
+
 #include "MFX_node_runtime.h"
 #include "MFX_util.h"
 
@@ -20,6 +42,7 @@ RuntimeData::RuntimeData()
   m_loaded_plugin_path[0] = '\0';
   m_loaded_effect_index = -1;
   m_effect_descriptor = nullptr;
+  m_effect_instance = nullptr;
   m_registry = nullptr;
 }
 
@@ -34,7 +57,12 @@ RuntimeData &RuntimeData::operator=(const RuntimeData &other)
   m_loaded_effect_index = other.m_loaded_effect_index;
   m_effect_descriptor = other.m_effect_descriptor;
   m_registry = other.m_registry;
+
   PluginManager.incrementRegistryReference(m_registry);
+
+  if (other.m_effect_instance != nullptr) {
+    ensureEffectInstance();
+  }
   return *this;
 }
 
@@ -69,8 +97,7 @@ bool RuntimeData::setEffectIndex(int effect_index)
   }
 
   if (-1 != m_loaded_effect_index) {
-    m_effect_descriptor = nullptr;
-    // free_effect_instance();
+    freeEffectInstance();
   }
 
   if (isPluginLoaded()) {
@@ -81,8 +108,7 @@ bool RuntimeData::setEffectIndex(int effect_index)
   }
 
   if (-1 != m_loaded_effect_index) {
-    m_effect_descriptor = PluginManager.getEffectDescriptor(m_registry, m_loaded_effect_index);
-    // ensure_effect_instance();
+    ensureEffectInstance();
   }
   return true;
 }
@@ -90,6 +116,11 @@ bool RuntimeData::setEffectIndex(int effect_index)
 OfxMeshEffectHandle RuntimeData::effectDescriptor() const
 {
   return m_effect_descriptor;
+}
+
+OfxMeshEffectHandle RuntimeData::effectInstance() const
+{
+  return m_effect_instance;
 }
 
 const PluginRegistry &RuntimeData::registry() const
@@ -101,8 +132,7 @@ void RuntimeData::unloadPlugin()
 {
   if (isPluginLoaded()) {
     printf("Unloading OFX plugin %s\n", m_loaded_plugin_path);
-    m_effect_descriptor = nullptr;
-    // free_effect_instance();
+    freeEffectInstance();
 
     PluginManager.releaseRegistry(m_registry);
     m_registry = nullptr;
@@ -114,6 +144,36 @@ void RuntimeData::unloadPlugin()
 inline bool RuntimeData::isPluginLoaded() const
 {
   return m_registry != nullptr;
+}
+
+void RuntimeData::ensureEffectInstance()
+{
+  if (nullptr != m_effect_instance)
+    return; // Instance already available
+
+  if (!isPluginLoaded() || m_loaded_effect_index == -1)
+    return; // Invalid effect
+
+  m_effect_descriptor = PluginManager.getEffectDescriptor(m_registry, m_loaded_effect_index);
+
+  if (m_effect_descriptor == nullptr)
+    return; // Invalid effect
+
+  auto &host = BlenderMfxHost::GetInstance();
+  if (!host.CreateInstance(m_effect_descriptor, m_effect_instance)) {
+    m_effect_instance = nullptr;
+  }
+}
+
+void RuntimeData::freeEffectInstance()
+{
+  if (nullptr != m_effect_instance) {
+    auto &host = BlenderMfxHost::GetInstance();
+    host.DestroyInstance(m_effect_instance);
+    m_effect_instance = nullptr;
+  }
+  m_effect_descriptor = nullptr;
+  m_loaded_effect_index = -1;
 }
 
 } // namespace blender::nodes::node_geo_open_mfx_cc

@@ -69,6 +69,19 @@ typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxMeshHandle);
 typedef OfxStatus (*BeforeMeshGetCbFunc)(OfxHost*, OfxMeshHandle);
 
 /**
+ * Custom callback called before allocating mesh data.
+ * This can be used to allocate the mesh on host side rather than using the default
+ * allocation mechanism of the MfxHost.
+ *
+ * Callback signature must be:
+ *   OfxStatus callback(OfxHost *host, OfxPropertySetHandle meshHandle);
+ * (type BeforeMeshAllocateCbFunc)
+ */
+#define kOfxHostPropBeforeMeshAllocateCb "OfxHostPropBeforeMeshAllocateCb"
+
+typedef OfxStatus (*BeforeMeshAllocateCbFunc)(OfxHost*, OfxMeshHandle);
+
+/**
  * Internal property on attributes that are used to store attribute requests
  */
 #define kMeshAttribRequestPropMandatory "MeshAttribRequestPropMandatory"

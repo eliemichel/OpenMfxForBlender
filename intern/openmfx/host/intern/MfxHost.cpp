@@ -46,6 +46,7 @@ MfxHost::MfxHost()
 
 	propertySuite->propSetPointer(props, kOfxHostPropBeforeMeshGetCb, 0, (void**)&BeforeMeshGetCb);
 	propertySuite->propSetPointer(props, kOfxHostPropBeforeMeshReleaseCb, 0, (void**)&BeforeMeshReleaseCb);
+	propertySuite->propSetPointer(props, kOfxHostPropBeforeMeshAllocateCb, 0, (void**)&BeforeMeshAllocateCb);
 	propertySuite->propSetPointer(props, kOfxMeshPropHostHandle, 0, (void**)this);
 }
 
@@ -312,6 +313,17 @@ OfxStatus MfxHost::BeforeMeshReleaseCb(OfxHost* ofxHost, OfxMeshHandle ofxMesh)
 	}
 	else {
 		return mfxHost->BeforeMeshRelease(ofxMesh);
+	}
+}
+
+OfxStatus MfxHost::BeforeMeshAllocateCb(OfxHost *ofxHost, OfxMeshHandle ofxMesh)
+{
+	MfxHost *mfxHost = MfxHost::FromOfxHost(ofxHost);
+	if (nullptr == mfxHost) {
+		return kOfxStatErrFatal;
+	}
+	else {
+		return mfxHost->BeforeMeshAllocate(ofxMesh);
 	}
 }
 

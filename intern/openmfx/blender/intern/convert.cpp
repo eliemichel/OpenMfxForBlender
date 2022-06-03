@@ -1,6 +1,6 @@
 /**
  * Open Mesh Effect modifier for Blender
- * Copyright (C) 2019 - 2020 Elie Michel
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,13 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "mfxConvert.h"
+#include "MFX_convert.h"
+
 #include "mfxHost.h"
 
 #include <iostream>
 #include <cstring>
 
-void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParameter *rna)
+void MFX_copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParameter *rna)
 {
   param->type = static_cast<ParamType>(rna->type);
   switch (rna->type) {
@@ -62,7 +63,7 @@ void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParameter 
   }
 }
 
-void copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxPropertyStruct *prop)
+void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxPropertyStruct *prop)
 {
   switch (rna->type) {
     case PARAM_TYPE_INTEGER_3D:
@@ -102,7 +103,7 @@ void copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxPropertyStruct 
   }
 }
 
-void copy_parameter_minmax_to_rna(int rna_type,
+void MFX_copy_parameter_minmax_to_rna(int rna_type,
                                   int & int_rna,
                                   float & float_rna,
                                   const OfxPropertyStruct *prop)
@@ -128,7 +129,7 @@ void copy_parameter_minmax_to_rna(int rna_type,
   }
 }
 
-void copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxParamHandle param)
+void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxParamHandle param)
 {
   rna->type = static_cast<int>(param->type);
   switch (rna->type) {

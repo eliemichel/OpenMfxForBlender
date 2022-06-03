@@ -23,9 +23,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "MFX_modifier.h"
-#include "mfxCallbacks.h"
-#include "mfxConvert.h"
-#include "mfxRuntime.h"
+#include "OpenMfxRuntime.h"
 
 #include "DNA_mesh_types.h"      // Mesh
 #include "DNA_meshdata_types.h"  // MVert

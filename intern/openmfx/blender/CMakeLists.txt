@@ -29,6 +29,7 @@ set(INC
   ../../../source/blender/blenlib
   ../../../source/blender/blenkernel
   ../../../source/blender/depsgraph
+  ../../../source/blender/functions
 )
 
 set(INC_SYS
@@ -41,11 +42,11 @@ set(SRC
   MFX_util.h
   intern/BlenderMfxHost.h
   intern/BlenderMfxHost.cpp
+  intern/OpenMfxRuntime.h
+  intern/OpenMfxRuntime.cpp
+  intern/MFX_convert.h
+  intern/convert.cpp
   intern/node_runtime.cpp
-  intern/mfxRuntime.h
-  intern/mfxRuntime.cpp
-  intern/mfxConvert.h
-  intern/mfxConvert.cpp
   intern/modifier.cpp
   intern/util.cpp
 )

@@ -1,6 +1,6 @@
 /**
  * OpenMfx modifier for Blender
- * Copyright (C) 2019 - 2021 Elie Michel
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include "BKE_geometry_set.hh"
+
 #include <mfxHost/MfxHost>
 
 struct Mesh;
@@ -30,6 +32,39 @@ struct Object;
 class BlenderMfxHost : public OpenMfx::MfxHost {
  public:
   static BlenderMfxHost &GetInstance();
+
+ public:
+  enum class CallbackContext {
+    Modifier,
+    Node,
+  };
+
+  /**
+   * Data shared as a blind handle from Blender GPL code to host code
+   */
+  struct MeshInternalData {
+    // Data is used either for an input or for an output
+    bool is_input;
+    // Type of internal data, because callbacks are different for
+    // the OpenMfx Modifier and the OpenMfx Geometry Node.
+    CallbackContext type;
+  };
+
+  struct MeshInternalDataModifier {
+    MeshInternalData header;
+
+    // For an input mesh, only blender_mesh is used
+    // For an output mesh, blender_mesh is set to NULL and source_mesh is set to the source mesh
+    // from which copying some flags and stuff.
+    Mesh *blender_mesh;
+    Mesh *source_mesh;
+    Object *object;
+  };
+
+  struct MeshInternalDataNode {
+    MeshInternalData header;
+    GeometrySet geo;
+  };
 
  protected:
   /**
@@ -50,9 +85,17 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
    * wireframe) - in this case, we use kOfxMeshPropConstantFaceCount instead of face count buffer.
    *
    * This function will also convert any corner color and UV attributes.
+   * Each callback has a different version depending of the context (modifier or node)
    */
   OfxStatus BeforeMeshGet(OfxMeshHandle ofxMesh) override;
 
+ private:
+  OfxStatus BeforeMeshGetModifier(OfxMeshHandle ofxMesh,
+                                  MeshInternalDataModifier &internalData);
+  OfxStatus BeforeMeshGetNode(OfxMeshHandle ofxMesh,
+                              MeshInternalDataNode &internalData);
+
+ protected:
   /**
    * @brief Convert Open Mesh Effect mesh to Blender mesh
    *
@@ -63,22 +106,28 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
    */
   OfxStatus BeforeMeshRelease(OfxMeshHandle ofxMesh) override;
 
-  private:
-  /**
-   * Data shared as a blind handle from Blender GPL code to host code
-   */
-  struct MeshInternalData {
-    // Data is used either for an input or for an output
-    bool is_input;
-    // For an input mesh, only blender_mesh is used
-    // For an output mesh, blender_mesh is set to NULL and source_mesh is set to the source mesh
-    // from which copying some flags and stuff.
-    Mesh *blender_mesh;
-    Mesh *source_mesh;
-    Object *object;
-  };
+ private:
+  OfxStatus BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
+                                      MeshInternalDataModifier &internalData);
+  OfxStatus BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
+                                  MeshInternalDataNode &internalData);
 
-  private:
+ protected:
+  /**
+   * @brief Convert Open Mesh Effect mesh to Blender mesh
+   *
+   * This function is called before allocating owned attributes, it can be used
+   * to allocate differently (in which case turn the owned flag to false).
+   */
+  OfxStatus BeforeMeshAllocate(OfxMeshHandle ofxMesh) override;
+
+ private:
+  OfxStatus BeforeMeshAllocateModifier(OfxMeshHandle ofxMesh,
+                                       MeshInternalDataModifier &internalData);
+  OfxStatus BeforeMeshAllocateNode(OfxMeshHandle ofxMesh,
+                                   MeshInternalDataNode &internalData);
+
+ private:
   static bool hasNoLooseEdge(int face_count, const char *face_data, int face_stride);
 
   /**

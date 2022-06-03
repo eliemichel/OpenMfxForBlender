@@ -1,5 +1,5 @@
 /**
- * Open Mesh Effect modifier for Blender
+ * OpenMfx modifier for Blender
  * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
  */
 
 /** \file
- * \ingroup openmesheffect
+ * \ingroup openmfx
  */
 
 #include "mfxHost.h"

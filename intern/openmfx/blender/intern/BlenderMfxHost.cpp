@@ -1,6 +1,6 @@
 /**
  * OpenMfx modifier for Blender
- * Copyright (C) 2019 - 2021 Elie Michel
+ * Copyright (C) 2019 - 2022 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,31 +54,52 @@ BlenderMfxHost &BlenderMfxHost::GetInstance()
 
 // ----------------------------------------------------------------------------
 
+#pragma region [BeforeMeshGet]
+
 OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
+{
+  MeshInternalData *internalData = nullptr;
+
+  MFX_CHECK(propertySuite->propGetPointer(
+      &ofxMesh->properties, kOfxMeshPropInternalData, 0, (void **)&internalData));
+
+  if (nullptr == internalData) {
+    printf("No internal data found\n");
+    return kOfxStatErrBadHandle;
+  }
+
+  switch (internalData->type) {
+    case CallbackContext::Modifier:
+      return BeforeMeshGetModifier(ofxMesh,
+                                   *reinterpret_cast<MeshInternalDataModifier *>(internalData));
+    case CallbackContext::Node:
+      return BeforeMeshGetNode(ofxMesh,
+                               *reinterpret_cast<MeshInternalDataNode *>(internalData));
+    default:
+      return kOfxStatErrBadHandle;
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+OfxStatus BlenderMfxHost::BeforeMeshGetModifier(OfxMeshHandle ofxMesh,
+                                                MeshInternalDataModifier &internalData)
 {
   Mesh *blender_mesh;
   int ofx_point_count, ofx_corner_count, ofx_face_count, ofx_no_loose_edge, ofx_constant_face_size;
   int blender_loop_count, blender_loose_edge_count;
-  MeshInternalData *internal_data;
 
-  MFX_CHECK(propertySuite->propGetPointer(
-      &ofxMesh->properties, kOfxMeshPropInternalData, 0, (void **)&internal_data));
+  blender_mesh = internalData.blender_mesh;
 
-  if (NULL == internal_data) {
-    printf("No internal data found\n");
-    return kOfxStatErrBadHandle;
-  }
-  blender_mesh = internal_data->blender_mesh;
-
-  if (NULL == internal_data->object) {
+  if (NULL == internalData.object) {
     // This is the way to tell the plugin that there is no object connected to the input,
     // maybe we should find something clearer.
     return kOfxStatErrBadHandle;
   }
 
-  propSetTransformMatrix(&ofxMesh->properties, internal_data->object);
+  propSetTransformMatrix(&ofxMesh->properties, internalData.object);
 
-  if (false == internal_data->is_input) {
+  if (false == internalData.header.is_input) {
     // Initialize counters to zero
     MFX_CHECK(propertySuite->propSetInt(&ofxMesh->properties, kOfxMeshPropPointCount, 0, 0));
     MFX_CHECK(propertySuite->propSetInt(&ofxMesh->properties, kOfxMeshPropCornerCount, 0, 0));
@@ -440,7 +461,6 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
     std::vector<float *> ofx_weightGroup_buffers(nbWeights);
     for (int k = 0; k < nbWeights; ++k) {
       sprintf(name, "pointWeight%d", k);
-      float *ofx_weightGroup_buffer;
       int stride;
       MFX_CHECK(
           meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribPoint, name, &pweight_attrib));
@@ -466,7 +486,47 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
 
 // ----------------------------------------------------------------------------
 
+OfxStatus BlenderMfxHost::BeforeMeshGetNode(OfxMeshHandle ofxMesh,
+                                            MeshInternalDataNode &internalData)
+{
+  return kOfxStatReplyDefault;
+}
+
+#pragma endregion [BeforeMeshGet]
+
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+#pragma region [BeforeMeshRelease]
+
 OfxStatus BlenderMfxHost::BeforeMeshRelease(OfxMeshHandle ofxMesh)
+{
+  MeshInternalData *internalData = nullptr;
+
+  MFX_CHECK(propertySuite->propGetPointer(
+      &ofxMesh->properties, kOfxMeshPropInternalData, 0, (void **)&internalData));
+
+  if (nullptr == internalData) {
+    printf("No internal data found\n");
+    return kOfxStatErrBadHandle;
+  }
+
+  switch (internalData->type) {
+    case CallbackContext::Modifier:
+      return BeforeMeshReleaseModifier(ofxMesh,
+                                       *reinterpret_cast<MeshInternalDataModifier *>(internalData));
+    case CallbackContext::Node:
+      return BeforeMeshReleaseNode(ofxMesh,
+                                   *reinterpret_cast<MeshInternalDataNode *>(internalData));
+    default:
+      return kOfxStatErrBadHandle;
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+OfxStatus BlenderMfxHost::BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
+                                                    MeshInternalDataModifier& internalData)
 {
   Mesh *source_mesh;
   Mesh *blender_mesh;
@@ -475,18 +535,12 @@ OfxStatus BlenderMfxHost::BeforeMeshRelease(OfxMeshHandle ofxMesh)
   int point_stride, corner_stride, face_stride;
   char *point_data, *corner_data, *face_data;
   OfxStatus status;
-  MeshInternalData *internal_data;
 
   propFreeTransformMatrix(&ofxMesh->properties);
-  propertySuite->propGetPointer(&ofxMesh->properties, kOfxMeshPropInternalData, 0, (void **)&internal_data);
 
-  if (NULL == internal_data) {
-    printf("No internal data found\n");
-    return kOfxStatErrBadHandle;
-  }
-  source_mesh = internal_data->source_mesh;
+  source_mesh = internalData.source_mesh;
 
-  if (true == internal_data->is_input) {
+  if (true == internalData.header.is_input) {
     printf("Input: NOT converting ofx mesh\n");
     return kOfxStatOK;
   }
@@ -686,11 +740,69 @@ OfxStatus BlenderMfxHost::BeforeMeshRelease(OfxMeshHandle ofxMesh)
     BKE_mesh_calc_edges(blender_mesh, (loose_edge_count > 0), false);
   }
 
-  internal_data->blender_mesh = blender_mesh;
+  internalData.blender_mesh = blender_mesh;
 
   return kOfxStatOK;
 }
 
+// ----------------------------------------------------------------------------
+
+OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
+                                                MeshInternalDataNode &internalData)
+{
+  return kOfxStatReplyDefault;
+}
+
+#pragma endregion [BeforeMeshRelease]
+
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+#pragma region [BeforeMeshAllocate]
+
+OfxStatus BlenderMfxHost::BeforeMeshAllocate(OfxMeshHandle ofxMesh)
+{
+  MeshInternalData *internalData = nullptr;
+
+  MFX_CHECK(propertySuite->propGetPointer(
+      &ofxMesh->properties, kOfxMeshPropInternalData, 0, (void **)&internalData));
+
+  if (nullptr == internalData) {
+    printf("No internal data found\n");
+    return kOfxStatErrBadHandle;
+  }
+
+  switch (internalData->type) {
+    case CallbackContext::Modifier:
+      return BeforeMeshAllocateModifier(ofxMesh,
+                                        *reinterpret_cast<MeshInternalDataModifier *>(internalData));
+    case CallbackContext::Node:
+      return BeforeMeshAllocateNode(ofxMesh,
+                                    *reinterpret_cast<MeshInternalDataNode *>(internalData));
+    default:
+      return kOfxStatErrBadHandle;
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+OfxStatus BlenderMfxHost::BeforeMeshAllocateModifier(OfxMeshHandle ofxMesh,
+                                                     MeshInternalDataModifier &internalData)
+{
+  return kOfxStatReplyDefault;
+}
+
+// ----------------------------------------------------------------------------
+
+OfxStatus BlenderMfxHost::BeforeMeshAllocateNode(OfxMeshHandle ofxMesh,
+                                                 MeshInternalDataNode &internalData)
+{
+  return kOfxStatReplyDefault;
+}
+
+#pragma endregion [BeforeMeshAllocate]
+
+// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
 bool BlenderMfxHost::hasNoLooseEdge(int face_count,

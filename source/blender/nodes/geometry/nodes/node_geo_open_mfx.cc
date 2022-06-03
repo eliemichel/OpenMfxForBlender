@@ -12,11 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * Copyright (c) 2022 - Elie Michel
  */
 
 #include "BLI_disjoint_set.hh"
 #include "BLI_task.hh"
 #include "BLI_vector_set.hh"
+#include "BLI_math_vec_types.hh"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -34,18 +37,55 @@
 
 #include "node_geometry_util.hh"
 
+// XXX We use an internal header of bf_intern_openmfx, either turn this to an external header or
+// get the host from node_runtime.
+#include "intern/BlenderMfxHost.h"
+
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
 
+using MeshInternalDataNode = BlenderMfxHost::MeshInternalDataNode;
+
 namespace blender::nodes::node_geo_open_mfx_cc {
 
-NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
+// -----------------------------------------
+// Utils
 
 static const char *MFX_input_label(const OfxMeshInputStruct &input)
 {
+  // This label must be unique because Blender uses the same string
+  // both for display and for identification
+  // XXX Should be return input.name().c_str() in any case then?
+  // OpenMfx does not ensure that labels are unique, but it ensures
+  // that names are, but on the other hand names are not meant for
+  // UI display and labels are unlikely to have duplicates.
   int labelIndex = input.properties.find(kOfxPropLabel);
-  return labelIndex >= 0 ? input.properties[labelIndex].value[0].as_const_char :
-                                        "Mesh";
+  return labelIndex >= 0 ? input.properties[labelIndex].value[0].as_const_char : input.name().c_str();
+}
+
+static const char *MFX_param_label(const OfxParamStruct &param)
+{
+  // Same as for MFX_input_label
+  int labelIndex = param.properties.find(kOfxPropLabel);
+  return labelIndex >= 0 ? param.properties[labelIndex].value[0].as_const_char :
+                           param.name;
+}
+
+NodeWarningType MFX_message_type(OfxMessageType messageType)
+{
+  switch (messageType) {
+    case OfxMessageType::Warning:
+    case OfxMessageType::Invalid:
+      return NodeWarningType::Warning;
+    case OfxMessageType::Error:
+    case OfxMessageType::Fatal:
+      return NodeWarningType::Error;
+    case OfxMessageType::Log:
+    case OfxMessageType::Message:
+    case OfxMessageType::Question:
+    default:
+      return NodeWarningType::Info;
+  }
 }
 
 static void MFX_node_add_geo_input(NodeDeclarationBuilder &b,
@@ -63,42 +103,43 @@ static void MFX_node_add_geo_input(NodeDeclarationBuilder &b,
 static void MFX_node_add_param_input(NodeDeclarationBuilder &b,
                                      const OfxParamStruct &param)
 {
+  const char *label = MFX_param_label(param);
   switch (param.type) {
     case PARAM_TYPE_INTEGER:
-      b.add_input<decl::Int>(param.name);
+      b.add_input<decl::Int>(label);
       break;
     case PARAM_TYPE_INTEGER_2D:
-      b.add_input<decl::Int>((std::string(param.name) + ".x").c_str());
-      b.add_input<decl::Int>((std::string(param.name) + ".y").c_str());
+      b.add_input<decl::Int>((std::string(label) + ".x").c_str());
+      b.add_input<decl::Int>((std::string(label) + ".y").c_str());
       break;
     case PARAM_TYPE_INTEGER_3D:
-      b.add_input<decl::Int>((std::string(param.name) + ".x").c_str());
-      b.add_input<decl::Int>((std::string(param.name) + ".y").c_str());
-      b.add_input<decl::Int>((std::string(param.name) + ".z").c_str());
+      b.add_input<decl::Int>((std::string(label) + ".x").c_str());
+      b.add_input<decl::Int>((std::string(label) + ".y").c_str());
+      b.add_input<decl::Int>((std::string(label) + ".z").c_str());
       break;
     case PARAM_TYPE_DOUBLE:
-      b.add_input<decl::Float>(param.name);
+      b.add_input<decl::Float>(label);
       break;
     case PARAM_TYPE_DOUBLE_2D:
-      b.add_input<decl::Vector>(param.name);
+      b.add_input<decl::Vector>(label);
       break;
     case PARAM_TYPE_DOUBLE_3D:
-      b.add_input<decl::Vector>(param.name);
+      b.add_input<decl::Vector>(label);
       break;
     case PARAM_TYPE_RGB:
-      b.add_input<decl::Color>(param.name);
+      b.add_input<decl::Color>(label);
       break;
     case PARAM_TYPE_RGBA:
-      b.add_input<decl::Color>(param.name);
+      b.add_input<decl::Color>(label);
       break;
     case PARAM_TYPE_BOOLEAN:
-      b.add_input<decl::Bool>(param.name);
+      b.add_input<decl::Bool>(label);
       break;
     case PARAM_TYPE_CHOICE:
-      b.add_input<decl::Int>(param.name);
+      b.add_input<decl::Int>(label);
       break;
     case PARAM_TYPE_STRING:
-      b.add_input<decl::String>(param.name);
+      b.add_input<decl::String>(label);
       break;
     case PARAM_TYPE_CUSTOM:
     case PARAM_TYPE_PUSH_BUTTON:
@@ -109,6 +150,81 @@ static void MFX_node_add_param_input(NodeDeclarationBuilder &b,
       break;
   }
 }
+
+static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
+{
+  const char *label = MFX_param_label(param);
+  switch (param.type) {
+    case PARAM_TYPE_INTEGER:
+    case PARAM_TYPE_CHOICE:
+      param.value[0].as_int = b.extract_input<int>(label);
+      break;
+    case PARAM_TYPE_INTEGER_2D:
+      param.value[0].as_int = b.extract_input<int>((std::string(label) + ".x").c_str());
+      param.value[1].as_int = b.extract_input<int>((std::string(label) + ".y").c_str());
+      break;
+    case PARAM_TYPE_INTEGER_3D:
+      param.value[0].as_int = b.extract_input<int>((std::string(label) + ".x").c_str());
+      param.value[1].as_int = b.extract_input<int>((std::string(label) + ".y").c_str());
+      param.value[2].as_int = b.extract_input<int>((std::string(label) + ".z").c_str());
+      break;
+    case PARAM_TYPE_DOUBLE:
+      param.value[0].as_double = b.extract_input<float>(label);
+      break;
+    case PARAM_TYPE_DOUBLE_2D: {
+      float2 value = b.extract_input<float2>(label);
+      param.value[0].as_double = value[0];
+      param.value[1].as_double = value[1];
+      break;
+    }
+    case PARAM_TYPE_DOUBLE_3D:
+    case PARAM_TYPE_RGB: {
+      float3 value = b.extract_input<float3>(label);
+      param.value[0].as_double = value[0];
+      param.value[1].as_double = value[1];
+      param.value[2].as_double = value[2];
+      break;
+    }
+    case PARAM_TYPE_RGBA: {
+      ColorGeometry4f value = b.extract_input<ColorGeometry4f>(label);
+      param.value[0].as_double = value[0];
+      param.value[1].as_double = value[1];
+      param.value[2].as_double = value[2];
+      param.value[3].as_double = value[3];
+      break;
+    }
+    case PARAM_TYPE_BOOLEAN:
+      param.value[0].as_bool = b.extract_input<bool>(label);
+      break;
+    case PARAM_TYPE_STRING:
+      param.value[0].as_const_char = b.extract_input<std::string>(label).c_str();
+      break;
+    case PARAM_TYPE_CUSTOM:
+    case PARAM_TYPE_PUSH_BUTTON:
+    case PARAM_TYPE_GROUP:
+    case PARAM_TYPE_PAGE:
+    case PARAM_TYPE_UNKNOWN:
+    default:
+      break;
+  }
+}
+
+static void MFX_node_set_message(GeoNodeExecParams &params, OfxMeshEffectHandle effect)
+{
+  if (effect->message != nullptr && effect->message[0] != '\0') {
+    NodeWarningType messageType = MFX_message_type(effect->messageType);
+    std::string message(effect->message);
+    params.error_message_add(messageType, message);
+  }
+  else {
+    params.error_message_add(NodeWarningType::Error, TIP_("Failed to cook effect"));
+  }
+}
+
+// -----------------------------------------
+// Node Callbacks
+
+NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
@@ -181,6 +297,11 @@ static void node_copy_storage(struct bNodeTree *dest_ntree,
   *dest_storage.runtime = *src_storage.runtime;
 }
 
+/**
+ * Trigger from node_update a new call to node_declare (but we do not call
+ * node_declare directly so that internal node function take care of
+ * boilerplate like updating UI etc.)
+ */
 static void force_redeclare(bNodeTree *ntree, bNode *node)
 {
   BLI_assert(node->typeinfo->declaration_is_dynamic);
@@ -221,6 +342,7 @@ static void node_update(bNodeTree *ntree, bNode *node)
   #endif
 }
 
+#pragma region [Pizza]
 static Mesh *create_pizza_mesh(const int olive_count,
                                const float radius,
                                const int base_div,
@@ -322,9 +444,65 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
       attribute_name,
       AnonymousAttributeFieldInput::Create<bool>(std::move(id), params.attribute_producer_name()));
 }
+#pragma endregion [Pizza]
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
+  const NodeGeometryOpenMfx &storage = node_storage(params.node());
+  OfxMeshEffectHandle effect = storage.runtime->effectInstance();
+
+  if (effect == nullptr) {
+    params.error_message_add(NodeWarningType::Info, TIP_("Could not load effect"));
+    params.set_default_remaining_outputs();
+    return;
+  }
+
+  auto &host = BlenderMfxHost::GetInstance();
+
+  // 1. Check if identity
+  bool isIdentity = true;
+  char *inputToPassThrough = nullptr;
+  host.IsIdentity(effect, &isIdentity, &inputToPassThrough);
+
+  if (isIdentity) {
+    const char* inputIdentifier = inputToPassThrough != nullptr ? inputToPassThrough : kOfxMeshMainInput;
+    const OfxMeshInputStruct &input = effect->inputs[inputIdentifier];
+    const OfxMeshInputStruct &output = effect->inputs[kOfxMeshMainOutput];
+    GeometrySet geometry_set = params.extract_input<GeometrySet>(MFX_input_label(input));
+    params.set_output(MFX_input_label(output), std::move(geometry_set));
+    return;
+  }
+
+  // 2. Set inputs/outputs
+  // Data that lives only for the call to the Cook action
+  std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
+  for (int i = 0; i < effect->inputs.count(); ++i) {
+    OfxMeshInputStruct &input = effect->inputs[i];
+    MeshInternalDataNode &input_data = inputInternalData[i];
+    input_data.header.is_input = input.name() != kOfxMeshMainOutput;
+    if (input_data.header.is_input) {
+      input_data.geo = params.extract_input<GeometrySet>(input.name());
+    }
+    else {
+    }
+    host.propertySuite->propSetPointer(
+        &input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+  }
+
+  // 3. Set parameters
+  for (int i = 0; i < effect->parameters.count(); ++i) {
+    const OfxParamStruct &ofxParam = effect->parameters[i];
+    MFX_node_extract_param(params, effect->parameters[i]);
+  }
+
+  // 4. Cook
+  if (!host.Cook(effect)) {
+    MFX_node_set_message(params, effect);
+    params.set_default_remaining_outputs();
+    return;
+  }
+
+  #if 0
   if (params.node().outputs.first == nullptr)
     return;
   // We first retrieve the property (olive count) and the input socket (radius)
@@ -346,6 +524,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   // We build a geometry set to wrap the mesh and set it as the output value
   params.set_output("Mesh", GeometrySet::create_with_mesh(mesh));
+  #endif
 }
 
 }  // namespace blender::nodes::node_geo_open_mfx_cc
