@@ -47,3 +47,18 @@ const PluginRegistry *MFX_get_plugin_registry(bNode *node)
   NodeGeometryOpenMfxRuntimeHandle *runtime = ((NodeGeometryOpenMfx *)(node->storage))->runtime;
   return &runtime->registry();
 }
+
+int MFX_component_size(const char *componentType)
+{
+  if (0 == strcmp(componentType, kOfxMeshAttribTypeUByte)) {
+    return sizeof(unsigned char);
+  }
+  if (0 == strcmp(componentType, kOfxMeshAttribTypeInt)) {
+    return sizeof(int);
+  }
+  if (0 == strcmp(componentType, kOfxMeshAttribTypeFloat)) {
+    return sizeof(float);
+  }
+  BLI_assert(false); // Unknown attribute type!
+  return 0;
+}

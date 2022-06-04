@@ -476,18 +476,22 @@ static void node_geo_exec(GeoNodeExecParams params)
   // 2. Set inputs/outputs
   // Data that lives only for the call to the Cook action
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
+  MeshInternalDataNode *outputIt = nullptr;
+  const char *outputLabel = nullptr;
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
     MeshInternalDataNode &inputData = inputInternalData[i];
+    const char *label = MFX_input_label(input);
     inputData.header.is_input = input.name() != kOfxMeshMainOutput;
     inputData.header.type = BlenderMfxHost::CallbackContext::Node;
     if (inputData.header.is_input) {
-      inputData.geo = params.extract_input<GeometrySet>(input.name());
+      inputData.geo = params.extract_input<GeometrySet>(label);
     }
     else {
+      outputLabel = label;
+      outputIt = &inputInternalData[i];
     }
-    host.propertySuite->propSetPointer(
-        &input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&inputData);
+    host.propertySuite->propSetPointer(&input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&inputData);
   }
 
   // 3. Set parameters
@@ -501,6 +505,10 @@ static void node_geo_exec(GeoNodeExecParams params)
     MFX_node_set_message(params, effect);
     params.set_default_remaining_outputs();
     return;
+  }
+
+  if (nullptr != outputIt) {
+    params.set_output(outputLabel, outputIt->geo);
   }
 
   #if 0

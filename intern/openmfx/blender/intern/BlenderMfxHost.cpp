@@ -21,6 +21,7 @@
  */
 
 #include "BlenderMfxHost.h"
+#include "sdk/MfxAttributeProps.h"
 
 #include "util/mfx_util.h"
 #include "ofxExtras.h"
@@ -38,6 +39,8 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
+#include "MFX_util.h"
+
 #include <cassert>
 
 #ifndef max
@@ -45,35 +48,6 @@
 #endif
 
 constexpr int MAX_ATTRIB_NAME = 32;
-
-// ----------------------------------------------------------------------------
-
-/**
- * This class is used in the beforeMeshGet callback in order to regroup what
- * happens before and after the memory allocation for a given attribute.
- * Without this, we had to organize the code as
- *   define attrib A
- *   define attrib B
- *   define attrib C
- *   allocate
- *   fill in attrib A
- *   fill in attrib B
- *   fill in attrib C
- * which was hard to maintain as a clean code. Instead, it is now:
- *   add transfer definition A
- *   add transfer definition B
- *   add transfer definition C
- *   automatically call all beforeAllocate()
- *   allocate
- *   automatically call all afterAllocate()
- */
-class AttributeTransferDefinition {
-  virtual OfxStatus beforeAllocate() { return kOfxStatOK; }
-  virtual OfxStatus afterAllocate() { return kOfxStatOK; }
-};
-
-class PointPositionTransferDefinition : public AttributeTransferDefinition {
-};
 
 // ----------------------------------------------------------------------------
 
@@ -227,6 +201,10 @@ OfxStatus BlenderMfxHost::BeforeMeshRelease(OfxMeshHandle ofxMesh)
     return kOfxStatErrBadHandle;
   }
 
+  if (true == internalData->is_input) {
+    return kOfxStatOK;
+  }
+
   switch (internalData->type) {
     case CallbackContext::Modifier:
       return BeforeMeshReleaseModifier(ofxMesh,
@@ -244,217 +222,71 @@ OfxStatus BlenderMfxHost::BeforeMeshRelease(OfxMeshHandle ofxMesh)
 OfxStatus BlenderMfxHost::BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
                                                     MeshInternalDataModifier& internalData)
 {
-  Mesh *source_mesh;
+  Mesh *sourceMesh;
   Mesh *blenderMesh;
-  int ofx_point_count, ofx_corner_count, ofx_face_count, ofx_no_loose_edge, ofx_constant_face_size;
-  int blender_poly_count, loose_edge_count, blender_loop_count;
-  int point_stride, corner_stride, face_stride;
-  char *point_data, *corner_data, *face_data;
   OfxStatus status;
+
+  ElementCounts counts;
 
   propFreeTransformMatrix(&ofxMesh->properties);
 
-  source_mesh = internalData.source_mesh;
+  sourceMesh = internalData.source_mesh;
 
-  if (true == internalData.header.is_input) {
-    printf("Input: NOT converting ofx mesh\n");
-    return kOfxStatOK;
+  status = countMeshElements(ofxMesh, counts);
+  if (kOfxStatOK != status) {
+    return status;
   }
 
-  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropPointCount, 0, &ofx_point_count));
-  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropCornerCount, 0, &ofx_corner_count));
-  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropFaceCount, 0, &ofx_face_count));
-  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropNoLooseEdge, 0, &ofx_no_loose_edge));
-  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropConstantFaceSize, 0, &ofx_constant_face_size));
-
-  if (ofx_point_count < 0 || ofx_corner_count < 0 || ofx_face_count < 0 ||
-      (ofx_no_loose_edge != 0 && ofx_no_loose_edge != 1) ||
-      (ofx_no_loose_edge == 1 && ofx_constant_face_size == 2 && ofx_face_count > 0) ||
-      (ofx_face_count > 0 && (ofx_constant_face_size < 2 && ofx_constant_face_size != -1))) {
-    printf("WARNING: Bad mesh property values\n");
-    return kOfxStatErrBadHandle;
-  }
-
-  // We need to handle stride here. While buffers from meshAlloc() are contiguous, these attributes
-  // may have been forwarded from input mesh, in which case they would be strided.
-  OfxPropertySetHandle pos_attrib, cornerpoint_attrib, facesize_attrib;
-  MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
-  MFX_CHECK(propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void **)&point_data));
-  MFX_CHECK(propertySuite->propGetInt(pos_attrib, kOfxMeshAttribPropStride, 0, &point_stride));
-  MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint, &cornerpoint_attrib));
-  MFX_CHECK(propertySuite->propGetPointer(cornerpoint_attrib, kOfxMeshAttribPropData, 0, (void **)&corner_data));
-  MFX_CHECK(propertySuite->propGetInt(cornerpoint_attrib, kOfxMeshAttribPropStride, 0, &corner_stride));
-  MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize, &facesize_attrib));
-  MFX_CHECK(propertySuite->propGetPointer(facesize_attrib, kOfxMeshAttribPropData, 0, (void **)&face_data));
-  MFX_CHECK(propertySuite->propGetInt(facesize_attrib, kOfxMeshAttribPropStride, 0, &face_stride));
+  MfxAttributeProps pointPosition, cornerPoint, faceSize;
+  pointPosition.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition);
+  cornerPoint.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint);
+  faceSize.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize);
 
   MFX_CHECK(propertySuite->propSetPointer(&ofxMesh->properties, kOfxMeshPropInternalData, 0, NULL));
 
-  if ((NULL == point_data && ofx_point_count > 0) ||
-      (NULL == corner_data && ofx_corner_count > 0) ||
-      (NULL == face_data && ofx_face_count > 0 && -1 == ofx_constant_face_size)) {
+  if ((nullptr == pointPosition.data && counts.ofxPointCount > 0) ||
+      (nullptr == cornerPoint.data && counts.ofxCornerCount > 0) ||
+      (nullptr == faceSize.data && counts.ofxFaceCount > 0 && -1 == counts.ofxConstantFaceSize)) {
     printf("WARNING: Null data pointers\n");
     return kOfxStatErrBadHandle;
   }
 
-  // Figure out geometry size on Blender side.
-  // Separate true faces (polys) and 2-corner faces (loose edges), to get proper faces/edges in
-  // Blender. This requires reinterpretation of OFX face and corner attributes, since we'll
-  // "forget" corners associated with loose edges:
-  //
-  // OFX 2-corners face (ie. edge) -> Blender edge (no loops)
-  // OFX n-corners face (ie. poly) -> Blender poly and loops
-  if (1 == ofx_no_loose_edge) {
-    loose_edge_count = 0;
-    if (ofx_constant_face_size == -1) {
-      assert(hasNoLooseEdge(ofx_face_count, face_data, face_stride));
-    }
-  }
-  else if (2 == ofx_constant_face_size) {
-    loose_edge_count = ofx_face_count;
-  }
-  else {
-    loose_edge_count = 0;
-    for (int i = 0; i < ofx_face_count; ++i) {
-      int corner_count = *attributeAt<int>(face_data, face_stride, i);
-      if (2 == corner_count) {
-        ++loose_edge_count;
-      }
-    }
-  }
-
-  blender_poly_count = ofx_face_count - loose_edge_count;
-  blender_loop_count = ofx_corner_count - 2 * loose_edge_count;
+  MFX_CHECK(computeBlenderMeshElementsCounts(faceSize, counts));
 
   printf("Allocating Blender mesh with %d verts %d edges %d loops %d polys\n",
-         ofx_point_count,
-         loose_edge_count,
-         blender_loop_count,
-         blender_poly_count);
-  if (source_mesh) {
-    blenderMesh = BKE_mesh_new_nomain_from_template(
-        source_mesh, ofx_point_count, loose_edge_count, 0, blender_loop_count, blender_poly_count);
+         counts.ofxPointCount,
+         counts.blenderLooseEdgeCount,
+         counts.blenderLoopCount,
+         counts.blenderPolygonCount);
+  if (nullptr != sourceMesh) {
+    blenderMesh = BKE_mesh_new_nomain_from_template(sourceMesh,
+                                                    counts.ofxPointCount,
+                                                    counts.blenderLooseEdgeCount,
+                                                    0,
+                                                    counts.blenderLoopCount,
+                                                    counts.blenderPolygonCount);
   }
   else {
-    printf("Warning: No source mesh\n");
-    blenderMesh = BKE_mesh_new_nomain(
-        ofx_point_count, loose_edge_count, 0, ofx_corner_count, blender_poly_count);
+    blenderMesh = BKE_mesh_new_nomain(counts.ofxPointCount,
+                                      counts.blenderLooseEdgeCount,
+                                      0,
+                                      counts.blenderLoopCount,
+                                      counts.blenderPolygonCount);
   }
-  if (NULL == blenderMesh) {
+
+  if (nullptr == blenderMesh) {
     printf("WARNING: Could not allocate Blender Mesh data\n");
     return kOfxStatErrMemory;
   }
 
-  printf("Converting ofx mesh into blender mesh...\n");
+  extractBasicAttributes(pointPosition, cornerPoint, faceSize, blenderMesh, counts);
+  extractUvAttributes(ofxMesh, blenderMesh, counts);
 
-  // copy OFX points (= Blender's vertex)
-  for (int i = 0; i < ofx_point_count; ++i) {
-    float *p = attributeAt<float>(point_data, point_stride, i);
-    copy_v3_v3(blenderMesh->mvert[i].co, p);
-  }
-
-  // copy OFX corners (= Blender's loops) + OFX faces (= Blender's faces and edges)
-  if (loose_edge_count == 0) {
-    // Corners
-    for (int i = 0; i < ofx_corner_count; ++i) {
-      blenderMesh->mloop[i].v = *attributeAt<int>(corner_data, corner_stride, i);
-    }
-
-    // Faces
-    int size = ofx_constant_face_size;
-    int current_loop = 0;
-    for (int i = 0; i < ofx_face_count; ++i) {
-      if (-1 == ofx_constant_face_size) {
-        size = *attributeAt<int>(face_data, face_stride, i);
-      }
-      blenderMesh->mpoly[i].loopstart = current_loop;
-      blenderMesh->mpoly[i].totloop = size;
-      current_loop += size;
-    }
-  }
-  else {
-    int size = ofx_constant_face_size;
-    int current_poly = 0, current_edge = 0, current_corner_ofx = 0, current_loop_blender = 0;
-
-    for (int i = 0; i < ofx_face_count; ++i) {
-      if (-1 == ofx_constant_face_size) {
-        size = *attributeAt<int>(face_data, face_stride, i);
-      }
-      if (2 == size) {
-        // make Blender edge, no loops
-        blenderMesh->medge[current_edge].v1 = *attributeAt<int>(corner_data, corner_stride, current_corner_ofx);
-        blenderMesh->medge[current_edge].v2 = *attributeAt<int>(corner_data, corner_stride, current_corner_ofx + 1);
-        blenderMesh->medge[current_edge].flag |= ME_LOOSEEDGE |
-                                                  ME_EDGEDRAW;  // see BKE_mesh_calc_edges_loose()
-
-        ++current_edge;
-        current_corner_ofx += 2;
-      }
-      else {
-        // make Blender poly and loops
-        blenderMesh->mpoly[current_poly].loopstart = current_loop_blender;
-        blenderMesh->mpoly[current_poly].totloop = size;
-
-        for (int j = 0; j < size; ++j) {
-          blenderMesh->mloop[current_loop_blender + j].v =*attributeAt<int> (corner_data, corner_stride, current_corner_ofx + j);
-        }
-
-        ++current_poly;
-        current_loop_blender += size;
-        current_corner_ofx += size;
-      }
-    }
-  }
-
-  // Get corner UVs if UVs are present in the mesh
-  // TODO: Use semantics to get UV layers back from mfx mesh
-  int uv_layers = 4;
-  char name[MAX_ATTRIB_NAME];
-  char *ofx_uv_data;
-  int ofx_uv_stride;
-  for (int k = 0; k < uv_layers; ++k) {
-    OfxPropertySetHandle uv_attrib;
-    sprintf(name, "uv%d", k);
-    printf("Look for attribute '%s'\n", name);
-    status = meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &uv_attrib);
-    if (kOfxStatOK == status) {
-      printf("Found!\n");
-      MFX_CHECK(propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void **)&ofx_uv_data));
-      MFX_CHECK(propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &ofx_uv_stride));
-
-      if (loose_edge_count > 0) {
-        // TODO implement OFX->Blender UV conversion for loose edge meshes
-        // we would need to traverse faces too, since we need to skip loose edges
-        // and they need not be at the end like in before_mesh_get()
-        printf(
-            "WARNING: mesh has loose edges, copying UVs is not currently implemented for this "
-            "case!\n");
-        continue;
-      }
-
-      // Get UV data pointer in mesh.
-      // elie: The next line does not work idk why, hence the next three lines.
-      // MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blenderMesh->ldata, CD_MLOOPUV,
-      // CD_CALLOC, NULL, ofx_corner_count, name);
-      char uvname[MAX_CUSTOMDATA_LAYER_NAME];
-      CustomData_validate_layer_name(&blenderMesh->ldata, CD_MLOOPUV, name, uvname);
-      MLoopUV *uv_data = (MLoopUV *)CustomData_duplicate_referenced_layer_named(
-          &blenderMesh->ldata, CD_MLOOPUV, uvname, ofx_corner_count);
-
-      for (int i = 0; i < ofx_corner_count; ++i) {
-        float *uv = attributeAt<float>(ofx_uv_data, ofx_uv_stride, i);
-        uv_data[i].uv[0] = uv[0];
-        uv_data[i].uv[1] = uv[1];
-      }
-      blenderMesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
-      blenderMesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
-    }
-  }
-
-  if (blender_poly_count > 0) {
+  if (counts.blenderPolygonCount > 0) {
     // if we're here, this dominates before_mesh_get()/before_mesh_release() total running time!
-    BKE_mesh_calc_edges(blenderMesh, (loose_edge_count > 0), false);
+    BKE_mesh_calc_edges(blenderMesh, counts.blenderLooseEdgeCount > 0, false);
   }
+  BLI_assert(BKE_mesh_is_valid(blenderMesh));
 
   internalData.blender_mesh = blenderMesh;
 
@@ -466,7 +298,61 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
 OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
                                                 MeshInternalDataNode &internalData)
 {
-  return kOfxStatReplyDefault;
+  Mesh *blenderMesh = nullptr;
+  OfxStatus status;
+
+  ElementCounts counts;
+  status = countMeshElements(ofxMesh, counts);
+  if (kOfxStatOK != status) {
+    return status;
+  }
+
+  MfxAttributeProps pointPosition, cornerPoint, faceSize;
+  pointPosition.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition);
+  cornerPoint.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint);
+  faceSize.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize);
+
+  MFX_CHECK(
+      propertySuite->propSetPointer(&ofxMesh->properties, kOfxMeshPropInternalData, 0, NULL));
+
+  if ((nullptr == pointPosition.data && counts.ofxPointCount > 0) ||
+      (nullptr == cornerPoint.data && counts.ofxCornerCount > 0) ||
+      (nullptr == faceSize.data && counts.ofxFaceCount > 0 && -1 == counts.ofxConstantFaceSize)) {
+    printf("WARNING: Null data pointers\n");
+    return kOfxStatErrBadHandle;
+  }
+
+  MFX_CHECK(computeBlenderMeshElementsCounts(faceSize, counts));
+
+  printf("Allocating Blender mesh with %d verts %d edges %d loops %d polys\n",
+         counts.ofxPointCount,
+         counts.blenderLooseEdgeCount,
+         counts.blenderLoopCount,
+         counts.blenderPolygonCount);
+
+  blenderMesh = BKE_mesh_new_nomain(counts.ofxPointCount,
+                                    counts.blenderLooseEdgeCount,
+                                    0,
+                                    counts.blenderLoopCount,
+                                    counts.blenderPolygonCount);
+
+  if (nullptr == blenderMesh) {
+    printf("WARNING: Could not allocate Blender Mesh data\n");
+    return kOfxStatErrMemory;
+  }
+
+  extractBasicAttributes(pointPosition, cornerPoint, faceSize, blenderMesh, counts);
+  extractUvAttributes(ofxMesh, blenderMesh, counts);
+
+  if (counts.blenderPolygonCount > 0) {
+    // if we're here, this dominates before_mesh_get()/before_mesh_release() total running time!
+    BKE_mesh_calc_edges(blenderMesh, counts.blenderLooseEdgeCount > 0, false);
+  }
+  BLI_assert(BKE_mesh_is_valid(blenderMesh));
+
+  internalData.geo = GeometrySet::create_with_mesh(blenderMesh);
+
+  return kOfxStatOK;
 }
 
 #pragma endregion [BeforeMeshRelease]
@@ -525,12 +411,10 @@ OfxStatus BlenderMfxHost::BeforeMeshAllocateNode(OfxMeshHandle ofxMesh,
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-bool BlenderMfxHost::hasNoLooseEdge(int face_count,
-                                    const char *face_data,
-                                    int face_stride)
+bool BlenderMfxHost::hasNoLooseEdge(int face_count, const MfxAttributeProps &faceSize)
 {
   for (int i = 0; i < face_count; ++i) {
-    int corner_count = *attributeAt<int>(face_data, face_stride, i);
+    int corner_count = *faceSize.at<int>(i);
     if (2 == corner_count) {
       return false;
     }
@@ -564,7 +448,7 @@ void BlenderMfxHost::propFreeTransformMatrix(OfxPropertySetHandle properties) co
 
 void BlenderMfxHost::countMeshElements(const Mesh *blenderMesh, ElementCounts &counts)
 {
-  int blenderPolyCount, blenderPointCount;
+  int blenderPointCount;
 
   // count input geometry on blender side
   blenderPointCount = blenderMesh->totvert;
@@ -573,7 +457,7 @@ void BlenderMfxHost::countMeshElements(const Mesh *blenderMesh, ElementCounts &c
     int after_last_loop = blenderMesh->mpoly[i].loopstart + blenderMesh->mpoly[i].totloop;
     counts.blenderLoopCount = max(counts.blenderLoopCount, after_last_loop);
   }
-  blenderPolyCount = blenderMesh->totpoly;
+  counts.blenderPolygonCount = blenderMesh->totpoly;
   counts.blenderLooseEdgeCount = 0;
   for (int i = 0; i < blenderMesh->totedge; ++i) {
     if (blenderMesh->medge[i].flag & ME_LOOSEEDGE)
@@ -583,9 +467,10 @@ void BlenderMfxHost::countMeshElements(const Mesh *blenderMesh, ElementCounts &c
   // figure out input geometry size on OFX side
   counts.ofxPointCount = blenderPointCount;
   counts.ofxCornerCount = counts.blenderLoopCount;
-  counts.ofxFaceCount = blenderPolyCount;
+  counts.ofxFaceCount = counts.blenderPolygonCount;
   counts.ofxNoLooseEdge = (counts.blenderLooseEdgeCount > 0) ? 0 : 1;
-  counts.ofxConstantFaceSize = (counts.blenderLooseEdgeCount > 0 && blenderPolyCount == 0) ? 2 : -1;
+  counts.ofxConstantFaceSize = (counts.blenderLooseEdgeCount > 0 &&
+                                counts.blenderPolygonCount == 0) ? 2 : -1;
 
   if (counts.blenderLooseEdgeCount > 0) {
     // turn blender loose edges into 2-corner faces
@@ -593,6 +478,63 @@ void BlenderMfxHost::countMeshElements(const Mesh *blenderMesh, ElementCounts &c
     counts.ofxFaceCount += counts.blenderLooseEdgeCount;
     printf("Blender mesh has %d loose edges\n", counts.blenderLooseEdgeCount);
   }
+}
+
+OfxStatus BlenderMfxHost::countMeshElements(OfxMeshHandle ofxMesh, ElementCounts &counts) const
+{
+  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropPointCount, 0, &counts.ofxPointCount));
+  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropCornerCount, 0, &counts.ofxCornerCount));
+  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropFaceCount, 0, &counts.ofxFaceCount));
+  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropNoLooseEdge, 0, &counts.ofxNoLooseEdge));
+  MFX_CHECK(propertySuite->propGetInt(&ofxMesh->properties, kOfxMeshPropConstantFaceSize, 0, &counts.ofxConstantFaceSize));
+
+  if (
+      counts.ofxPointCount < 0 ||
+      counts.ofxCornerCount < 0 ||
+      counts.ofxFaceCount < 0 ||
+      (counts.ofxNoLooseEdge != 0 && counts.ofxNoLooseEdge != 1) ||
+      (counts.ofxNoLooseEdge == 1 && counts.ofxConstantFaceSize == 2 && counts.ofxFaceCount > 0) ||
+      (counts.ofxFaceCount > 0 && counts.ofxConstantFaceSize < 2 && counts.ofxConstantFaceSize != -1)
+  ) {
+    printf("WARNING: Bad mesh property values\n");
+    return kOfxStatErrBadHandle;
+  }
+  return kOfxStatOK;
+}
+
+OfxStatus BlenderMfxHost::computeBlenderMeshElementsCounts(const MfxAttributeProps &faceSize,
+                                                           ElementCounts &counts) const
+{
+  // Figure out geometry size on Blender side.
+  // Separate true faces (polys) and 2-corner faces (loose edges), to get proper faces/edges in
+  // Blender. This requires reinterpretation of OFX face and corner attributes, since we'll
+  // "forget" corners associated with loose edges:
+  //
+  // OFX 2-corners face (ie. edge) -> Blender edge (no loops)
+  // OFX n-corners face (ie. poly) -> Blender poly and loops
+  if (1 == counts.ofxNoLooseEdge) {
+    counts.blenderLooseEdgeCount = 0;
+    if (counts.ofxConstantFaceSize == -1) {
+      BLI_assert(hasNoLooseEdge(counts.ofxFaceCount, faceSize));
+    }
+  }
+  else if (2 == counts.ofxConstantFaceSize) {
+    counts.blenderLooseEdgeCount = counts.ofxFaceCount;
+  }
+  else {
+    counts.blenderLooseEdgeCount = 0;
+    for (int i = 0; i < counts.ofxFaceCount; ++i) {
+      int corner_count = *faceSize.at<int>(i);
+      if (2 == corner_count) {
+        ++counts.blenderLooseEdgeCount;
+      }
+    }
+  }
+
+  
+  counts.blenderPolygonCount = counts.ofxFaceCount - counts.blenderLooseEdgeCount;
+  counts.blenderLoopCount = counts.ofxCornerCount - 2 * counts.blenderLooseEdgeCount;
+  return kOfxStatOK;
 }
 
 OfxStatus BlenderMfxHost::setupElementCounts(OfxPropertySetHandle properties,
@@ -778,14 +720,22 @@ OfxStatus BlenderMfxHost::setupCornerColorAttributes(OfxMeshHandle ofxMesh,
                                                      const ElementCounts &counts,
                                                      CallbackList &afterAllocate) const
 {
-  int vcolor_layers = CustomData_number_of_layers(&blenderMesh->ldata, CD_MLOOPCOL);
+  int layerCount = CustomData_number_of_layers(&blenderMesh->ldata, CD_MLOOPCOL);
   char name[MAX_ATTRIB_NAME];
-  for (int k = 0; k < vcolor_layers; ++k) {
+  for (int k = 0; k < layerCount; ++k) {
     sprintf(name, "%s%d", prefix, k);
 
-    MLoopCol *vcolor_data = (MLoopCol *)CustomData_get_layer_n(&blenderMesh->ldata, CD_MLOOPCOL, k);
-    if (nullptr != vcolor_data) {
-      setupCornerColorAttribute(ofxMesh, name, vcolor_data, counts, afterAllocate);
+    MLoopCol *vcolorData = (MLoopCol *)CustomData_get_layer_n(&blenderMesh->ldata, CD_MLOOPCOL, k);
+    if (nullptr != vcolorData) {
+      setupCornerAttribute(ofxMesh,
+                           name,
+                           3,
+                           kOfxMeshAttribTypeUByte,
+                           kOfxMeshAttribSemanticColor,
+                           (char *)&vcolorData[0].r,
+                           sizeof(MLoopCol),
+                           counts,
+                           afterAllocate);
     }
   }
 
@@ -798,14 +748,22 @@ OfxStatus BlenderMfxHost::setupCornerUvAttributes(OfxMeshHandle ofxMesh,
                                                   const ElementCounts &counts,
                                                   CallbackList &afterAllocate) const
 {
-  int uv_layers = CustomData_number_of_layers(&blenderMesh->ldata, CD_MLOOPUV);
+  int layerCount = CustomData_number_of_layers(&blenderMesh->ldata, CD_MLOOPUV);
   char name[MAX_ATTRIB_NAME];
-  for (int k = 0; k < uv_layers; ++k) {
+  for (int k = 0; k < layerCount; ++k) {
     sprintf(name, "%s%d", prefix, k);
 
-    MLoopUV *uv_data = (MLoopUV *)CustomData_get_layer_n(&blenderMesh->ldata, CD_MLOOPUV, k);
-    if (nullptr != uv_data) {
-      setupCornerUvAttribute(ofxMesh, name, uv_data, counts, afterAllocate);
+    MLoopUV *uvData = (MLoopUV *)CustomData_get_layer_n(&blenderMesh->ldata, CD_MLOOPUV, k);
+    if (nullptr != uvData) {
+      setupCornerAttribute(ofxMesh,
+                           name,
+                           2,
+                           kOfxMeshAttribTypeFloat,
+                           kOfxMeshAttribSemanticTextureCoordinate,
+                           (char *)&uvData[0].uv[0],
+                           sizeof(MLoopUV),
+                           counts,
+                           afterAllocate);
     }
   }
 
@@ -833,133 +791,60 @@ OfxStatus BlenderMfxHost::setupFaceMapAttributes(OfxMeshHandle ofxMesh,
   return kOfxStatOK;
 }
 
-OfxStatus BlenderMfxHost::setupCornerColorAttribute(OfxMeshHandle ofxMesh,
-                                                    const char* name,
-                                                    const MLoopCol *blenderData,
-                                                    const ElementCounts &counts,
-                                                    CallbackList &afterAllocate) const
+OfxStatus BlenderMfxHost::setupCornerAttribute(OfxMeshHandle ofxMesh,
+                                               const char *name,
+                                               int componentCount,
+                                               const char *componentType,
+                                               const char *semantic,
+                                               char *blenderLoopData,
+                                               size_t blenderLoopStride,
+                                               const ElementCounts &counts,
+                                               CallbackList &afterAllocate) const
 {
+  if (counts.ofxCornerCount == 0)
+    return kOfxStatOK;
+
   OfxPropertySetHandle attrib;
+  MFX_CHECK(meshEffectSuite->attributeDefine(
+      ofxMesh, kOfxMeshAttribCorner, name, componentCount, componentType, semantic, &attrib));
 
   if (counts.ofxNoLooseEdge) {
     // reuse host buffer, kOfxMeshPropNoLooseEdge optimization
-    MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
-                                               kOfxMeshAttribCorner,
-                                               name,
-                                               3,
-                                               kOfxMeshAttribTypeUByte,
-                                               kOfxMeshAttribSemanticColor,
-                                               &attrib));
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 0));
-    MFX_CHECK(propertySuite->propSetPointer(attrib, kOfxMeshAttribPropData, 0, (void *)&blenderData[0].r));
-    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopCol)));
+    MFX_CHECK(propertySuite->propSetPointer(attrib, kOfxMeshAttribPropData, 0, (void*)blenderLoopData));
+    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropStride, 0, blenderLoopStride));
   }
   else if (counts.blenderLoopCount > 0) {
     // request new buffer to copy data from existing polys, fill default values for edges
-    MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
-                                               kOfxMeshAttribCorner,
-                                               name,
-                                               3,
-                                               kOfxMeshAttribTypeUByte,
-                                               kOfxMeshAttribSemanticColor,
-                                               &attrib));
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
     afterAllocate.push_back([&]() {
-        unsigned char *data = nullptr;
-        MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
-
-# ifndef NDEBUG
-        int stride;
-        MFX_CHECK(propertySuite->propGetInt(attrib, kOfxMeshAttribPropStride, 0, &stride));
-        assert(stride == 3 * sizeof(unsigned char));
-# endif // NDEBUG
-
-        for (int i = 0; i < counts.ofxCornerCount; i++) {
-          if (i < counts.blenderLoopCount) {
-            data[3 * i + 0] = blenderData[i].r;
-            data[3 * i + 1] = blenderData[i].g;
-            data[3 * i + 2] = blenderData[i].b;
-          }
-          else {
-            data[3 * i + 0] = 0;
-            data[3 * i + 1] = 0;
-            data[3 * i + 2] = 0;
-          }
-        }
-    });
-  }
-  else {
-    // we have just loose edges, no data to copy
-    printf("WARNING: I want to copy corner colors but there are no corners\n");
-  }
-
-  return kOfxStatOK;
-}
-
-OfxStatus BlenderMfxHost::setupCornerUvAttribute(OfxMeshHandle ofxMesh,
-                                                 const char *name,
-                                                 const MLoopUV *blenderData,
-                                                 const ElementCounts &counts,
-                                                 CallbackList &afterAllocate) const
-{
-  OfxPropertySetHandle attrib;
-
-  if (counts.ofxNoLooseEdge) {
-    // reuse host buffer, kOfxMeshPropNoLooseEdge optimization
-    MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
-                                               kOfxMeshAttribCorner,
-                                               name,
-                                               2,
-                                               kOfxMeshAttribTypeFloat,
-                                               kOfxMeshAttribSemanticTextureCoordinate,
-                                               &attrib));
-    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 0));
-    MFX_CHECK(propertySuite->propSetPointer(attrib, kOfxMeshAttribPropData, 0, (void *)&blenderData[0].uv[0]));
-    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopUV)));
-  }
-  else if (counts.blenderLoopCount > 0) {
-    // request new buffer to copy data from existing polys, fill default values for edges
-    MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
-                                               kOfxMeshAttribCorner,
-                                               name,
-                                               2,
-                                               kOfxMeshAttribTypeFloat,
-                                               kOfxMeshAttribSemanticTextureCoordinate,
-                                               &attrib));
-    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-    afterAllocate.push_back([&]() {
-      float *data = nullptr;
+      char *data = nullptr;
       MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
 
-#ifndef NDEBUG
       int stride;
       MFX_CHECK(propertySuite->propGetInt(attrib, kOfxMeshAttribPropStride, 0, &stride));
-      assert(stride == 2 * sizeof(float));
-#endif  // NDEBUG
 
+      int elementSize = componentCount * MFX_component_size(componentType);
       for (int i = 0; i < counts.ofxCornerCount; i++) {
+        char *element = data + i * (size_t)stride;
         if (i < counts.blenderLoopCount) {
-          copy_v2_v2(&data[2 * i], blenderData[i].uv);
+          memcpy(element, blenderLoopData + i * blenderLoopStride, elementSize);
         }
         else {
-          zero_v2(&data[2 * i]);
+          memset(element, 0, elementSize);
         }
       }
     });
-  }
-  else {
-    // we have just loose edges, no data to copy
-    printf("WARNING: I want to copy UV but there are no corners\n");
   }
 
   return kOfxStatOK;
 }
 
 OfxStatus BlenderMfxHost::setupFaceMapAttribute(OfxMeshHandle ofxMesh,
-                                const char *name,
-                                const MIntProperty *blenderData,
-                                const ElementCounts &counts,
-                                CallbackList &afterAllocate) const
+                                                const char *name,
+                                                const MIntProperty *blenderData,
+                                                const ElementCounts &counts,
+                                                CallbackList &afterAllocate) const
 {
   OfxPropertySetHandle attrib;
 
@@ -1009,6 +894,131 @@ OfxStatus BlenderMfxHost::setupFaceMapAttribute(OfxMeshHandle ofxMesh,
   else {
     // we have just loose edges, no data to copy
     printf("WARNING: I want to copy faceMaps but there are no faces\n");
+  }
+
+  return kOfxStatOK;
+}
+
+OfxStatus BlenderMfxHost::extractBasicAttributes(const MfxAttributeProps &pointPosition,
+                                                 const MfxAttributeProps &cornerPoint,
+                                                 const MfxAttributeProps &faceSize,
+                                                 Mesh *blenderMesh,
+                                                 const ElementCounts &counts) const
+{
+
+  // copy OFX points (= Blender's vertex)
+  for (int i = 0; i < counts.ofxPointCount; ++i) {
+    const float *p = pointPosition.at<float>(i);
+    copy_v3_v3(blenderMesh->mvert[i].co, p);
+  }
+
+  // copy OFX corners (= Blender's loops) + OFX faces (= Blender's faces and edges)
+  if (counts.blenderLooseEdgeCount == 0) {
+    // Corners
+    for (int i = 0; i < counts.ofxCornerCount; ++i) {
+      blenderMesh->mloop[i].v = *cornerPoint.at<int>(i);
+    }
+
+    // Faces
+    int size = counts.ofxConstantFaceSize;
+    int current_loop = 0;
+    for (int i = 0; i < counts.ofxFaceCount; ++i) {
+      if (-1 == counts.ofxConstantFaceSize) {
+        size = *faceSize.at<int>(i);
+      }
+      blenderMesh->mpoly[i].loopstart = current_loop;
+      blenderMesh->mpoly[i].totloop = size;
+      current_loop += size;
+    }
+  }
+  else {
+    int size = counts.ofxConstantFaceSize;
+    int current_poly = 0, current_edge = 0, current_corner_ofx = 0, current_loop_blender = 0;
+
+    for (int i = 0; i < counts.ofxFaceCount; ++i) {
+      if (-1 == counts.ofxConstantFaceSize) {
+        size = *faceSize.at<int>(i);
+      }
+      if (2 == size) {
+        // make Blender edge, no loops
+        blenderMesh->medge[current_edge].v1 = *cornerPoint.at<int>(current_corner_ofx);
+        blenderMesh->medge[current_edge].v2 = *cornerPoint.at<int>(current_corner_ofx + 1);
+        blenderMesh->medge[current_edge].flag |= ME_LOOSEEDGE |
+                                                 ME_EDGEDRAW;  // see BKE_mesh_calc_edges_loose()
+
+        ++current_edge;
+        current_corner_ofx += 2;
+      }
+      else {
+        // make Blender poly and loops
+        blenderMesh->mpoly[current_poly].loopstart = current_loop_blender;
+        blenderMesh->mpoly[current_poly].totloop = size;
+
+        for (int j = 0; j < size; ++j) {
+          blenderMesh->mloop[current_loop_blender + j].v = *cornerPoint.at<int>(
+              current_corner_ofx + j);
+        }
+
+        ++current_poly;
+        current_loop_blender += size;
+        current_corner_ofx += size;
+      }
+    }
+  }
+
+  return kOfxStatOK;
+}
+
+OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
+                                              Mesh *blenderMesh,
+                                              const ElementCounts &counts) const
+{
+    OfxStatus status;
+
+  // Get corner UVs if UVs are present in the mesh
+  // TODO: Use semantics to get UV layers back from mfx mesh
+  int uv_layers = 4;
+  char name[MAX_ATTRIB_NAME];
+  char *ofx_uv_data;
+  int ofx_uv_stride;
+  for (int k = 0; k < uv_layers; ++k) {
+    OfxPropertySetHandle uv_attrib;
+    sprintf(name, "uv%d", k);
+    printf("Look for attribute '%s'\n", name);
+    status = meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &uv_attrib);
+    if (kOfxStatOK == status) {
+      printf("Found!\n");
+      MFX_CHECK(propertySuite->propGetPointer(
+          uv_attrib, kOfxMeshAttribPropData, 0, (void **)&ofx_uv_data));
+      MFX_CHECK(propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &ofx_uv_stride));
+
+      if (counts.blenderLooseEdgeCount > 0) {
+        // TODO implement OFX->Blender UV conversion for loose edge meshes
+        // we would need to traverse faces too, since we need to skip loose edges
+        // and they need not be at the end like in before_mesh_get()
+        printf(
+            "WARNING: mesh has loose edges, copying UVs is not currently implemented for this "
+            "case!\n");
+        continue;
+      }
+
+      // Get UV data pointer in mesh.
+      // elie: The next line does not work idk why, hence the next three lines.
+      // MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blenderMesh->ldata, CD_MLOOPUV,
+      // CD_CALLOC, NULL, ofx_corner_count, name);
+      char uvname[MAX_CUSTOMDATA_LAYER_NAME];
+      CustomData_validate_layer_name(&blenderMesh->ldata, CD_MLOOPUV, name, uvname);
+      MLoopUV *uv_data = (MLoopUV *)CustomData_duplicate_referenced_layer_named(
+          &blenderMesh->ldata, CD_MLOOPUV, uvname, counts.ofxCornerCount);
+
+      for (int i = 0; i < counts.ofxCornerCount; ++i) {
+        float *uv = attributeAt<float>(ofx_uv_data, ofx_uv_stride, i);
+        uv_data[i].uv[0] = uv[0];
+        uv_data[i].uv[1] = uv[1];
+      }
+      blenderMesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
+      blenderMesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
+    }
   }
 
   return kOfxStatOK;

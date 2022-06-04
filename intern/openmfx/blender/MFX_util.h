@@ -39,6 +39,8 @@ void MFX_normalize_plugin_path(char *dest_path, const char *src_path);
 
 const PluginRegistry *MFX_get_plugin_registry(bNode *node);
 
+int MFX_component_size(const char *componentType);
+
 #ifdef __cplusplus
 }
 #endif

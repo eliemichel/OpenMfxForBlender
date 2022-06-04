@@ -40,6 +40,7 @@ set(SRC
   MFX_modifier.h
   MFX_node_runtime.h
   MFX_util.h
+  
   intern/BlenderMfxHost.h
   intern/BlenderMfxHost.cpp
   intern/OpenMfxRuntime.h
@@ -49,6 +50,9 @@ set(SRC
   intern/node_runtime.cpp
   intern/modifier.cpp
   intern/util.cpp
+
+  intern/sdk/MfxAttributeProps.h
+  intern/sdk/MfxAttributeProps.cpp
 )
 
 set(LIB

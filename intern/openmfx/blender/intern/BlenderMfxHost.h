@@ -29,6 +29,7 @@
 #include <functional>
 #include <vector>
 
+struct MfxAttributeProps;
 struct Mesh;
 struct Object;
 struct MLoopCol;
@@ -144,9 +145,10 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
     int ofxConstantFaceSize = -1;
     int blenderLoopCount = 0;
     int blenderLooseEdgeCount = 0;
+    int blenderPolygonCount = 0;
   };
 
-  static bool hasNoLooseEdge(int face_count, const char *face_data, int face_stride);
+  static bool hasNoLooseEdge(int face_count, const MfxAttributeProps &faceSize);
 
   /**
    * Copy the model to world matrix from the blender object to target mesh properties.
@@ -167,6 +169,19 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
    * (it's static because it does not use the suites)
    */
   static void countMeshElements(const Mesh *blenderMesh, ElementCounts &counts);
+
+  /**
+   * Get the number of point/corner/face from an ofx mesh, as well as loose edge
+   * and constant face size flags.
+   */
+  OfxStatus countMeshElements(OfxMeshHandle ofxMesh, ElementCounts &counts) const;
+
+  /**
+   * Given the connectivity attributes, compute the numbers of verts/loops/polys
+   * for the new Blender mesh
+   */
+  OfxStatus computeBlenderMeshElementsCounts(const MfxAttributeProps &faceSize,
+                                             ElementCounts &counts) const;
 
   /**
    * Initialize mesh properties for an empty mesh
@@ -236,24 +251,19 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
                                    CallbackList &afterAllocate) const;
 
   /**
-   * Set the data pointer and stride for a corner color attribute
-   * @param blenderData must not be null
+   * Setup an ofx corner attribute from a blender loop attribute.
+   * If the is no loose edge, directly point to blender buffers,
+   * otherwise copy to a new buffer and set the value to 0 for loose edges.
    */
-  OfxStatus setupCornerColorAttribute(OfxMeshHandle ofxMesh,
-                                      const char *name,
-                                      const MLoopCol *blenderData,
-                                      const ElementCounts &counts,
-                                      CallbackList &afterAllocate) const;
-
-  /**
-   * Set the data pointer and stride for a corner UV attribute
-   * @param blenderData must not be null
-   */
-  OfxStatus setupCornerUvAttribute(OfxMeshHandle ofxMesh,
-                                   const char *name,
-                                   const MLoopUV *blenderData,
-                                   const ElementCounts &counts,
-                                   CallbackList &afterAllocate) const;
+  OfxStatus setupCornerAttribute(OfxMeshHandle ofxMesh,
+                                 const char *name,
+                                 int componentCount,
+                                 const char *componentType,
+                                 const char *semantic,
+                                 char *blenderLoopData,
+                                 size_t blenderLoopStride,
+                                 const ElementCounts &counts,
+                                 CallbackList &afterAllocate) const;
 
   /**
    * Set the data pointer and stride for a face map attribute
@@ -264,6 +274,22 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
                                   const MIntProperty *blenderData,
                                   const ElementCounts &counts,
                                   CallbackList &afterAllocate) const;
+
+  /**
+   * Extract from ofx mesh the basic attributes (point position, corner point, face size)
+   */
+  OfxStatus extractBasicAttributes(const MfxAttributeProps &pointPosition,
+                                   const MfxAttributeProps &cornerPoint,
+                                   const MfxAttributeProps &faceSize,
+                                   Mesh *blenderMesh,
+                                   const ElementCounts &counts) const;
+
+  /**
+   * Extract all UV attributes from ofx mesh to blender mesh
+   */
+  OfxStatus extractUvAttributes(OfxMeshHandle ofxMesh,
+                                Mesh *blenderMesh,
+                                const ElementCounts &counts) const;
 
  private:
   // Avoid calling before allocate callback from within the before mesh get one
