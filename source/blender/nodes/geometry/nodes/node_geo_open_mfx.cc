@@ -478,15 +478,16 @@ static void node_geo_exec(GeoNodeExecParams params)
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
-    MeshInternalDataNode &input_data = inputInternalData[i];
-    input_data.header.is_input = input.name() != kOfxMeshMainOutput;
-    if (input_data.header.is_input) {
-      input_data.geo = params.extract_input<GeometrySet>(input.name());
+    MeshInternalDataNode &inputData = inputInternalData[i];
+    inputData.header.is_input = input.name() != kOfxMeshMainOutput;
+    inputData.header.type = BlenderMfxHost::CallbackContext::Node;
+    if (inputData.header.is_input) {
+      inputData.geo = params.extract_input<GeometrySet>(input.name());
     }
     else {
     }
     host.propertySuite->propSetPointer(
-        &input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+        &input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&inputData);
   }
 
   // 3. Set parameters

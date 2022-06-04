@@ -246,6 +246,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   MeshInternalDataModifier input_data;  // must remain in scope
   if (NULL != input) {
     input_data.header.is_input = true;
+    input_data.header.type = BlenderMfxHost::CallbackContext::Modifier;
     input_data.blender_mesh = mesh;
     input_data.source_mesh = NULL;
     input_data.object = object;
@@ -270,6 +271,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
       mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object_eval, false);
     }
     extra_input_data[i].header.is_input = true;
+    extra_input_data[i].header.type = BlenderMfxHost::CallbackContext::Modifier;
     extra_input_data[i].blender_mesh = mesh;
     extra_input_data[i].source_mesh = NULL;
     extra_input_data[i].object = object;
@@ -281,6 +283,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   // Set output mesh data binding, used by before/after callbacks
   MeshInternalDataModifier output_data;
   output_data.header.is_input = false;
+  output_data.header.type = BlenderMfxHost::CallbackContext::Modifier;
   output_data.blender_mesh = NULL;
   output_data.source_mesh = mesh;
   output_data.object = object;

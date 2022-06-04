@@ -205,7 +205,7 @@ OfxStatus BlenderMfxHost::BeforeMeshGetNode(OfxMeshHandle ofxMesh,
     callback();
   }
 
-  return kOfxStatReplyDefault;
+  return kOfxStatOK;
 }
 
 #pragma endregion [BeforeMeshGet]
@@ -726,6 +726,10 @@ OfxStatus BlenderMfxHost::setupPointWeightAttributes(OfxMeshHandle ofxMesh,
         weightGroupsCount = max(weightGroupsCount, groupIndex + 1);
       }
     }
+  }
+
+  if (weightGroupsCount == 0) {
+    return kOfxStatOK;
   }
 
   std::vector<OfxPropertySetHandle> attribs(weightGroupsCount);
