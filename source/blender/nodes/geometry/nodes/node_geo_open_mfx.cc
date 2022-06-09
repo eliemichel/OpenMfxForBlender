@@ -478,6 +478,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
   MeshInternalDataNode *outputIt = nullptr;
   const char *outputLabel = nullptr;
+  bool doCook = true;
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
     MeshInternalDataNode &inputData = inputInternalData[i];
@@ -486,6 +487,7 @@ static void node_geo_exec(GeoNodeExecParams params)
     inputData.header.type = BlenderMfxHost::CallbackContext::Node;
     if (inputData.header.is_input) {
       inputData.geo = params.extract_input<GeometrySet>(label);
+      doCook = doCook && inputData.geo.has_mesh();
     }
     else {
       outputLabel = label;
@@ -501,7 +503,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 4. Cook
-  if (!host.Cook(effect)) {
+  if (doCook && !host.Cook(effect)) {
     MFX_node_set_message(params, effect);
     params.set_default_remaining_outputs();
     return;
