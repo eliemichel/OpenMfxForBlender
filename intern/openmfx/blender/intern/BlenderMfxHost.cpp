@@ -286,7 +286,10 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
     // if we're here, this dominates before_mesh_get()/before_mesh_release() total running time!
     BKE_mesh_calc_edges(blenderMesh, counts.blenderLooseEdgeCount > 0, false);
   }
-  BLI_assert(BKE_mesh_is_valid(blenderMesh));
+  
+  if (BKE_mesh_validate(blenderMesh, true, true)) {
+    printf("Warning: Mesh returned by the OpenMfx plugin had to be fixed.\n");
+  }
 
   internalData.blender_mesh = blenderMesh;
 
@@ -348,7 +351,10 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
     // if we're here, this dominates before_mesh_get()/before_mesh_release() total running time!
     BKE_mesh_calc_edges(blenderMesh, counts.blenderLooseEdgeCount > 0, false);
   }
-  BLI_assert(BKE_mesh_is_valid(blenderMesh));
+  
+  if (BKE_mesh_validate(blenderMesh, true, true)) {
+    printf("Warning: Mesh returned by the OpenMfx plugin had to be fixed.\n");
+  }
 
   internalData.geo = GeometrySet::create_with_mesh(blenderMesh);
 

@@ -536,6 +536,13 @@ static void node_geo_exec(GeoNodeExecParams params)
   #endif
 }
 
+static void node_gather_link_searches(GatherLinkSearchOpParams &UNUSED(params))
+{
+  // Deactivate the link search feature that is not compatible with dynamic
+  // sockets yet (because GatherLinkSearchOpParams does not have access to the
+  // node instance, only to the node type).
+}
+
 }  // namespace blender::nodes::node_geo_open_mfx_cc
 
 // ----------------------------------------------------------------------------
@@ -557,5 +564,6 @@ void register_node_type_geo_open_mfx()
                     file_ns::node_free_storage,
                     file_ns::node_copy_storage);
   ntype.draw_buttons = file_ns::node_layout;
+  ntype.gather_link_search_ops = file_ns::node_gather_link_searches;
   nodeRegisterType(&ntype);
 }
