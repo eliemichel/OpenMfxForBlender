@@ -27,6 +27,8 @@
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
+#include "DNA_node_types.h" // bNode
+
 #include "PluginRegistryManager.h"
 #include "BlenderMfxHost.h"
 
@@ -44,6 +46,7 @@ RuntimeData::RuntimeData()
   m_effect_descriptor = nullptr;
   m_effect_instance = nullptr;
   m_registry = nullptr;
+  m_must_update = true;
 }
 
 RuntimeData::~RuntimeData()
@@ -57,6 +60,7 @@ RuntimeData &RuntimeData::operator=(const RuntimeData &other)
   m_loaded_effect_index = other.m_loaded_effect_index;
   m_effect_descriptor = other.m_effect_descriptor;
   m_registry = other.m_registry;
+  m_must_update = other.m_must_update;
 
   PluginManager.incrementRegistryReference(m_registry);
 
@@ -77,6 +81,7 @@ bool RuntimeData::setPluginPath(const char *plugin_path)
   BLI_strncpy(m_loaded_plugin_path, plugin_path, sizeof(m_loaded_plugin_path));
 
   if (0 == strcmp(m_loaded_plugin_path, "")) {
+    m_must_update = true;
     return true;
   }
 
@@ -87,6 +92,8 @@ bool RuntimeData::setPluginPath(const char *plugin_path)
 
   PluginManager.setHost(&BlenderMfxHost::GetInstance());
   m_registry = PluginManager.getRegistry(abs_path);
+
+  m_must_update = true;
   return true;
 }
 
@@ -110,7 +117,14 @@ bool RuntimeData::setEffectIndex(int effect_index)
   if (-1 != m_loaded_effect_index) {
     ensureEffectInstance();
   }
+
+  m_must_update = true;
   return true;
+}
+
+void RuntimeData::clearMustUpdate()
+{
+  m_must_update = false;
 }
 
 OfxMeshEffectHandle RuntimeData::effectDescriptor() const
@@ -126,6 +140,11 @@ OfxMeshEffectHandle RuntimeData::effectInstance() const
 const PluginRegistry &RuntimeData::registry() const
 {
   return *m_registry;
+}
+
+bool RuntimeData::mustUpdate() const
+{
+  return m_must_update;
 }
 
 void RuntimeData::unloadPlugin()

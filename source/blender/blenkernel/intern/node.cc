@@ -96,6 +96,7 @@
 #include "BLO_read_write.h"
 
 #include "MOD_nodes.h"
+#include "NOD_geometry_read.hh"
 
 #define NODE_DEFAULT_MAX_WIDTH 700
 
@@ -718,6 +719,11 @@ void ntreeBlendReadData(BlendDataReader *reader, bNodeTree *ntree)
       BLO_read_data_address(reader, &node->storage);
     }
 
+    // That would be convenient... unfortunately node->typeinfo is always null at this stage
+    if (node->typeinfo != nullptr && node->typeinfo->blend_read_data != nullptr) {
+      node->typeinfo->blend_read_data(reader, node);
+    }
+
     if (node->storage) {
       switch (node->type) {
         case SH_NODE_CURVE_VEC:
@@ -788,6 +794,10 @@ void ntreeBlendReadData(BlendDataReader *reader, bNodeTree *ntree)
         case FN_NODE_INPUT_STRING: {
           NodeInputString *storage = (NodeInputString *)node->storage;
           BLO_read_data_address(reader, &storage->string);
+          break;
+        }
+        case GEO_NODE_OPEN_MFX: {
+          blender::nodes::node_geo_open_mfx_cc::node_read_data(reader, node);
           break;
         }
         default:

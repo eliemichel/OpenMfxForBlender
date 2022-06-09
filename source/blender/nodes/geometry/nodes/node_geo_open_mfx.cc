@@ -221,6 +221,25 @@ static void MFX_node_set_message(GeoNodeExecParams &params, OfxMeshEffectHandle 
   }
 }
 
+// Try to setup runtime data and return true if it
+// succeeds or if it was already defined.
+static bool MFX_node_try_ensure_runtime(bNode *node)
+{
+  if (node == nullptr || node->storage == nullptr) {
+    return false;
+  }
+
+  NodeGeometryOpenMfx &storage = *((NodeGeometryOpenMfx *)node->storage);
+
+  if (nullptr == storage.runtime) {
+    storage.runtime = MEM_new<RuntimeData>(__func__);
+    storage.runtime->setPluginPath(storage.plugin_path);
+    storage.runtime->setEffectIndex(storage.effect_index);
+  }
+
+  return true;
+}
+
 // -----------------------------------------
 // Node Callbacks
 
@@ -229,20 +248,24 @@ NODE_STORAGE_FUNCS(NodeGeometryOpenMfx)
 static void node_declare(NodeDeclarationBuilder &b)
 {
   const bNode *node = b.node();
-  if (node == nullptr || node->storage == nullptr)
+  if (node == nullptr || node->storage == nullptr) {
     return;
+  }
+
   const NodeGeometryOpenMfx &storage = node_storage(*node);
 
-  OfxMeshEffectHandle desc = storage.runtime->effectDescriptor();
-  if (desc != nullptr) {
-    const OfxMeshInputSetStruct &inputs = desc->inputs;
-    for (int i = 0; i < inputs.count(); ++i) {
-      MFX_node_add_geo_input(b, inputs[i]);
-    }
+  if (storage.runtime != nullptr) {
+    OfxMeshEffectHandle desc = storage.runtime->effectDescriptor();
+    if (desc != nullptr) {
+      const OfxMeshInputSetStruct &inputs = desc->inputs;
+      for (int i = 0; i < inputs.count(); ++i) {
+        MFX_node_add_geo_input(b, inputs[i]);
+      }
 
-    const OfxParamSetStruct &params = desc->parameters;
-    for (int i = 0; i < params.count(); ++i) {
-      MFX_node_add_param_input(b, params[i]);
+      const OfxParamSetStruct &params = desc->parameters;
+      for (int i = 0; i < params.count(); ++i) {
+        MFX_node_add_param_input(b, params[i]);
+      }
     }
   }
   #if 0
@@ -315,17 +338,19 @@ static void force_redeclare(bNodeTree *ntree, bNode *node)
 
 static void node_update(bNodeTree *ntree, bNode *node)
 {
-  if (node == nullptr || node->storage == nullptr)
+  if (!MFX_node_try_ensure_runtime(node)) {
     return;
+  }
   const NodeGeometryOpenMfx &storage = node_storage(*node);
 
-  bool changed = false;
-  changed = storage.runtime->setPluginPath(storage.plugin_path) || changed;
-  changed = storage.runtime->setEffectIndex(storage.effect_index) || changed;
+  storage.runtime->setPluginPath(storage.plugin_path);
+  storage.runtime->setEffectIndex(storage.effect_index);
 
-  if (changed) {
+  if (storage.runtime->mustUpdate()) {
     force_redeclare(ntree, node);
   }
+
+  storage.runtime->clearMustUpdate();
 
   #if 0
   if (node->outputs.first == nullptr)
@@ -545,6 +570,13 @@ static void node_gather_link_searches(GatherLinkSearchOpParams &UNUSED(params))
   // node instance, only to the node type).
 }
 
+void node_read_data(BlendDataReader *reader, bNode *node)
+{
+  NodeGeometryOpenMfx &storage = node_storage(*node);
+  storage.runtime = nullptr;
+  MFX_node_try_ensure_runtime(node);
+}
+
 }  // namespace blender::nodes::node_geo_open_mfx_cc
 
 // ----------------------------------------------------------------------------
@@ -567,5 +599,6 @@ void register_node_type_geo_open_mfx()
                     file_ns::node_copy_storage);
   ntype.draw_buttons = file_ns::node_layout;
   ntype.gather_link_search_ops = file_ns::node_gather_link_searches;
+  ntype.blend_read_data = file_ns::node_read_data;
   nodeRegisterType(&ntype);
 }

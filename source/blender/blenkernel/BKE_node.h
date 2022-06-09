@@ -343,6 +343,12 @@ typedef struct bNodeType {
    */
   NodeGatherSocketLinkOperationsFunction gather_link_search_ops;
 
+  /**
+   * If not null, this is called when loading a blend file with a node of this type.
+   * XXX we will likely need an equivalent blend_write_data
+   */
+  void (*blend_read_data)(struct BlendDataReader *reader, struct bNode *node);
+
   /** True when the node cannot be muted. */
   bool no_muting;
 

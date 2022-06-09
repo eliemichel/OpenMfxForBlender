@@ -25,6 +25,7 @@
 #include "ofxMeshEffect.h"
 
 struct PluginRegistry;
+struct bNode;
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
@@ -39,12 +40,15 @@ class RuntimeData {
   RuntimeData(const RuntimeData &) = delete;
   RuntimeData &operator=(const RuntimeData &other);
 
-  // These two setters return true iff they changed the value
+  // These two setters return true iff they changed the value, and also mustUpdate is turned true when they return true
   bool setPluginPath(const char *plugin_path);
   bool setEffectIndex(int effect_index);
+  void clearMustUpdate();
+
   OfxMeshEffectHandle effectDescriptor() const;
   OfxMeshEffectHandle effectInstance() const;
   const PluginRegistry &registry() const;
+  bool mustUpdate() const;
 
  private:
   // Release the current plugin registry and reset
@@ -55,6 +59,7 @@ class RuntimeData {
   void freeEffectInstance();
 
  private:
+  bool m_must_update;
   char m_loaded_plugin_path[1024];
   int m_loaded_effect_index;
   OfxMeshEffectHandle m_effect_descriptor;
