@@ -40,6 +40,7 @@
 // XXX We use an internal header of bf_intern_openmfx, either turn this to an external header or
 // get the host from node_runtime.
 #include "intern/BlenderMfxHost.h"
+#include "TinyTimer.h"
 
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
@@ -473,6 +474,7 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
+  TinyTimer::Timer timer;
   const NodeGeometryOpenMfx &storage = node_storage(params.node());
   OfxMeshEffectHandle effect = storage.runtime->effectInstance();
 
@@ -528,7 +530,15 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 4. Cook
-  if (doCook && !host.Cook(effect)) {
+  if (!doCook) {
+    return;
+  }
+
+  TinyTimer::Timer subtimer;
+  bool success = host.Cook(effect);
+  PERF(1).add_sample(subtimer);
+
+  if (!success) {
     MFX_node_set_message(params, effect);
     params.set_default_remaining_outputs();
     return;
@@ -537,6 +547,12 @@ static void node_geo_exec(GeoNodeExecParams params)
   if (nullptr != outputIt) {
     params.set_output(outputLabel, outputIt->geo);
   }
+
+  PERF(0).add_sample(timer);
+  std::cout << "Profiling:\n"
+            << " - openmfx.node_geo_exec.total: " << PERF(0).summary() << "\n"
+            << " - openmfx.node_geo_exec.cook: " << PERF(1).summary() << "\n"
+            << std::flush;
 
   #if 0
   if (params.node().outputs.first == nullptr)
