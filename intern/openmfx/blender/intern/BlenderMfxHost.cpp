@@ -34,14 +34,20 @@
 #include "BKE_mesh.h" // BKE_mesh_new_nomain
 #include "BKE_main.h" // BKE_main_blendfile_path_from_global
 #include "BKE_customdata.h"
+#include "BKE_geometry_set.hh" // GeometryComponentFieldContext
 
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
+#include "FN_field.hh" // FieldEvaluator
+
 #include "MFX_util.h"
 
 #include <cassert>
+
+using blender::fn::GVArray;
+using blender::bke::GeometryComponentFieldContext;
 
 #ifndef max
 #  define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -169,6 +175,8 @@ OfxStatus BlenderMfxHost::BeforeMeshGetNode(OfxMeshHandle ofxMesh,
   setupCornerUvAttributes(ofxMesh, "uv", blenderMesh, counts, afterAllocate);
   setupFaceMapAttributes(ofxMesh, "faceMap", blenderMesh, counts, afterAllocate);
   setupPointWeightAttributes(ofxMesh, "pointWeight", blenderMesh, counts, afterAllocate);
+
+  setupRequestedAttributes(ofxMesh, internalData.requestedAttributes, afterAllocate);
 
   // finished adding attributes, allocate any requested buffers
   m_deactivateBeforeAllocateCb = true;
@@ -346,6 +354,7 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
 
   extractBasicAttributes(pointPosition, cornerPoint, faceSize, blenderMesh, counts);
   extractUvAttributes(ofxMesh, blenderMesh, counts);
+  extractExpectedAttributes(ofxMesh, internalData.requestedAttributes, internalData.outputAttributes, blenderMesh, counts);
 
   if (counts.blenderPolygonCount > 0) {
     // if we're here, this dominates before_mesh_get()/before_mesh_release() total running time!
@@ -905,6 +914,21 @@ OfxStatus BlenderMfxHost::setupFaceMapAttribute(OfxMeshHandle ofxMesh,
   return kOfxStatOK;
 }
 
+OfxStatus BlenderMfxHost::setupRequestedAttributes(
+    OfxMeshHandle ofxMesh,
+    const std::vector<OfxAttributeStruct> &requestedAttributes,
+    CallbackList &afterAllocate) const
+{
+  (void) afterAllocate;
+
+  for (const OfxAttributeStruct &requestedAttrib : requestedAttributes) {
+    int idx = ofxMesh->attributes.ensure(requestedAttrib.index());
+    ofxMesh->attributes[idx].deep_copy_from(requestedAttrib);
+  }
+
+  return kOfxStatOK;
+}
+
 OfxStatus BlenderMfxHost::extractBasicAttributes(const MfxAttributeProps &pointPosition,
                                                  const MfxAttributeProps &cornerPoint,
                                                  const MfxAttributeProps &faceSize,
@@ -979,7 +1003,7 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
                                               Mesh *blenderMesh,
                                               const ElementCounts &counts) const
 {
-    OfxStatus status;
+  OfxStatus status;
 
   // Get corner UVs if UVs are present in the mesh
   // TODO: Use semantics to get UV layers back from mfx mesh
@@ -1025,6 +1049,42 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
       blenderMesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
       blenderMesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
     }
+  }
+
+  return kOfxStatOK;
+}
+
+OfxStatus BlenderMfxHost::extractExpectedAttributes(
+    OfxMeshHandle ofxMesh,
+    const std::vector<OfxAttributeStruct>& requestedAttributes,
+    const std::vector<blender::bke::StrongAnonymousAttributeID>& outputAttributes,
+    Mesh* blenderMesh,
+    const ElementCounts& counts) const
+{
+  MeshComponent component;
+  component.replace(blenderMesh, GeometryOwnershipType::Editable);
+  int i = 0;
+  for (const auto &requestedAttrib : requestedAttributes) {
+    auto key = std::make_pair(OpenMfx::AttributeAttachment::Point, requestedAttrib.name());
+    int idx = ofxMesh->attributes.find(key);
+    if (idx == -1) {
+        // warning!
+      continue;
+    }
+    const OfxAttributeStruct &ofxAttrib = ofxMesh->attributes[idx];
+    char *ofxAttribData = (char*)ofxAttrib.properties[kOfxMeshAttribPropData].value[0].as_pointer;
+    int ofxAttribStride = ofxAttrib.properties[kOfxMeshAttribPropStride].value[0].as_int;
+    
+    //blender::bke::StrongAnonymousAttributeID id(requestedAttrib.name());
+    const AttributeDomain domain = ATTR_DOMAIN_POINT;  // TODO
+    blender::bke::OutputAttribute_Typed<float> attribute =
+        component.attribute_try_get_for_output_only<float>(outputAttributes[i].get(), domain);
+    float *destData = attribute.as_span().data();
+    for (int k = 0; k < counts.ofxPointCount; ++k) {
+      destData[k] = *attributeAt<float>(ofxAttribData, ofxAttribStride, k);
+    }
+    attribute.save();
+    ++i;
   }
 
   return kOfxStatOK;

@@ -42,10 +42,11 @@ void OfxAttributeStruct::deep_copy_from(const OfxAttributeStruct &other)
   properties.deep_copy_from(other.properties);
 }
 
-AttributeType OfxAttributeStruct::type()
+AttributeType OfxAttributeStruct::type() const
 {
     char* stringType;
-    propGetString(&properties, kOfxMeshAttribPropType, 0, &stringType);
+    OfxPropertySetHandle mutableProperties = const_cast<OfxPropertySetHandle>(&properties);
+    propGetString(mutableProperties, kOfxMeshAttribPropType, 0, &stringType);
 
     if (0 == strcmp(stringType, kOfxMeshAttribTypeUByte)) {
         return AttributeType::UByte;
@@ -59,6 +60,14 @@ AttributeType OfxAttributeStruct::type()
     else {
         return AttributeType::Invalid;
     }
+}
+
+int OfxAttributeStruct::componentCount() const
+{
+  int count;
+  OfxPropertySetHandle mutableProperties = const_cast<OfxPropertySetHandle>(&properties);
+  propGetInt(mutableProperties, kOfxMeshAttribPropComponentCount, 0, &count);
+  return count;
 }
 
 void OfxAttributeStruct::setIndex(const Index& index)

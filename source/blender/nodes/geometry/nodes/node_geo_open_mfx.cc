@@ -89,15 +89,94 @@ NodeWarningType MFX_message_type(OfxMessageType messageType)
   }
 }
 
+static void MFX_node_add_attrib_input(NodeDeclarationBuilder &b, const OfxAttributeStruct &attrib)
+{
+  int componentCount = attrib.componentCount();
+  OpenMfx::AttributeSemantic semantic = attrib.semantic();
+  const std::string &name = attrib.name();
+
+  switch (attrib.type()) {
+    case OpenMfx::AttributeType::Float:
+      if (semantic == OpenMfx::AttributeSemantic::Color) {
+        b.add_input<decl::Color>(name).supports_field();
+      }
+      else if (componentCount == 1) {
+        b.add_input<decl::Float>(name).supports_field();
+      }
+      else if (componentCount <= 3) {
+        b.add_input<decl::Vector>(name).supports_field();
+      }
+      else
+      {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::Int:
+      if (componentCount == 1) {
+        b.add_input<decl::Int>(name).supports_field();
+      }
+      else {
+        BLI_assert(false); // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::UByte:
+      BLI_assert(false);  // Unsupported combination
+      break;
+  }
+}
+
+static void MFX_node_add_attrib_output(NodeDeclarationBuilder &b, const OfxAttributeStruct &attrib)
+{
+  int componentCount = attrib.componentCount();
+  OpenMfx::AttributeSemantic semantic = attrib.semantic();
+  const std::string &name = attrib.name();
+
+  switch (attrib.type()) {
+    case OpenMfx::AttributeType::Float:
+      if (semantic == OpenMfx::AttributeSemantic::Color) {
+        b.add_output<decl::Color>(name).field_source();
+      }
+      else if (componentCount == 1) {
+        b.add_output<decl::Float>(name).field_source();
+      }
+      else if (componentCount <= 3) {
+        b.add_output<decl::Vector>(name).field_source();
+      }
+      else {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::Int:
+      if (componentCount == 1) {
+        b.add_output<decl::Int>(name).field_source();
+      }
+      else {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::UByte:
+      BLI_assert(false);  // Unsupported combination
+      break;
+  }
+}
+
 static void MFX_node_add_geo_input(NodeDeclarationBuilder &b,
                                    const OfxMeshInputStruct &input)
 {
   const char *label = MFX_input_label(input);
   if (kOfxMeshMainOutput == input.name()) {
     b.add_output<decl::Geometry>(label);
+    int n = input.requested_attributes.count();
+    for (int i = 0; i < n; ++i) {
+      MFX_node_add_attrib_output(b, input.requested_attributes[i]);
+    }
   }
   else {
     b.add_input<decl::Geometry>(label);
+    int n = input.requested_attributes.count();
+    for (int i = 0; i < n; ++i) {
+      MFX_node_add_attrib_input(b, input.requested_attributes[i]);
+    }
   }
 }
 
@@ -470,6 +549,26 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
       attribute_name,
       AnonymousAttributeFieldInput::Create<bool>(std::move(id), params.attribute_producer_name()));
 }
+
+static void set_float_field_output(GeoNodeExecParams &params,
+                                       const char *attribute_name,
+                                       const IndexRange &poly_range,
+                                       Mesh *mesh,
+                                       const AttributeDomain domain) // ATTR_DOMAIN_POINT
+{
+  MeshComponent component;
+  component.replace(mesh, GeometryOwnershipType::Editable);
+
+  StrongAnonymousAttributeID id(attribute_name);
+  OutputAttribute_Typed<float> attribute = component.attribute_try_get_for_output_only<float>(
+      id.get(), domain);
+  attribute.as_span().slice(poly_range).fill(true);
+  attribute.save();
+
+  params.set_output(
+      attribute_name,
+      AnonymousAttributeFieldInput::Create<float>(std::move(id), params.attribute_producer_name()));
+}
 #pragma endregion [Pizza]
 
 static void node_geo_exec(GeoNodeExecParams params)
@@ -501,25 +600,144 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 2. Set inputs/outputs
+  
   // Data that lives only for the call to the Cook action
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
+  std::vector<blender::VArray_Span<float>> floatSpans;
+  std::vector<blender::VArray_Span<int>> intSpans;
+
   MeshInternalDataNode *outputIt = nullptr;
   const char *outputLabel = nullptr;
-  bool doCook = true;
+  bool canCook = true;
+
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
     MeshInternalDataNode &inputData = inputInternalData[i];
     const char *label = MFX_input_label(input);
     inputData.header.is_input = input.name() != kOfxMeshMainOutput;
     inputData.header.type = BlenderMfxHost::CallbackContext::Node;
+
     if (inputData.header.is_input) {
       inputData.geo = params.extract_input<GeometrySet>(label);
-      doCook = doCook && inputData.geo.has_mesh();
+      if (inputData.geo.has_mesh()) {
+        // Evaluate requested attributes
+        int attribCount = input.requested_attributes.count();
+        inputData.requestedAttributes.resize(attribCount);
+
+        // --------
+
+        std::vector<GVArray> arrays(attribCount);
+        GeometryComponent &component = inputData.geo.get_component_for_write(GEO_COMPONENT_TYPE_MESH);
+
+        blender::fn::FieldEvaluator pointEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_POINT},
+            component.attribute_domain_size(ATTR_DOMAIN_POINT)};
+
+        blender::fn::FieldEvaluator cornerEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_CORNER},
+            component.attribute_domain_size(ATTR_DOMAIN_CORNER)};
+
+        blender::fn::FieldEvaluator faceEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_FACE},
+            component.attribute_domain_size(ATTR_DOMAIN_FACE)};
+
+        // Evaluate requested attributes
+        for (int j = 0; j < attribCount ; ++j) {
+          const OfxAttributeStruct &def = input.requested_attributes[j];
+
+          GField field;
+          // TODO switch on the number of components
+          switch (def.type()) {
+            case OfxAttributeStruct::AttributeType::Float:
+              field = params.get_input<Field<float>>(def.name());
+              break;
+            case OfxAttributeStruct::AttributeType::Int:
+              field = params.get_input<Field<int>>(def.name());
+              break;
+            default:
+              BLI_assert(false); // not implemented
+          }
+
+          switch (def.attachment()) {
+            case OfxAttributeStruct::AttributeAttachment::Point:
+              pointEvaluator.add(field, &arrays[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Corner:
+              cornerEvaluator.add(field, &arrays[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Face:
+              faceEvaluator.add(field, &arrays[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Mesh:
+              BLI_assert(false);  // not implemented
+              break;
+          }
+        }
+
+        pointEvaluator.evaluate();
+        cornerEvaluator.evaluate();
+        faceEvaluator.evaluate();
+
+        for (int j = 0; j < attribCount; ++j) {
+          const OfxAttributeStruct &def = input.requested_attributes[j];
+
+          OfxAttributeStruct &attrib = inputData.requestedAttributes[j];
+          attrib.deep_copy_from(def);
+          attrib.properties[kOfxMeshAttribPropIsOwner].value[0].as_int = 0;
+
+          void *data = nullptr;
+          int stride = 0;
+
+          // TODO switch on the number of components
+          switch (def.type()) {
+            case OfxAttributeStruct::AttributeType::Float: {
+              blender::VArray_Span<float> span(arrays[j].typed<float>());
+              data = (void *)span.data();
+              stride = sizeof(float);
+
+              // save the span for the duration of the cooking
+              floatSpans.push_back(std::move(span));
+              break;
+            }
+            case OfxAttributeStruct::AttributeType::Int: {
+              blender::VArray_Span<int> span(arrays[j].typed<int>());
+              data = (void *)span.data();
+              stride = sizeof(int);
+
+              // save the span for the duration of the cooking
+              intSpans.push_back(std::move(span));
+              break;
+            }
+            default:
+              BLI_assert(false);  // not implemented
+          }
+
+          attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
+          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = stride;
+        }
+
+        // --------
+      }
+      else {
+        canCook = false;
+      }
     }
     else {
       outputLabel = label;
       outputIt = &inputInternalData[i];
+
+      // Prepare expected attributes
+      int attribCount = input.requested_attributes.count();
+      inputData.requestedAttributes.resize(attribCount);
+      inputData.outputAttributes.resize(attribCount);
+
+      for (int j = 0; j < attribCount; ++j) {
+        auto &attribData = inputData.requestedAttributes[j];
+        attribData.deep_copy_from(input.requested_attributes[j]);
+        inputData.outputAttributes[j] = StrongAnonymousAttributeID(attribData.name());
+      }
     }
+
     host.propertySuite->propSetPointer(&input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&inputData);
   }
 
@@ -530,7 +748,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 4. Cook
-  if (!doCook) {
+  if (!canCook) {
     return;
   }
 
@@ -546,6 +764,18 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   if (nullptr != outputIt) {
     params.set_output(outputLabel, outputIt->geo);
+
+    int attribCount = outputIt->requestedAttributes.size();
+    for (int j = 0; j < attribCount; ++j) {
+      const auto &attribInfo = outputIt->requestedAttributes[j];
+      const auto &attrib = outputIt->outputAttributes[j];
+      //if (params.output_is_required(attribInfo.name())) {
+        // TODO: switch on type
+        params.set_output(attribInfo.name(),
+                          AnonymousAttributeFieldInput::Create<float>(
+                              attrib, params.attribute_producer_name()));
+      //}
+    }
   }
 
   PERF(0).add_sample(timer);

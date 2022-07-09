@@ -15,6 +15,7 @@
  */
 
 #include "inputs.h"
+#include "ofxMeshEffect.h"
 
 #include <cstring>
 
@@ -26,14 +27,15 @@ OfxMeshInputStruct::OfxMeshInputStruct()
     : properties(PropertySetContext::Input)
     , host(nullptr)
 {
-  properties["OfxInputPropRequestGeometry"].value->as_int = 1;
-  properties["OfxInputPropRequestTransform"].value->as_int = 0;
+  properties[kOfxInputPropRequestGeometry].value->as_int = 1;
+  properties[kOfxInputPropRequestTransform].value->as_int = 0;
 }
 
 void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 {
   this->m_name = other.m_name;
   this->properties.deep_copy_from(other.properties);
+  this->requested_attributes.deep_copy_from(other.requested_attributes);
   this->mesh.deep_copy_from(other.mesh);
   this->host = other.host;  // not deep copied, as this is a weak pointer
 }

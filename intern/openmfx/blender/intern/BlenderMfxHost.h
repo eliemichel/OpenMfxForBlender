@@ -23,8 +23,10 @@
 #pragma once
 
 #include "BKE_geometry_set.hh"
+#include "FN_generic_virtual_array.hh"
 
 #include <mfxHost/MfxHost>
+#include <mfxHost/attributes>
 
 #include <functional>
 #include <vector>
@@ -73,6 +75,10 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
   struct MeshInternalDataNode {
     MeshInternalData header;
     GeometrySet geo;
+    std::vector<OfxAttributeStruct> requestedAttributes;
+
+    // Used by output only
+    std::vector<blender::bke::StrongAnonymousAttributeID> outputAttributes;
   };
 
  protected:
@@ -276,6 +282,14 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
                                   CallbackList &afterAllocate) const;
 
   /**
+   * Set the data pointer and stride for all requested attributes
+   */
+  OfxStatus setupRequestedAttributes(
+      OfxMeshHandle ofxMesh,
+      const std::vector<OfxAttributeStruct> &requestedAttributes,
+      CallbackList &afterAllocate) const;
+
+  /**
    * Extract from ofx mesh the basic attributes (point position, corner point, face size)
    */
   OfxStatus extractBasicAttributes(const MfxAttributeProps &pointPosition,
@@ -290,6 +304,15 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
   OfxStatus extractUvAttributes(OfxMeshHandle ofxMesh,
                                 Mesh *blenderMesh,
                                 const ElementCounts &counts) const;
+
+  /**
+   * Extract all expected attributes
+   */
+  OfxStatus extractExpectedAttributes(OfxMeshHandle ofxMesh,
+                                      const std::vector<OfxAttributeStruct> &requestedAttributes,
+                                      const std::vector<blender::bke::StrongAnonymousAttributeID>& outputAttributes,
+                                      Mesh *blenderMesh,
+                                      const ElementCounts &counts) const;
 
  private:
   // Avoid calling before allocate callback from within the before mesh get one

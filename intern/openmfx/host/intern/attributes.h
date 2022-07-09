@@ -73,7 +73,8 @@ struct OfxAttributeStruct {
 
   void deep_copy_from(const OfxAttributeStruct &other);
 
-  AttributeType type();
+  AttributeType type() const;
+  int componentCount() const;
   AttributeAttachment attachment() const
   {
     return m_attachment;
