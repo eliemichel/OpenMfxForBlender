@@ -134,7 +134,8 @@ OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
     return kOfxStatErrValue;
   }
 
-  if (0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
+  if (semantic != nullptr &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
       0 != strcmp(semantic, kOfxMeshAttribSemanticNormal) &&
       0 != strcmp(semantic, kOfxMeshAttribSemanticColor) &&
       0 != strcmp(semantic, kOfxMeshAttribSemanticWeight)) {

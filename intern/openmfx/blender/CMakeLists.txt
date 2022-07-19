@@ -50,9 +50,6 @@ set(SRC
   intern/node_runtime.cpp
   intern/modifier.cpp
   intern/util.cpp
-
-  intern/sdk/MfxAttributeProps.h
-  intern/sdk/MfxAttributeProps.cpp
 )
 
 set(LIB

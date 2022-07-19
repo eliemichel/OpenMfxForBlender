@@ -59,6 +59,9 @@ set(SRC
   intern/util/binary_util.c
   intern/util/ofx_util.h
   intern/util/ofx_util.c
+
+  sdk/MfxAttributeProps.h
+  sdk/MfxAttributeProps.cpp
 )
 
 set(INC_PRIV
@@ -73,7 +76,7 @@ set(LIB_PRIV
 )
 
 set(LIB
-  OpenMfx::Utils
+#  OpenMfx::Utils
 )
 
 add_library(OpenMfx_Host "${SRC}")

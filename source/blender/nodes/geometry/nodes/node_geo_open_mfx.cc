@@ -40,6 +40,7 @@
 // XXX We use an internal header of bf_intern_openmfx, either turn this to an external header or
 // get the host from node_runtime.
 #include "intern/BlenderMfxHost.h"
+#include "TinyTimer.h"
 
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
@@ -88,15 +89,112 @@ NodeWarningType MFX_message_type(OfxMessageType messageType)
   }
 }
 
+static int MFX_element_count(const GeometryComponent &component,
+                             OpenMfx::AttributeAttachment attachment)
+{
+  switch (attachment) {
+    case OfxAttributeStruct::AttributeAttachment::Point:
+      return component.attribute_domain_size(ATTR_DOMAIN_POINT);
+    case OfxAttributeStruct::AttributeAttachment::Corner:
+      return component.attribute_domain_size(ATTR_DOMAIN_CORNER);
+    case OfxAttributeStruct::AttributeAttachment::Face:
+      return component.attribute_domain_size(ATTR_DOMAIN_FACE);
+    case OfxAttributeStruct::AttributeAttachment::Mesh:
+      return 1;
+    default:
+      BLI_assert(false);
+      return 0;
+  }
+}
+
+static void MFX_node_add_attrib_input(NodeDeclarationBuilder &b, const OfxAttributeStruct &attrib)
+{
+  int componentCount = attrib.componentCount();
+  OpenMfx::AttributeSemantic semantic = attrib.semantic();
+  const std::string &name = attrib.name();
+
+  switch (attrib.type()) {
+    case OpenMfx::AttributeType::Float:
+      if (semantic == OpenMfx::AttributeSemantic::Color) {
+        b.add_input<decl::Color>(name).supports_field();
+      }
+      else if (componentCount == 1) {
+        b.add_input<decl::Float>(name).supports_field();
+      }
+      else if (componentCount <= 3) {
+        b.add_input<decl::Vector>(name).supports_field();
+      }
+      else
+      {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::Int:
+      if (componentCount == 1) {
+        b.add_input<decl::Int>(name).supports_field();
+      }
+      else {
+        BLI_assert(false); // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::UByte:
+      BLI_assert(false);  // Unsupported combination
+      break;
+  }
+}
+
+static void MFX_node_add_attrib_output(NodeDeclarationBuilder &b, const OfxAttributeStruct &attrib)
+{
+  int componentCount = attrib.componentCount();
+  OpenMfx::AttributeSemantic semantic = attrib.semantic();
+  const std::string &name = attrib.name();
+
+  switch (attrib.type()) {
+    case OpenMfx::AttributeType::Float:
+      if (semantic == OpenMfx::AttributeSemantic::Color) {
+        b.add_output<decl::Color>(name).field_source();
+      }
+      else if (componentCount == 1) {
+        b.add_output<decl::Float>(name).field_source();
+      }
+      else if (componentCount <= 3) {
+        b.add_output<decl::Vector>(name).field_source();
+      }
+      else {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::Int:
+      if (componentCount == 1) {
+        b.add_output<decl::Int>(name).field_source();
+      }
+      else {
+        BLI_assert(false);  // Unsupported combination
+      }
+      break;
+    case OpenMfx::AttributeType::UByte:
+      BLI_assert(false);  // Unsupported combination
+      break;
+  }
+}
+
 static void MFX_node_add_geo_input(NodeDeclarationBuilder &b,
                                    const OfxMeshInputStruct &input)
 {
   const char *label = MFX_input_label(input);
   if (kOfxMeshMainOutput == input.name()) {
     b.add_output<decl::Geometry>(label);
+    int n = input.requested_attributes.count();
+    for (int i = 0; i < n; ++i) {
+      MFX_node_add_attrib_output(b, input.requested_attributes[i]);
+    }
   }
   else {
     b.add_input<decl::Geometry>(label);
+    int n = input.requested_attributes.count();
+    for (int i = 0; i < n; ++i) {
+      MFX_node_add_attrib_input(b, input.requested_attributes[i]);
+    }
   }
 }
 
@@ -206,6 +304,21 @@ static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
     case PARAM_TYPE_UNKNOWN:
     default:
       break;
+  }
+}
+
+static const CPPType &MFX_to_cpptype(OpenMfx::AttributeType mfxType, int componentCount)
+{
+  // TODO: use componentCount
+  (void)componentCount;
+  switch (mfxType) {
+    case OfxAttributeStruct::AttributeType::Float:
+      return CPPType::get<float>();
+    case OfxAttributeStruct::AttributeType::Int:
+      return CPPType::get<int>();
+    default:
+      BLI_assert(false);  // not implemented
+      return CPPType::get<float>();
   }
 }
 
@@ -469,10 +582,31 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
       attribute_name,
       AnonymousAttributeFieldInput::Create<bool>(std::move(id), params.attribute_producer_name()));
 }
+
+static void set_float_field_output(GeoNodeExecParams &params,
+                                       const char *attribute_name,
+                                       const IndexRange &poly_range,
+                                       Mesh *mesh,
+                                       const AttributeDomain domain) // ATTR_DOMAIN_POINT
+{
+  MeshComponent component;
+  component.replace(mesh, GeometryOwnershipType::Editable);
+
+  StrongAnonymousAttributeID id(attribute_name);
+  OutputAttribute_Typed<float> attribute = component.attribute_try_get_for_output_only<float>(
+      id.get(), domain);
+  attribute.as_span().slice(poly_range).fill(true);
+  attribute.save();
+
+  params.set_output(
+      attribute_name,
+      AnonymousAttributeFieldInput::Create<float>(std::move(id), params.attribute_producer_name()));
+}
 #pragma endregion [Pizza]
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
+  TinyTimer::Timer timer;
   const NodeGeometryOpenMfx &storage = node_storage(params.node());
   OfxMeshEffectHandle effect = storage.runtime->effectInstance();
 
@@ -499,25 +633,129 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 2. Set inputs/outputs
+  
   // Data that lives only for the call to the Cook action
+  ResourceScope scope;
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
+  std::vector<std::vector<GMutableSpan>> inputAttributeArrays(effect->inputs.count());
+
   MeshInternalDataNode *outputIt = nullptr;
   const char *outputLabel = nullptr;
-  bool doCook = true;
+  bool canCook = true;
+
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
     MeshInternalDataNode &inputData = inputInternalData[i];
     const char *label = MFX_input_label(input);
     inputData.header.is_input = input.name() != kOfxMeshMainOutput;
     inputData.header.type = BlenderMfxHost::CallbackContext::Node;
+
     if (inputData.header.is_input) {
       inputData.geo = params.extract_input<GeometrySet>(label);
-      doCook = doCook && inputData.geo.has_mesh();
+      if (inputData.geo.has_mesh()) {
+        // Evaluate requested attributes
+        int attribCount = input.requested_attributes.count();
+        inputData.requestedAttributes.resize(attribCount);
+
+        // --------
+
+        std::vector<GMutableSpan> &spans = inputAttributeArrays[i];
+        //spans.resize(attribCount);
+        GeometryComponent &component = inputData.geo.get_component_for_write(GEO_COMPONENT_TYPE_MESH);
+
+        blender::fn::FieldEvaluator pointEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_POINT},
+            component.attribute_domain_size(ATTR_DOMAIN_POINT)};
+
+        blender::fn::FieldEvaluator cornerEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_CORNER},
+            component.attribute_domain_size(ATTR_DOMAIN_CORNER)};
+
+        blender::fn::FieldEvaluator faceEvaluator{
+            GeometryComponentFieldContext{component, ATTR_DOMAIN_FACE},
+            component.attribute_domain_size(ATTR_DOMAIN_FACE)};
+
+        // Evaluate requested attributes
+        for (int j = 0; j < attribCount ; ++j) {
+          const OfxAttributeStruct &def = input.requested_attributes[j];
+
+          int64_t size = MFX_element_count(component, def.attachment());
+
+          const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
+          void *evalBuffer = scope.linear_allocator().allocate(type.size() * size,
+                                                                 type.alignment());
+          spans.push_back(GMutableSpan(type, evalBuffer, size));
+
+          GField field;
+          // TODO switch on the number of components
+          switch (def.type()) {
+            case OfxAttributeStruct::AttributeType::Float:
+              field = params.get_input<Field<float>>(def.name());
+              break;
+            case OfxAttributeStruct::AttributeType::Int:
+              field = params.get_input<Field<int>>(def.name());
+              break;
+            default:
+              BLI_assert(false); // not implemented
+          }
+
+          switch (def.attachment()) {
+            case OfxAttributeStruct::AttributeAttachment::Point:
+              
+              pointEvaluator.add_with_destination(field, spans[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Corner:
+              cornerEvaluator.add_with_destination(field, spans[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Face:
+              faceEvaluator.add_with_destination(field, spans[j]);
+              break;
+            case OfxAttributeStruct::AttributeAttachment::Mesh:
+              BLI_assert(false);  // not implemented
+              break;
+          }
+        }
+
+        pointEvaluator.evaluate();
+        cornerEvaluator.evaluate();
+        faceEvaluator.evaluate();
+
+        for (int j = 0; j < attribCount; ++j) {
+          const OfxAttributeStruct &def = input.requested_attributes[j];
+
+          OfxAttributeStruct &attrib = inputData.requestedAttributes[j];
+          attrib.deep_copy_from(def);
+          attrib.properties[kOfxMeshAttribPropIsOwner].value[0].as_int = 0;
+
+          void *data = spans[j].data();
+          const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
+
+          attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
+          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.alignment();
+        }
+
+        // --------
+      }
+      else {
+        canCook = false;
+      }
     }
     else {
       outputLabel = label;
       outputIt = &inputInternalData[i];
+
+      // Prepare expected attributes
+      int attribCount = input.requested_attributes.count();
+      inputData.requestedAttributes.resize(attribCount);
+      inputData.outputAttributes.resize(attribCount);
+
+      for (int j = 0; j < attribCount; ++j) {
+        auto &attribData = inputData.requestedAttributes[j];
+        attribData.deep_copy_from(input.requested_attributes[j]);
+        inputData.outputAttributes[j] = StrongAnonymousAttributeID(attribData.name());
+      }
     }
+
     host.propertySuite->propSetPointer(&input.mesh.properties, kOfxMeshPropInternalData, 0, (void *)&inputData);
   }
 
@@ -528,7 +766,15 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   // 4. Cook
-  if (doCook && !host.Cook(effect)) {
+  if (!canCook) {
+    return;
+  }
+
+  TinyTimer::Timer subtimer;
+  bool success = host.Cook(effect);
+  PERF(1).add_sample(subtimer);
+
+  if (!success) {
     MFX_node_set_message(params, effect);
     params.set_default_remaining_outputs();
     return;
@@ -536,7 +782,27 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   if (nullptr != outputIt) {
     params.set_output(outputLabel, outputIt->geo);
+
+    int attribCount = outputIt->requestedAttributes.size();
+    for (int j = 0; j < attribCount; ++j) {
+      const auto &attribInfo = outputIt->requestedAttributes[j];
+      const auto &attrib = outputIt->outputAttributes[j];
+      //if (params.output_is_required(attribInfo.name())) {
+        // TODO: switch on type
+        params.set_output(attribInfo.name(),
+                          AnonymousAttributeFieldInput::Create<float>(
+                              std::move(attrib), params.attribute_producer_name()));
+
+        outputIt->outputAttributes[j] = {};
+      //}
+    }
   }
+
+  PERF(0).add_sample(timer);
+  std::cout << "Profiling:\n"
+            << " - openmfx.node_geo_exec.total: " << PERF(0).summary() << "\n"
+            << " - openmfx.node_geo_exec.cook: " << PERF(1).summary() << "\n"
+            << std::flush;
 
   #if 0
   if (params.node().outputs.first == nullptr)
