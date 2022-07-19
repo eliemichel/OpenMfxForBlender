@@ -241,16 +241,16 @@ For more details on how to deal with actions, see \ref MeshEffectActions.
 
  @param  outArgs is redundant and should be set to NULL
 
-\pre
-     -  \ref kOfxActionCreateInstance has been called on the instance
+      \pre
+         -  \ref kOfxActionCreateInstance has been called on the instance
      
  @returns
-     -  \ref kOfxStatOK, the effect cooked normally
-     -  \ref kOfxStatErrMemory, in which case the action may be called again after
+      -  \ref kOfxStatOK, the effect cooked normally
+      -  \ref kOfxStatErrMemory, in which case the action may be called again after
      a memory purge
-     -  \ref kOfxStatFailed, something wrong, but no error code appropriate,
+      -  \ref kOfxStatFailed, something wrong, but no error code appropriate,
      plugin to post message
-     -  \ref kOfxStatErrFatal
+      -  \ref kOfxStatErrFatal
 
  */
 #define kOfxMeshEffectActionCook                "OfxMeshEffectActionCook"
@@ -278,19 +278,19 @@ For more details on how to deal with actions, see \ref MeshEffectActions.
 
  @param  outArgs is redundant and is set to NULL
 
-\pre
-     - \ref kOfxActionDescribe has been called on the descriptor handle,
-     - \ref kOfxActionCreateInstance has not been called
+      \pre
+         -  \ref kOfxActionDescribe has been called on the descriptor handle,
+         -  \ref kOfxActionCreateInstance has not been called
 
  @returns
-     -  \ref kOfxStatOK, the action was trapped and all was well
-     -  \ref kOfxStatErrMissingHostFeature, in which the context will be ignored
-     by the host, the plugin may post a message
-     -  \ref kOfxStatErrMemory, in which case the action may be called again after
-     a memory purge
-     -  \ref kOfxStatFailed, something wrong, but no error code appropriate,
-     plugin to post message
-     -  \ref kOfxStatErrFatal
+         -  \ref kOfxStatOK, the action was trapped and all was well
+         -  \ref kOfxStatErrMissingHostFeature, in which the context will be ignored
+            by the host, the plugin may post a message
+         -  \ref kOfxStatErrMemory, in which case the action may be called again after
+            a memory purge
+         -  \ref kOfxStatFailed, something wrong, but no error code appropriate,
+            plugin to post message
+         -  \ref kOfxStatErrFatal
 
  */
 #define kOfxMeshEffectActionDescribeInContext     "OfxMeshEffectActionDescribeInContext"
@@ -577,8 +577,8 @@ typedef struct OfxMeshEffectSuiteV1 {
    various aspects of the input to the host.
    The input handle can be used to request specific attributes.
    
-\pre
- - we are inside the describe in context action.
+      \pre
+         - we are inside the describe in context action.
 
   @returns
   */
@@ -602,9 +602,9 @@ typedef struct OfxMeshEffectSuiteV1 {
 
   Not a valid call in any of the describe actions.
 
-\pre
- - create instance action called,
- - \e name passed to inputDefine for this context,
+      \pre
+         - create instance action called,
+         - \e name passed to inputDefine for this context,
  
 \post
  - if meshEffect is a descriptor (i.e. we are inside the describe or describe in context actions), handle
@@ -653,10 +653,10 @@ typedef struct OfxMeshEffectSuiteV1 {
   The effect should also be ready to handle attributes that it did not requested but that the host decided
   to feed it (likely because they are needed by other effects located downstream).
 
-  \pre
-      - called from inside the describe or describe in context action
-      - input was returned by inputGetHandle
-      - inputRequestAttribute was not called with the same \e attachement and \e name combination
+      \pre
+        - called from inside the describe or describe in context action
+        - input was returned by inputGetHandle
+        - inputRequestAttribute was not called with the same \e attachement and \e name combination
   
   @returns
       - ::kOfxStatOK     - the mesh was successfully fetched and returned in the handle,
@@ -685,19 +685,19 @@ typedef struct OfxMeshEffectSuiteV1 {
 
 If inputGetMesh is called twice with the same parameters, then two separate mesh handles will be returned, each of which must be release. The underlying implementation could share mesh data pointers and use reference counting to maintain them.
 
-\pre
- - input was returned by inputGetHandle
+      \pre
+        - input was returned by inputGetHandle
 
-\post
- - mesh handle is only valid for the duration of the action inputGetMesh is called in
- - mesh handle to be disposed of by inputReleaseMesh before the action returns
+      \post
+        - mesh handle is only valid for the duration of the action inputGetMesh is called in
+        - mesh handle to be disposed of by inputReleaseMesh before the action returns
 
-@returns
-- ::kOfxStatOK     - the mesh was successfully fetched and returned in the handle,
-- ::kOfxStatFailed - the mesh could not be fetched because it does not exist in the input at the indicated time, the plugin
+  @returns
+      - ::kOfxStatOK     - the mesh was successfully fetched and returned in the handle,
+      - ::kOfxStatFailed - the mesh could not be fetched because it does not exist in the input at the indicated time, the plugin
                      should continue operation, but assume the mesh was empty.
-- ::kOfxStatErrBadHandle - the input handle was invalid,
-- ::kOfxStatErrMemory - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
+      - ::kOfxStatErrBadHandle - the input handle was invalid,
+      - ::kOfxStatErrMemory - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
 
   */
   OfxStatus (*inputGetMesh)(OfxMeshInputHandle input,
@@ -707,15 +707,15 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
 
   /** @brief Releases the mesh handle previously returned by inputGetMesh
 
-\pre
- - meshHandle was returned by inputGetMesh
+      \pre
+        - meshHandle was returned by inputGetMesh
 
-\post
- - all operations on meshHandle will be invalid
+      \post
+        - all operations on meshHandle will be invalid
 
-@returns
-- ::kOfxStatOK - the mesh was successfully released,
-- ::kOfxStatErrBadHandle - the mesh handle was invalid,
+  @returns
+      - ::kOfxStatOK - the mesh was successfully released,
+      - ::kOfxStatErrBadHandle - the mesh handle was invalid,
  */
   OfxStatus (*inputReleaseMesh)(OfxMeshHandle meshHandle);
 
@@ -730,21 +730,21 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
       \arg semantic        - optional semantic of the attribute data (see \ref MeshAttrib), might be NULL
       \arg attributeHandle  - property set for returning attribute properties, might be NULL.
 
-\pre
- - meshHandle was returned by inputGetMesh
- - attachment is a valid attachment
+      \pre
+        - meshHandle was returned by inputGetMesh
+        - attachment is a valid attachment
 
-\post
- - attributeHandle is a valid attribute handle
+      \post
+        - attributeHandle is a valid attribute handle
 
 By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwner is 0)
 
-@returns
-- ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
-- ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
+  @returns
+      - ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
+      - ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
                           attachment is not valid.
-- ::kOfxStatErrValue - the component count or type is not valid.
-- ::kOfxStatErrBadHandle - the mesh handle was invalid,
+      - ::kOfxStatErrValue - the component count or type is not valid.
+      - ::kOfxStatErrBadHandle - the mesh handle was invalid,
  */
   OfxStatus(*attributeDefine)(OfxMeshHandle meshHandle,
                               const char *attachment,
@@ -754,25 +754,48 @@ By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwn
                               const char *semantic,
                               OfxPropertySetHandle *attributeHandle);
 
-  /** @brief Get an attribute handle from a mesh
+  /** @brief Get an attribute handle by index from a mesh
 
       \arg meshHandle       - mesh handle
-      \arg attachment       - attribute attachment (see \ref MeshAttrib)
-      \arg name             - attribute name
+      \arg index            - attribute index
       \arg attributeHandle  - property set for returning attribute properties
 
-\pre
- - meshHandle was returned by inputGetMesh
- - attachment is a valid attachment
+      \pre
+        - meshHandle was returned by inputGetMesh
+        - attachment is a valid attachment
 
-\post
- - attributeHandle is a valid attribute handle
+      \post
+        - attributeHandle is a valid attribute handle
 
 @returns
 - ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
 - ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
                           attachment is not valid.
 - ::kOfxStatErrBadHandle - the mesh handle was invalid,
+ */
+  OfxStatus(*meshGetAttributeByIndex)(OfxMeshHandle meshHandle,
+                               int index,
+                               OfxPropertySetHandle *attributeHandle);
+
+  /** @brief Get an attribute handle by name and attachment from a mesh 
+
+      \arg meshHandle       - mesh handle
+      \arg attachment       - attribute attachment (see \ref MeshAttrib)
+      \arg name             - attribute name
+      \arg attributeHandle  - property set for returning attribute properties
+
+      \pre
+        - meshHandle was returned by inputGetMesh
+        - attachment is a valid attachment
+
+      \post
+        - attributeHandle is a valid attribute handle
+
+  @returns
+      - ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
+      - ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
+                          attachment is not valid.
+      - ::kOfxStatErrBadHandle - the mesh handle was invalid,
  */
   OfxStatus(*meshGetAttribute)(OfxMeshHandle meshHandle,
                                const char *attachment,
@@ -781,38 +804,37 @@ By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwn
 
   /** @brief Retrieves the property set for a given mesh
 
-  \arg mesh          mesh to get the property set for
-  \arg propHandle    pointer to a the property set handle, value is returned here
+      \arg mesh          mesh to get the property set for
+      \arg propHandle    pointer to a the property set handle, value is returned here
 
   The property handle is valid for the lifetime of the mesh.
 
   @returns
-  - ::kOfxStatOK            - the property set was found and returned
-  - ::kOfxStatErrBadHandle  - if the mesh handle was invalid
-  - ::kOfxStatErrUnknown    - if the type is unknown
+      - ::kOfxStatOK            - the property set was found and returned
+      - ::kOfxStatErrBadHandle  - if the mesh handle was invalid
+      - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*meshGetPropertySet)(OfxMeshHandle mesh,
           OfxPropertySetHandle *propHandle);
 
-/** @brief Allocate memory of a mesh in an output input
+  /** @brief Allocate memory of a mesh in an output input
 
       \arg meshHandle  - mesh handle
 
-\pre
- - meshHandle was not allocated yet
- - meshHandle was returned by inputGetMesh
- - inputReleaseMesh has not been called yet
- - meshHandle kOfxMeshPropPointCount, kOfxMeshPropCornerCount, kOfxMeshPropFaceCount properties
- must have been set.
+      \pre
+        - meshHandle was not allocated yet
+        - meshHandle was returned by inputGetMesh
+        - inputReleaseMesh has not been called yet
+        - meshHandle kOfxMeshPropPointCount, kOfxMeshPropCornerCount, kOfxMeshPropFaceCount properties must have been set.
 
-\post
- - all attribut data pointers for which kOfxMeshAttribPropIsOwner is 1 have been allocated
- - meshHandle attributes will no longer change (no call to meshDefineAttribute)
+      \post
+      - all attribut data pointers for which kOfxMeshAttribPropIsOwner is 1 have been allocated
+      - meshHandle attributes will no longer change (no call to meshDefineAttribute)
 
-@returns
-- ::kOfxStatOK           - the mesh was successfully allocated,
-- ::kOfxStatErrBadHandle - the mesh handle was invalid,
-- ::kOfxStatErrMemory    - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
+  @returns
+      - ::kOfxStatOK           - the mesh was successfully allocated,
+      - ::kOfxStatErrBadHandle - the mesh handle was invalid,
+      - ::kOfxStatErrMemory    - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
 
   */
   OfxStatus (*meshAlloc)(OfxMeshHandle meshHandle);
