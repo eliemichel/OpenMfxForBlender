@@ -89,6 +89,24 @@ NodeWarningType MFX_message_type(OfxMessageType messageType)
   }
 }
 
+static int MFX_element_count(const GeometryComponent &component,
+                             OpenMfx::AttributeAttachment attachment)
+{
+  switch (attachment) {
+    case OfxAttributeStruct::AttributeAttachment::Point:
+      return component.attribute_domain_size(ATTR_DOMAIN_POINT);
+    case OfxAttributeStruct::AttributeAttachment::Corner:
+      return component.attribute_domain_size(ATTR_DOMAIN_CORNER);
+    case OfxAttributeStruct::AttributeAttachment::Face:
+      return component.attribute_domain_size(ATTR_DOMAIN_FACE);
+    case OfxAttributeStruct::AttributeAttachment::Mesh:
+      return 1;
+    default:
+      BLI_assert(false);
+      return 0;
+  }
+}
+
 static void MFX_node_add_attrib_input(NodeDeclarationBuilder &b, const OfxAttributeStruct &attrib)
 {
   int componentCount = attrib.componentCount();
@@ -286,6 +304,21 @@ static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
     case PARAM_TYPE_UNKNOWN:
     default:
       break;
+  }
+}
+
+static const CPPType &MFX_to_cpptype(OpenMfx::AttributeType mfxType, int componentCount)
+{
+  // TODO: use componentCount
+  (void)componentCount;
+  switch (mfxType) {
+    case OfxAttributeStruct::AttributeType::Float:
+      return CPPType::get<float>();
+    case OfxAttributeStruct::AttributeType::Int:
+      return CPPType::get<int>();
+    default:
+      BLI_assert(false);  // not implemented
+      return CPPType::get<float>();
   }
 }
 
@@ -602,9 +635,9 @@ static void node_geo_exec(GeoNodeExecParams params)
   // 2. Set inputs/outputs
   
   // Data that lives only for the call to the Cook action
+  ResourceScope scope;
   std::vector<MeshInternalDataNode> inputInternalData(effect->inputs.count());
-  std::vector<blender::VArray_Span<float>> floatSpans;
-  std::vector<blender::VArray_Span<int>> intSpans;
+  std::vector<std::vector<GMutableSpan>> inputAttributeArrays(effect->inputs.count());
 
   MeshInternalDataNode *outputIt = nullptr;
   const char *outputLabel = nullptr;
@@ -626,7 +659,8 @@ static void node_geo_exec(GeoNodeExecParams params)
 
         // --------
 
-        std::vector<GVArray> arrays(attribCount);
+        std::vector<GMutableSpan> &spans = inputAttributeArrays[i];
+        //spans.resize(attribCount);
         GeometryComponent &component = inputData.geo.get_component_for_write(GEO_COMPONENT_TYPE_MESH);
 
         blender::fn::FieldEvaluator pointEvaluator{
@@ -645,6 +679,13 @@ static void node_geo_exec(GeoNodeExecParams params)
         for (int j = 0; j < attribCount ; ++j) {
           const OfxAttributeStruct &def = input.requested_attributes[j];
 
+          int64_t size = MFX_element_count(component, def.attachment());
+
+          const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
+          void *evalBuffer = scope.linear_allocator().allocate(type.size() * size,
+                                                                 type.alignment());
+          spans.push_back(GMutableSpan(type, evalBuffer, size));
+
           GField field;
           // TODO switch on the number of components
           switch (def.type()) {
@@ -660,13 +701,14 @@ static void node_geo_exec(GeoNodeExecParams params)
 
           switch (def.attachment()) {
             case OfxAttributeStruct::AttributeAttachment::Point:
-              pointEvaluator.add(field, &arrays[j]);
+              
+              pointEvaluator.add_with_destination(field, spans[j]);
               break;
             case OfxAttributeStruct::AttributeAttachment::Corner:
-              cornerEvaluator.add(field, &arrays[j]);
+              cornerEvaluator.add_with_destination(field, spans[j]);
               break;
             case OfxAttributeStruct::AttributeAttachment::Face:
-              faceEvaluator.add(field, &arrays[j]);
+              faceEvaluator.add_with_destination(field, spans[j]);
               break;
             case OfxAttributeStruct::AttributeAttachment::Mesh:
               BLI_assert(false);  // not implemented
@@ -685,35 +727,11 @@ static void node_geo_exec(GeoNodeExecParams params)
           attrib.deep_copy_from(def);
           attrib.properties[kOfxMeshAttribPropIsOwner].value[0].as_int = 0;
 
-          void *data = nullptr;
-          int stride = 0;
-
-          // TODO switch on the number of components
-          switch (def.type()) {
-            case OfxAttributeStruct::AttributeType::Float: {
-              blender::VArray_Span<float> span(arrays[j].typed<float>());
-              data = (void *)span.data();
-              stride = sizeof(float);
-
-              // save the span for the duration of the cooking
-              floatSpans.push_back(std::move(span));
-              break;
-            }
-            case OfxAttributeStruct::AttributeType::Int: {
-              blender::VArray_Span<int> span(arrays[j].typed<int>());
-              data = (void *)span.data();
-              stride = sizeof(int);
-
-              // save the span for the duration of the cooking
-              intSpans.push_back(std::move(span));
-              break;
-            }
-            default:
-              BLI_assert(false);  // not implemented
-          }
+          void *data = spans[j].data();
+          const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
 
           attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
-          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = stride;
+          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.alignment();
         }
 
         // --------
@@ -773,7 +791,9 @@ static void node_geo_exec(GeoNodeExecParams params)
         // TODO: switch on type
         params.set_output(attribInfo.name(),
                           AnonymousAttributeFieldInput::Create<float>(
-                              attrib, params.attribute_producer_name()));
+                              std::move(attrib), params.attribute_producer_name()));
+
+        outputIt->outputAttributes[j] = {};
       //}
     }
   }

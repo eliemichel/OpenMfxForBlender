@@ -1077,8 +1077,8 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
     
     //blender::bke::StrongAnonymousAttributeID id(requestedAttrib.name());
     const AttributeDomain domain = ATTR_DOMAIN_POINT;  // TODO
-    blender::bke::OutputAttribute_Typed<float> attribute =
-        component.attribute_try_get_for_output_only<float>(outputAttributes[i].get(), domain);
+    blender::bke::OutputAttribute_Typed<float> attribute;
+    attribute = component.attribute_try_get_for_output_only<float>(outputAttributes[i].get(), domain);
     float *destData = attribute.as_span().data();
     for (int k = 0; k < counts.ofxPointCount; ++k) {
       destData[k] = *attributeAt<float>(ofxAttribData, ofxAttribStride, k);
