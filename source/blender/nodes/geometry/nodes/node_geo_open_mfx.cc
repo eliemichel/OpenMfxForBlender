@@ -767,6 +767,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   // 4. Cook
   if (!canCook) {
+    params.set_default_remaining_outputs();
     return;
   }
 
