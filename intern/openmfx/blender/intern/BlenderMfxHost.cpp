@@ -591,7 +591,9 @@ OfxStatus BlenderMfxHost::setupCornerPointAttribute(OfxMeshHandle ofxMesh,
   else {
     // request new buffer, we need to append new corners for loose edges
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-    afterAllocate.push_back([&]() {
+    afterAllocate.push_back([=]() {
+      OfxPropertySetHandle attrib;
+      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint, &attrib));
       int *data = nullptr;
       MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
 
@@ -641,7 +643,9 @@ OfxStatus BlenderMfxHost::setupFaceSizeAttribute(OfxMeshHandle ofxMesh,
   else {
     // request new buffer, we need to append new faces for loose edges
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-    afterAllocate.push_back([&]() {
+    afterAllocate.push_back([=]() {
+      OfxPropertySetHandle attrib;
+      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize, &attrib));
       if (-1 == counts.ofxConstantFaceSize) {
         int *data = nullptr;
         MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
@@ -689,28 +693,31 @@ OfxStatus BlenderMfxHost::setupPointWeightAttributes(OfxMeshHandle ofxMesh,
     return kOfxStatOK;
   }
 
-  std::vector<OfxPropertySetHandle> attribs(weightGroupsCount);
   for (int k = 0; k < weightGroupsCount; k++) {
     std::string name = prefix + std::to_string(k);
     // request new buffer to copy data from existing polys, fill default values for edges
+    OfxPropertySetHandle attrib;
     MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
                                                kOfxMeshAttribPoint,
                                                name.c_str(),
                                                1,
                                                kOfxMeshAttribTypeFloat,
                                                kOfxMeshAttribSemanticWeight,
-                                               &attribs[k]));
-    MFX_CHECK(propertySuite->propSetInt(attribs[k], kOfxMeshAttribPropIsOwner, 0, 1));
+                                               &attrib));
+    MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
   }
 
-  afterAllocate.push_back([&]() {
+  afterAllocate.push_back([=]() {
     std::vector<float *> buffers(weightGroupsCount, nullptr);
     for (int k = 0; k < weightGroupsCount; ++k) {
-      MFX_CHECK(propertySuite->propGetPointer(attribs[k], kOfxMeshAttribPropData, 0, (void **)&buffers[k]));
+      OfxPropertySetHandle attrib;
+      std::string name = prefix + std::to_string(k);
+      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribPoint, name.c_str(), &attrib));
+      MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&buffers[k]));
 
 #ifndef NDEBUG
       int stride;
-      MFX_CHECK(propertySuite->propGetInt(attribs[k], kOfxMeshAttribPropStride, 0, &stride));
+      MFX_CHECK(propertySuite->propGetInt(attrib, kOfxMeshAttribPropStride, 0, &stride));
       assert(stride == sizeof(float));
 #endif  // NDEBUG
     }
@@ -832,7 +839,9 @@ OfxStatus BlenderMfxHost::setupCornerAttribute(OfxMeshHandle ofxMesh,
   else if (counts.blenderLoopCount > 0) {
     // request new buffer to copy data from existing polys, fill default values for edges
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-    afterAllocate.push_back([&]() {
+    afterAllocate.push_back([=]() {
+      OfxPropertySetHandle attrib;
+      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &attrib));
       char *data = nullptr;
       MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
 
@@ -887,7 +896,9 @@ OfxStatus BlenderMfxHost::setupFaceMapAttribute(OfxMeshHandle ofxMesh,
                                                kOfxMeshAttribSemanticWeight,
                                                &attrib));
     MFX_CHECK(propertySuite->propSetInt(attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-    afterAllocate.push_back([&]() {
+    afterAllocate.push_back([=]() {
+      OfxPropertySetHandle attrib;
+      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribFace, name, &attrib));
       int *data = nullptr;
       MFX_CHECK(propertySuite->propGetPointer(attrib, kOfxMeshAttribPropData, 0, (void **)&data));
 
