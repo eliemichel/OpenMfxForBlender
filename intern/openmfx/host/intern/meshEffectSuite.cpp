@@ -235,6 +235,15 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
 
   meshHandle->free_owned_data();
 
+  // Free owned data sur le IOMap
+  
+  int findIOMap = meshHandle->properties.find(kOfxMeshPropIOMap);
+  if (findIOMap != -1) {
+    OfxMeshStruct *map = nullptr;
+    propGetPointer(&meshHandle->properties, kOfxMeshPropIOMap, 0, (void **)&map);
+    map->free_owned_data();
+    meshHandle->properties.remove(findIOMap);
+  }
   propSetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropCornerCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropFaceCount, 0, 0);
@@ -332,6 +341,101 @@ OfxStatus meshGetPropertySet(OfxMeshHandle mesh, OfxPropertySetHandle *propHandl
 OfxStatus meshAlloc(OfxMeshHandle meshHandle)
 {
   OfxStatus status;
+  bool isAttributeMap = meshHandle->properties.find("OfxMeshPropIsAttributeMap") != -1;
+  if (isAttributeMap) {
+    int output_points_count, origin_points_pool_size;
+    status = propGetInt(&meshHandle->properties, "OfxMeshPropOutputPointsCount", 0, &output_points_count);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+    status = propGetInt(&meshHandle->properties, "OfxMeshOriginPointsTotalPoolSize", 0, &origin_points_pool_size);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+
+    meshHandle->attributes.clear();
+    int elementCount[3];
+
+    attributeDefine(meshHandle,
+                    kOfxMeshAttribMesh,
+                    "OfxMeshAttribOriginPointsPoolSize",
+                    1,
+                    kOfxMeshAttribTypeInt,
+                    NULL,
+                    NULL);
+    elementCount[0] = output_points_count;
+    
+    attributeDefine(meshHandle,
+                    kOfxMeshAttribMesh,
+                    "OfxMeshAttribOriginPointIndex",
+                    1,
+                    kOfxMeshAttribTypeInt,
+                    NULL,
+                    NULL);
+    elementCount[1] = origin_points_pool_size;
+   
+    attributeDefine(meshHandle,
+                    kOfxMeshAttribMesh,
+                    "OfxMeshAttribOriginPointWeight",
+                    1,
+                    kOfxMeshAttribTypeFloat,
+                    NULL,
+                    NULL);
+    elementCount[2] = origin_points_pool_size;
+
+    for (int i = 0; i < meshHandle->attributes.count(); ++i) {
+      OfxAttributeStruct &attribute = meshHandle->attributes[i];
+
+      int count;
+      status = propGetInt(&attribute.properties, kOfxMeshAttribPropComponentCount, 0, &count);
+      if (kOfxStatOK != status) {
+        return status;
+      }
+
+      char *type;
+      status = propGetString(&attribute.properties, kOfxMeshAttribPropType, 0, &type);
+      if (kOfxStatOK != status) {
+        return status;
+      }
+
+      size_t byteSize = 0;
+      if (0 == strcmp(type, kOfxMeshAttribTypeUByte)) {
+        byteSize = sizeof(unsigned char);
+      }
+      else if (0 == strcmp(type, kOfxMeshAttribTypeInt)) {
+        byteSize = sizeof(int);
+      }
+      else if (0 == strcmp(type, kOfxMeshAttribTypeFloat)) {
+        byteSize = sizeof(float);
+      }
+      else {
+        return kOfxStatErrBadHandle;
+      }
+
+      void *data = new char[byteSize * count * elementCount[i]];
+      if (NULL == data) {
+        return kOfxStatErrMemory;
+      }
+
+      status = propSetPointer(&attribute.properties, kOfxMeshAttribPropData, 0, data);
+      if (kOfxStatOK != status) {
+        return status;
+      }
+
+      status = propSetInt(
+          &attribute.properties, kOfxMeshAttribPropStride, 0, (int)(byteSize * count));
+      if (kOfxStatOK != status) {
+        return status;
+      }
+
+      status = propSetInt(&attribute.properties, kOfxMeshAttribPropIsOwner, 0, 1);
+      if (kOfxStatOK != status) {
+        return status;
+      }
+    }
+
+    return kOfxStatOK;
+  }
 
   // Call internal callback before actually allocating data
   OfxHost *host = nullptr;

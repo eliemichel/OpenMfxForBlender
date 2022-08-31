@@ -141,7 +141,6 @@ bool MfxHost::GetDescriptor(OfxPlugin* plugin, OfxMeshEffectHandle & effectDescr
 		delete effectHandle;
 		return false;
 	}
-
 	return true;
 }
 

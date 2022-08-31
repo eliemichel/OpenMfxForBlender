@@ -42,6 +42,7 @@
 #include "intern/BlenderMfxHost.h"
 #include "TinyTimer.h"
 
+#include "sdk/MfxAttributeProps.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
 
@@ -374,7 +375,6 @@ static void node_declare(NodeDeclarationBuilder &b)
       for (int i = 0; i < inputs.count(); ++i) {
         MFX_node_add_geo_input(b, inputs[i]);
       }
-
       const OfxParamSetStruct &params = desc->parameters;
       for (int i = 0; i < params.count(); ++i) {
         MFX_node_add_param_input(b, params[i]);
@@ -643,6 +643,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   const char *outputLabel = nullptr;
   bool canCook = true;
 
+  OfxMeshStruct AttributeIOMap;
+
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
     MeshInternalDataNode &inputData = inputInternalData[i];
@@ -729,7 +731,27 @@ static void node_geo_exec(GeoNodeExecParams params)
 
           void *data = spans[j].data();
           const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
-
+          
+         /* MeshComponent &component = inputData.geo.get_component_for_write<MeshComponent>();
+          component.attribute_foreach([&](const AttributeIDRef &id, const AttributeMetaData meta_data) {
+            if (!ELEM(meta_data.domain, ATTR_DOMAIN_POINT, ATTR_DOMAIN_CORNER, ATTR_DOMAIN_FACE)) {
+              return true;
+            }
+            OutputAttribute attribute = component.attribute_try_get_for_output(
+                id, meta_data.domain, meta_data.data_type);
+            attribute_math::convert_to_static_type(meta_data.data_type, [&](auto dummy) {
+              using T = decltype(dummy);
+              MutableSpan<T> data = attribute.as_span().typed<T>();
+              switch (attribute.domain()) {
+                case ATTR_DOMAIN_POINT: {
+                  copy_with_mask(data.slice(new_vert_range), data.as_span(), selection);
+                  break;
+                }
+                default:
+                  BLI_assert_unreachable();
+              }
+            });*/
+            
           attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
           attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.alignment();
         }
@@ -745,14 +767,24 @@ static void node_geo_exec(GeoNodeExecParams params)
       outputIt = &inputInternalData[i];
 
       // Prepare expected attributes
-      int attribCount = input.requested_attributes.count();
-      inputData.requestedAttributes.resize(attribCount);
-      inputData.outputAttributes.resize(attribCount);
+      size_t requestedAttribCount = input.requested_attributes.count();
 
-      for (int j = 0; j < attribCount; ++j) {
+      inputData.requestedAttributes.resize(requestedAttribCount);
+      inputData.outputAttributes.resize(requestedAttribCount);
+
+      for (int j = 0; j < requestedAttribCount; ++j) {
         auto &attribData = inputData.requestedAttributes[j];
         attribData.deep_copy_from(input.requested_attributes[j]);
         inputData.outputAttributes[j] = StrongAnonymousAttributeID(attribData.name());
+      }
+
+      // TODO: For other default attributes, check if a map exists, add to requested attributes and prepare a StrongAnonymousAttributeID
+      bool IOMapRequested = input.properties.find(kOfxInputPropRequestIOMap) != -1;
+      IOMapRequested = IOMapRequested && input.properties[kOfxInputPropRequestIOMap].value[0].as_int;
+
+      if (IOMapRequested) {
+        host.propertySuite->propSetPointer(&input.mesh.properties, kOfxMeshPropIOMap, 0, (void *)&AttributeIOMap);
+        host.propertySuite->propSetPointer(&input.mesh.properties, "OfxMeshSource0", 0, (void *)&effect->inputs[0].mesh);
       }
     }
 
@@ -773,6 +805,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   TinyTimer::Timer subtimer;
   bool success = host.Cook(effect);
+  
   PERF(1).add_sample(subtimer);
 
   if (!success) {
@@ -784,8 +817,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   if (nullptr != outputIt) {
     params.set_output(outputLabel, outputIt->geo);
 
-    int attribCount = outputIt->requestedAttributes.size();
-    for (int j = 0; j < attribCount; ++j) {
+    int requestedAttribCount = outputIt->requestedAttributes.size();
+    for (int j = 0; j < requestedAttribCount; ++j) {
       const auto &attribInfo = outputIt->requestedAttributes[j];
       const auto &attrib = outputIt->outputAttributes[j];
       //if (params.output_is_required(attribInfo.name())) {
