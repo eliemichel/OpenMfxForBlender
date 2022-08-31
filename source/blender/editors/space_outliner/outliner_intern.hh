@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spoutliner
@@ -49,6 +33,7 @@ struct ViewLayer;
 struct bContext;
 struct bContextDataResult;
 struct bPoseChannel;
+struct View2D;
 struct wmKeyConfig;
 struct wmOperatorType;
 
@@ -57,10 +42,12 @@ class AbstractTreeDisplay;
 class AbstractTreeElement;
 }  // namespace blender::ed::outliner
 
+namespace outliner = blender::ed::outliner;
+
 struct SpaceOutliner_Runtime {
   /** Object to create and manage the tree for a specific display type (View Layers, Scenes,
    * Blender File, etc.). */
-  std::unique_ptr<blender::ed::outliner::AbstractTreeDisplay> tree_display;
+  std::unique_ptr<outliner::AbstractTreeDisplay> tree_display;
 
   /** Pointers to tree-store elements, grouped by `(id, type, nr)`
    *  in hash-table for faster searching. */
@@ -93,11 +80,12 @@ typedef struct TreeElement {
   struct TreeElement *next, *prev, *parent;
 
   /**
-   * Handle to the new C++ object (a derived type of base #AbstractTreeElement) that should replace
-   * #TreeElement. Step by step, data should be moved to it and operations based on the type should
-   * become virtual methods of the class hierarchy.
+   * The new inheritance based representation of the element (a derived type of base
+   * #AbstractTreeElement) that should eventually replace #TreeElement. Step by step, data should
+   * be moved to it and operations based on the type should become virtual methods of the class
+   * hierarchy.
    */
-  std::unique_ptr<blender::ed::outliner::AbstractTreeElement> type;
+  std::unique_ptr<outliner::AbstractTreeElement> abstract_element;
 
   ListBase subtree;
   int xs, ys;                /* Do selection. */
@@ -121,7 +109,7 @@ typedef struct TreeElementIcon {
         ID_LI, \
         ID_OB, \
         ID_ME, \
-        ID_CU, \
+        ID_CU_LEGACY, \
         ID_MB, \
         ID_NT, \
         ID_MA, \
@@ -142,7 +130,7 @@ typedef struct TreeElementIcon {
         ID_GD, \
         ID_LS, \
         ID_LP, \
-        ID_HA, \
+        ID_CV, \
         ID_PT, \
         ID_VO, \
         ID_SIM) || /* Only in 'blendfile' mode ... :/ */ \
@@ -165,15 +153,16 @@ enum {
   /* Closed items display their children as icon within the row. TE_ICONROW is for
    * these child-items that are visible but only within the row of the closed parent. */
   TE_ICONROW = (1 << 1),
-  TE_LAZY_CLOSED = (1 << 2),
+  /** Treat the element as if it had children, e.g. draw an icon to un-collapse it, even if it
+   * doesn't. Used where children are lazy-built only if the parent isn't collapsed (see
+   * #AbstractTreeDisplay::is_lazy_built()). */
+  TE_PRETEND_HAS_CHILDREN = (1 << 2),
   TE_FREE_NAME = (1 << 3),
   TE_DRAGGING = (1 << 4),
   TE_CHILD_NOT_IN_COLLECTION = (1 << 6),
   /* Child elements of the same type in the icon-row are drawn merged as one icon.
    * This flag is set for an element that is part of these merged child icons. */
   TE_ICONROW_MERGED = (1 << 7),
-  /* This element has some warning to be displayed. */
-  TE_HAS_WARNING = (1 << 8),
 };
 
 /* button events */
@@ -231,8 +220,9 @@ typedef enum {
 
 /* is the current element open? if so we also show children */
 #define TSELEM_OPEN(telm, sv) \
-  (((telm)->flag & TSE_CLOSED) == 0 || \
-   (SEARCHING_OUTLINER(sv) && ((telm)->flag & TSE_CHILDSEARCH)))
+  (CHECK_TYPE_INLINE(telm, TreeStoreElem *), \
+   (((telm)->flag & TSE_CLOSED) == 0 || \
+    (SEARCHING_OUTLINER(sv) && ((telm)->flag & TSE_CHILDSEARCH))))
 
 /**
  * Container to avoid passing around these variables to many functions.
@@ -289,11 +279,6 @@ struct TreeElement *outliner_add_collection_recursive(SpaceOutliner *space_outli
 
 bool outliner_requires_rebuild_on_select_or_active_change(
     const struct SpaceOutliner *space_outliner);
-/**
- * Check if a display mode needs a full rebuild if the open/collapsed state changes.
- * Element types in these modes don't actually add children if collapsed, so the rebuild is needed.
- */
-bool outliner_requires_rebuild_on_open_change(const struct SpaceOutliner *space_outliner);
 
 typedef struct IDsSelectedData {
   struct ListBase selected_array;
@@ -421,8 +406,12 @@ int outliner_flag_is_any_test(ListBase *lb, short flag, int curlevel);
  * Set or unset \a flag for all outliner elements in \a lb and sub-trees.
  * \return if any flag was modified.
  */
-bool outliner_flag_set(ListBase *lb, short flag, short set);
-bool outliner_flag_flip(ListBase *lb, short flag);
+extern "C++" {
+bool outliner_flag_set(const SpaceOutliner &space_outliner, short flag, short set);
+bool outliner_flag_set(const ListBase &lb, short flag, short set);
+bool outliner_flag_flip(const SpaceOutliner &space_outliner, short flag);
+bool outliner_flag_flip(const ListBase &lb, short flag);
+}
 
 void item_rename_fn(struct bContext *C,
                     struct ReportList *reports,
@@ -446,13 +435,13 @@ void lib_reload_fn(struct bContext *C,
                    struct TreeStoreElem *tselem,
                    void *user_data);
 
-void id_delete_fn(struct bContext *C,
-                  struct ReportList *reports,
-                  struct Scene *scene,
-                  struct TreeElement *te,
-                  struct TreeStoreElem *tsep,
-                  struct TreeStoreElem *tselem,
-                  void *user_data);
+void id_delete_tag_fn(struct bContext *C,
+                      struct ReportList *reports,
+                      struct Scene *scene,
+                      struct TreeElement *te,
+                      struct TreeStoreElem *tsep,
+                      struct TreeStoreElem *tselem,
+                      void *user_data);
 void id_remap_fn(struct bContext *C,
                  struct ReportList *reports,
                  struct Scene *scene,
@@ -464,15 +453,13 @@ void id_remap_fn(struct bContext *C,
 /**
  * To retrieve coordinates with redrawing the entire tree.
  */
-void outliner_set_coordinates(struct ARegion *region, struct SpaceOutliner *space_outliner);
+void outliner_set_coordinates(const struct ARegion *region,
+                              const struct SpaceOutliner *space_outliner);
 
 /**
  * Open or close a tree element, optionally toggling all children recursively.
  */
-void outliner_item_openclose(struct SpaceOutliner *space_outliner,
-                             TreeElement *te,
-                             bool open,
-                             bool toggle_all);
+void outliner_item_openclose(TreeElement *te, bool open, bool toggle_all);
 
 /* outliner_dragdrop.c */
 
@@ -521,6 +508,11 @@ void OUTLINER_OT_drivers_delete_selected(struct wmOperatorType *ot);
 
 void OUTLINER_OT_orphans_purge(struct wmOperatorType *ot);
 
+/* outliner_query.cc ---------------------------------------------- */
+
+bool outliner_shows_mode_column(const SpaceOutliner &space_outliner);
+bool outliner_has_element_warnings(const SpaceOutliner &space_outliner);
+
 /* outliner_tools.c ---------------------------------------------- */
 
 void merged_element_search_menu_invoke(struct bContext *C,
@@ -533,6 +525,8 @@ void OUTLINER_OT_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_scene_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_object_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_lib_operation(struct wmOperatorType *ot);
+void OUTLINER_OT_liboverride_operation(struct wmOperatorType *ot);
+void OUTLINER_OT_liboverride_troubleshoot_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_id_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_id_remap(struct wmOperatorType *ot);
 void OUTLINER_OT_id_copy(struct wmOperatorType *ot);
@@ -547,6 +541,7 @@ void OUTLINER_OT_delete(struct wmOperatorType *ot);
 /* ---------------------------------------------------------------- */
 
 /* outliner_ops.c */
+
 void outliner_operatortypes(void);
 void outliner_keymap(struct wmKeyConfig *keyconf);
 
@@ -558,7 +553,7 @@ void outliner_collection_delete(struct bContext *C,
                                 struct Main *bmain,
                                 struct Scene *scene,
                                 struct ReportList *reports,
-                                bool hierarchy);
+                                bool do_hierarchy);
 
 void OUTLINER_OT_collection_new(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_duplicate_linked(struct wmOperatorType *ot);
@@ -649,15 +644,21 @@ bool outliner_tree_traverse(const SpaceOutliner *space_outliner,
                             int filter_tselem_flag,
                             TreeTraversalFunc func,
                             void *customdata);
-float outliner_restrict_columns_width(const struct SpaceOutliner *space_outliner);
+float outliner_right_columns_width(const struct SpaceOutliner *space_outliner);
 /**
  * Find first tree element in tree with matching tree-store flag.
  */
 TreeElement *outliner_find_element_with_flag(const ListBase *lb, short flag);
 /**
- * Find if element is visible in the outliner tree.
+ * Find if element is visible in the outliner tree, i.e. if all of its parents are expanded.
+ * Doesn't check if the item is in view-bounds, for that use #outliner_is_element_in_view().
  */
 bool outliner_is_element_visible(const TreeElement *te);
+/**
+ * Check if the element is displayed within the view bounds. Doesn't check if all parents are
+ * open/uncollapsed.
+ */
+bool outliner_is_element_in_view(const TreeElement *te, const struct View2D *v2d);
 /**
  * Scroll view vertically while keeping within total bounds.
  */
@@ -700,7 +701,7 @@ template<typename TreeElementT> TreeElementT *tree_element_cast(const TreeElemen
 {
   static_assert(std::is_base_of_v<AbstractTreeElement, TreeElementT>,
                 "Requested tree-element type must be an AbstractTreeElement");
-  return dynamic_cast<TreeElementT *>(te->type.get());
+  return dynamic_cast<TreeElementT *>(te->abstract_element.get());
 }
 
 }  // namespace blender::ed::outliner

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008, Blender Foundation
- * This is a new part of Blender
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. */
 
 #pragma once
 
@@ -32,6 +16,7 @@ struct Brush;
 struct CurveMapping;
 struct Depsgraph;
 struct GHash;
+struct GPencilUpdateCache;
 struct ListBase;
 struct MDeformVert;
 struct Main;
@@ -49,7 +34,8 @@ struct bGPDlayer_Mask;
 struct bGPDstroke;
 struct bGPdata;
 
-#define GPENCIL_SIMPLIFY(scene) (scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ENABLE)
+#define GPENCIL_SIMPLIFY(scene) \
+  ((scene->r.mode & R_SIMPLIFY) && (scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ENABLE))
 #define GPENCIL_SIMPLIFY_ONPLAY(playing) \
   (((playing == true) && (scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ON_PLAY)) || \
    ((scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ON_PLAY) == 0))
@@ -90,13 +76,13 @@ struct bGPdata;
 void BKE_gpencil_free_point_weights(struct MDeformVert *dvert);
 void BKE_gpencil_free_stroke_weights(struct bGPDstroke *gps);
 void BKE_gpencil_free_stroke_editcurve(struct bGPDstroke *gps);
-/* free stroke, doesn't unlink from any listbase */
+/** Free stroke, doesn't unlink from any #ListBase. */
 void BKE_gpencil_free_stroke(struct bGPDstroke *gps);
-/* Free strokes belonging to a gp-frame */
+/** Free strokes belonging to a gp-frame. */
 bool BKE_gpencil_free_strokes(struct bGPDframe *gpf);
-/* Free all of a gp-layer's frames */
+/** Free all of a gp-layer's frames. */
 void BKE_gpencil_free_frames(struct bGPDlayer *gpl);
-/* Free all of the gp-layers for a viewport (list should be &gpd->layers or so) */
+/** Free all of the gp-layers for a viewport (list should be `&gpd->layers` or so). */
 void BKE_gpencil_free_layers(struct ListBase *list);
 /** Free (or release) any data used by this grease pencil (does not free the gpencil itself). */
 void BKE_gpencil_free_data(struct bGPdata *gpd, bool free_all);
@@ -122,9 +108,9 @@ void BKE_gpencil_batch_cache_free(struct bGPdata *gpd);
  */
 void BKE_gpencil_stroke_sync_selection(struct bGPdata *gpd, struct bGPDstroke *gps);
 void BKE_gpencil_curve_sync_selection(struct bGPdata *gpd, struct bGPDstroke *gps);
-/* Assign unique stroke ID for selection. */
+/** Assign unique stroke ID for selection. */
 void BKE_gpencil_stroke_select_index_set(struct bGPdata *gpd, struct bGPDstroke *gps);
-/* Reset unique stroke ID for selection. */
+/** Reset unique stroke ID for selection. */
 void BKE_gpencil_stroke_select_index_reset(struct bGPDstroke *gps);
 
 /**
@@ -175,10 +161,28 @@ struct bGPDframe *BKE_gpencil_frame_duplicate(const struct bGPDframe *gpf_src, b
 struct bGPDlayer *BKE_gpencil_layer_duplicate(const struct bGPDlayer *gpl_src,
                                               bool dup_frames,
                                               bool dup_strokes);
+
+/**
+ * Make a copy of a given gpencil data settings.
+ */
+void BKE_gpencil_data_copy_settings(const struct bGPdata *gpd_src, struct bGPdata *gpd_dst);
+
 /**
  * Make a copy of a given gpencil layer settings.
  */
 void BKE_gpencil_layer_copy_settings(const struct bGPDlayer *gpl_src, struct bGPDlayer *gpl_dst);
+
+/**
+ * Make a copy of a given gpencil frame settings.
+ */
+void BKE_gpencil_frame_copy_settings(const struct bGPDframe *gpf_src, struct bGPDframe *gpf_dst);
+
+/**
+ * Make a copy of a given gpencil stroke settings.
+ */
+void BKE_gpencil_stroke_copy_settings(const struct bGPDstroke *gps_src,
+                                      struct bGPDstroke *gps_dst);
+
 /**
  * Make a copy of strokes between gpencil frames.
  * \param gpf_src: Source grease pencil frame
@@ -675,12 +679,23 @@ extern void (*BKE_gpencil_batch_cache_free_cb)(struct bGPdata *gpd);
  */
 void BKE_gpencil_frame_original_pointers_update(const struct bGPDframe *gpf_orig,
                                                 const struct bGPDframe *gpf_eval);
+
+void BKE_gpencil_layer_original_pointers_update(const struct bGPDlayer *gpl_orig,
+                                                const struct bGPDlayer *gpl_eval);
 /**
  * Update pointers of eval data to original data to keep references.
  * \param ob_orig: Original grease pencil object
  * \param ob_eval: Evaluated grease pencil object
  */
 void BKE_gpencil_update_orig_pointers(const struct Object *ob_orig, const struct Object *ob_eval);
+
+/**
+ * Update pointers of eval data to original data to keep references.
+ * \param gpd_orig: Original grease pencil data
+ * \param gpd_eval: Evaluated grease pencil data
+ */
+void BKE_gpencil_data_update_orig_pointers(const struct bGPdata *gpd_orig,
+                                           const struct bGPdata *gpd_eval);
 
 /**
  * Get parent matrix, including layer parenting.
@@ -710,6 +725,11 @@ void BKE_gpencil_update_layer_transforms(const struct Depsgraph *depsgraph, stru
 int BKE_gpencil_material_find_index_by_name_prefix(struct Object *ob, const char *name_prefix);
 
 void BKE_gpencil_blend_read_data(struct BlendDataReader *reader, struct bGPdata *gpd);
+
+bool BKE_gpencil_can_avoid_full_copy_on_write(const struct Depsgraph *depsgraph,
+                                              struct bGPdata *gpd);
+
+void BKE_gpencil_update_on_write(struct bGPdata *gpd_orig, struct bGPdata *gpd_eval);
 
 #ifdef __cplusplus
 }

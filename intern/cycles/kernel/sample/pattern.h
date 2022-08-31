@@ -1,18 +1,6 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
+
 #pragma once
 
 #include "kernel/sample/jitter.h"
@@ -44,7 +32,7 @@ ccl_device uint sobol_dimension(KernelGlobals kg, int index, int dimension)
   uint i = index + SOBOL_SKIP;
   for (int j = 0, x; (x = find_first_set(i)); i >>= x) {
     j += x;
-    result ^= __float_as_uint(kernel_tex_fetch(__sample_pattern_lut, 32 * dimension + j - 1));
+    result ^= __float_as_uint(kernel_data_fetch(sample_pattern_lut, 32 * dimension + j - 1));
   }
   return result;
 }

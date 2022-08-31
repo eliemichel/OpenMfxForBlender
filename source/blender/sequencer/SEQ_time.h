@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -45,7 +29,9 @@ void SEQ_timeline_init_boundbox(const struct Scene *scene, struct rctf *rect);
  * \param seqbase: ListBase in which strips are located
  * \param rect: output parameter to be filled with strips' boundaries
  */
-void SEQ_timeline_expand_boundbox(const struct ListBase *seqbase, struct rctf *rect);
+void SEQ_timeline_expand_boundbox(const struct Scene *scene,
+                                  const struct ListBase *seqbase,
+                                  struct rctf *rect);
 /**
  * Define boundary rectangle of sequencer timeline and fill in rect data
  *
@@ -63,8 +49,6 @@ int SEQ_time_find_next_prev_edit(struct Scene *scene,
                                  bool do_skip_mute,
                                  bool do_center,
                                  bool do_unselected);
-void SEQ_time_update_sequence(struct Scene *scene, struct ListBase *seqbase, struct Sequence *seq);
-void SEQ_time_update_recursive(struct Scene *scene, struct Sequence *changed_seq);
 /**
  * Test if strip intersects with timeline frame.
  * \note This checks if strip would be rendered at this frame. For rendering it is assumed, that
@@ -74,8 +58,24 @@ void SEQ_time_update_recursive(struct Scene *scene, struct Sequence *changed_seq
  * \param timeline_frame: absolute frame position
  * \return true if strip intersects with timeline frame.
  */
-bool SEQ_time_strip_intersects_frame(const struct Sequence *seq, int timeline_frame);
-void SEQ_time_update_meta_strip_range(struct Scene *scene, struct Sequence *seq_meta);
+bool SEQ_time_strip_intersects_frame(const struct Scene *scene,
+                                     const struct Sequence *seq,
+                                     int timeline_frame);
+bool SEQ_time_has_still_frames(const struct Scene *scene, const struct Sequence *seq);
+bool SEQ_time_has_left_still_frames(const struct Scene *scene, const struct Sequence *seq);
+bool SEQ_time_has_right_still_frames(const struct Scene *scene, const struct Sequence *seq);
+
+int SEQ_time_left_handle_frame_get(const struct Scene *scene, const struct Sequence *seq);
+int SEQ_time_right_handle_frame_get(const struct Scene *scene, const struct Sequence *seq);
+void SEQ_time_left_handle_frame_set(const struct Scene *scene, struct Sequence *seq, int val);
+void SEQ_time_right_handle_frame_set(const struct Scene *scene, struct Sequence *seq, int val);
+int SEQ_time_strip_length_get(const struct Scene *scene, const struct Sequence *seq);
+void SEQ_time_speed_factor_set(const struct Scene *scene,
+                               struct Sequence *seq,
+                               const float speed_factor);
+float SEQ_time_start_frame_get(const struct Sequence *seq);
+void SEQ_time_start_frame_set(const struct Scene *scene, struct Sequence *seq, int timeline_frame);
+void SEQ_time_update_meta_strip_range(const struct Scene *scene, struct Sequence *seq_meta);
 
 #ifdef __cplusplus
 }

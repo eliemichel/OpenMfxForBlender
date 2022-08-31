@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2016 by Mike Erwin.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2016 by Mike Erwin. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -44,11 +28,11 @@ namespace blender::gpu {
 class Context {
  public:
   /** State management */
-  Shader *shader = NULL;
-  FrameBuffer *active_fb = NULL;
-  GPUMatrixState *matrix_state = NULL;
-  StateManager *state_manager = NULL;
-  Immediate *imm = NULL;
+  Shader *shader = nullptr;
+  FrameBuffer *active_fb = nullptr;
+  GPUMatrixState *matrix_state = nullptr;
+  StateManager *state_manager = nullptr;
+  Immediate *imm = nullptr;
 
   /**
    * All 4 window frame-buffers.
@@ -57,10 +41,10 @@ class Context {
    * Front frame-buffers contains (in principle, but not always) the last frame color.
    * Default frame-buffer is back_left.
    */
-  FrameBuffer *back_left = NULL;
-  FrameBuffer *front_left = NULL;
-  FrameBuffer *back_right = NULL;
-  FrameBuffer *front_right = NULL;
+  FrameBuffer *back_left = nullptr;
+  FrameBuffer *front_left = nullptr;
+  FrameBuffer *back_right = nullptr;
+  FrameBuffer *front_right = nullptr;
 
   DebugStack debug_stack;
 
@@ -68,7 +52,7 @@ class Context {
   /** Thread on which this context is active. */
   pthread_t thread_;
   bool is_active_;
-  /** Avoid including GHOST headers. Can be NULL for off-screen contexts. */
+  /** Avoid including GHOST headers. Can be nullptr for off-screen contexts. */
   void *ghost_window_;
 
  public:
@@ -79,6 +63,8 @@ class Context {
 
   virtual void activate() = 0;
   virtual void deactivate() = 0;
+  virtual void begin_frame() = 0;
+  virtual void end_frame() = 0;
 
   /* Will push all pending commands to the GPU. */
   virtual void flush() = 0;

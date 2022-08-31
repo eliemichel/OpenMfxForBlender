@@ -1,24 +1,7 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * - Blender Foundation, 2003-2009
- * - Peter Schlaile <peter [at] schlaile [dot] de> 2005/2006
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved.
+ *           2003-2009 Blender Foundation.
+ *           2005-2006 Peter Schlaile <peter [at] schlaile [dot] de> */
 
 /** \file
  * \ingroup bke
@@ -44,6 +27,7 @@
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 
+#include "SEQ_channels.h"
 #include "SEQ_edit.h"
 #include "SEQ_effects.h"
 #include "SEQ_iterator.h"
@@ -53,6 +37,7 @@
 #include "SEQ_select.h"
 #include "SEQ_sequencer.h"
 #include "SEQ_sound.h"
+#include "SEQ_time.h"
 #include "SEQ_utils.h"
 
 #include "BLO_read_write.h"
@@ -85,6 +70,7 @@ static Strip *seq_strip_alloc(int type)
     strip->transform->scale_y = 1;
     strip->transform->origin[0] = 0.5f;
     strip->transform->origin[1] = 0.5f;
+    strip->transform->filter = SEQ_TRANSFORM_FILTER_BILINEAR;
     strip->crop = MEM_callocN(sizeof(struct StripCrop), "StripCrop");
   }
 
@@ -141,15 +127,26 @@ Sequence *SEQ_sequence_alloc(ListBase *lb, int timeline_frame, int machine, int 
   seq->mul = 1.0;
   seq->blend_opacity = 100.0;
   seq->volume = 1.0f;
-  seq->pitch = 1.0f;
   seq->scene_sound = NULL;
   seq->type = type;
-  seq->blend_mode = SEQ_TYPE_ALPHAOVER;
+  seq->media_playback_rate = 0.0f;
+  seq->speed_factor = 1.0f;
+
+  if (seq->type == SEQ_TYPE_ADJUSTMENT) {
+    seq->blend_mode = SEQ_TYPE_CROSS;
+  }
+  else {
+    seq->blend_mode = SEQ_TYPE_ALPHAOVER;
+  }
 
   seq->strip = seq_strip_alloc(type);
   seq->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Sequence Stereo Format");
 
   seq->color_tag = SEQUENCE_COLOR_NONE;
+
+  if (seq->type == SEQ_TYPE_META) {
+    SEQ_channels_ensure(&seq->channels);
+  }
 
   SEQ_relations_session_uuid_generate(seq);
 
@@ -217,6 +214,9 @@ static void seq_sequence_free_ex(Scene *scene,
       SEQ_relations_invalidate_cache_raw(scene, seq);
     }
   }
+  if (seq->type == SEQ_TYPE_META) {
+    SEQ_channels_free(&seq->channels);
+  }
 
   MEM_freeN(seq);
 }
@@ -253,6 +253,8 @@ Editing *SEQ_editing_ensure(Scene *scene)
     ed->cache = NULL;
     ed->cache_flag = SEQ_CACHE_STORE_FINAL_OUT;
     ed->cache_flag |= SEQ_CACHE_STORE_RAW;
+    ed->displayed_channels = &ed->channels;
+    SEQ_channels_ensure(ed->displayed_channels);
   }
 
   return scene->ed;
@@ -276,6 +278,7 @@ void SEQ_editing_free(Scene *scene, const bool do_id_user)
 
   BLI_freelistN(&ed->metastack);
   SEQ_sequence_lookup_free(scene);
+  SEQ_channels_free(&ed->channels);
   MEM_freeN(ed);
 
   scene->ed = NULL;
@@ -396,20 +399,22 @@ void SEQ_seqbase_active_set(Editing *ed, ListBase *seqbase)
   ed->seqbasep = seqbase;
 }
 
-MetaStack *SEQ_meta_stack_alloc(Editing *ed, Sequence *seq_meta)
+static MetaStack *seq_meta_stack_alloc(const Scene *scene, Sequence *seq_meta)
 {
-  MetaStack *ms = MEM_mallocN(sizeof(MetaStack), "metastack");
-  BLI_addtail(&ed->metastack, ms);
-  ms->parseq = seq_meta;
-  ms->oldbasep = ed->seqbasep;
-  copy_v2_v2_int(ms->disp_range, &ms->parseq->startdisp);
-  return ms;
-}
+  Editing *ed = SEQ_editing_get(scene);
 
-void SEQ_meta_stack_free(Editing *ed, MetaStack *ms)
-{
-  BLI_remlink(&ed->metastack, ms);
-  MEM_freeN(ms);
+  MetaStack *ms = MEM_mallocN(sizeof(MetaStack), "metastack");
+  BLI_addhead(&ed->metastack, ms);
+  ms->parseq = seq_meta;
+
+  /* Reference to previously displayed timeline data. */
+  Sequence *higher_level_meta = seq_sequence_lookup_meta_by_seq(scene, seq_meta);
+  ms->oldbasep = higher_level_meta ? &higher_level_meta->seqbase : &ed->seqbase;
+  ms->old_channels = higher_level_meta ? &higher_level_meta->channels : &ed->channels;
+
+  ms->disp_range[0] = SEQ_time_left_handle_frame_get(scene, ms->parseq);
+  ms->disp_range[1] = SEQ_time_right_handle_frame_get(scene, ms->parseq);
+  return ms;
 }
 
 MetaStack *SEQ_meta_stack_active_get(const Editing *ed)
@@ -419,6 +424,41 @@ MetaStack *SEQ_meta_stack_active_get(const Editing *ed)
   }
 
   return ed->metastack.last;
+}
+
+void SEQ_meta_stack_set(const Scene *scene, Sequence *seqm)
+{
+  Editing *ed = SEQ_editing_get(scene);
+  /* Clear metastack */
+  BLI_freelistN(&ed->metastack);
+
+  if (seqm != NULL) {
+    /* Allocate meta stack in a way, that represents meta hierarchy in timeline. */
+    seq_meta_stack_alloc(scene, seqm);
+    Sequence *meta_parent = seqm;
+    while ((meta_parent = seq_sequence_lookup_meta_by_seq(scene, meta_parent))) {
+      seq_meta_stack_alloc(scene, meta_parent);
+    }
+
+    SEQ_seqbase_active_set(ed, &seqm->seqbase);
+    SEQ_channels_displayed_set(ed, &seqm->channels);
+  }
+  else {
+    /* Go to top level, exiting meta strip. */
+    SEQ_seqbase_active_set(ed, &ed->seqbase);
+    SEQ_channels_displayed_set(ed, &ed->channels);
+  }
+}
+
+Sequence *SEQ_meta_stack_pop(Editing *ed)
+{
+  MetaStack *ms = SEQ_meta_stack_active_get(ed);
+  Sequence *meta_parent = ms->parseq;
+  SEQ_seqbase_active_set(ed, ms->oldbasep);
+  SEQ_channels_displayed_set(ed, ms->old_channels);
+  BLI_remlink(&ed->metastack, ms);
+  MEM_freeN(ms);
+  return meta_parent;
 }
 
 /** \} */
@@ -476,6 +516,9 @@ static Sequence *seq_dupli(const Scene *scene_src,
     BLI_listbase_clear(&seqn->seqbase);
     /* WARNING: This meta-strip is not recursively duplicated here - do this after! */
     // seq_dupli_recursive(&seq->seqbase, &seqn->seqbase);
+
+    BLI_listbase_clear(&seqn->channels);
+    SEQ_channels_duplicate(&seqn->channels, &seq->channels);
   }
   else if (seq->type == SEQ_TYPE_SCENE) {
     seqn->strip->stripdata = NULL;
@@ -702,6 +745,10 @@ static bool seq_write_data_cb(Sequence *seq, void *userdata)
   }
 
   SEQ_modifier_blend_write(writer, &seq->modifiers);
+
+  LISTBASE_FOREACH (SeqTimelineChannel *, channel, &seq->channels) {
+    BLO_write_struct(writer, SeqTimelineChannel, channel);
+  }
   return true;
 }
 
@@ -769,6 +816,8 @@ static bool seq_read_data_cb(Sequence *seq, void *user_data)
   }
 
   SEQ_modifier_blend_read_data(reader, &seq->modifiers);
+
+  BLO_read_list(reader, &seq->channels);
   return true;
 }
 void SEQ_blend_read(BlendDataReader *reader, ListBase *seqbase)
@@ -787,7 +836,7 @@ static bool seq_read_lib_cb(Sequence *seq, void *user_data)
   BlendLibReader *reader = data->reader;
   Scene *sce = data->scene;
 
-  IDP_BlendReadLib(reader, seq->prop);
+  IDP_BlendReadLib(reader, sce->id.lib, seq->prop);
 
   if (seq->ipo) {
     /* XXX: deprecated - old animation system. */
@@ -917,8 +966,9 @@ static bool seq_update_seq_cb(Sequence *seq, void *user_data)
     }
     BKE_sound_set_scene_sound_volume(
         seq->scene_sound, seq->volume, (seq->flag & SEQ_AUDIO_VOLUME_ANIMATED) != 0);
-    BKE_sound_set_scene_sound_pitch(
-        seq->scene_sound, seq->pitch, (seq->flag & SEQ_AUDIO_PITCH_ANIMATED) != 0);
+    BKE_sound_set_scene_sound_pitch(seq->scene_sound,
+                                    SEQ_sound_pitch_get(scene, seq),
+                                    (seq->flag & SEQ_AUDIO_PITCH_ANIMATED) != 0);
     BKE_sound_set_scene_sound_pan(
         seq->scene_sound, seq->pan, (seq->flag & SEQ_AUDIO_PAN_ANIMATED) != 0);
   }

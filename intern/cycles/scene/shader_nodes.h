@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #ifndef __NODES_H__
 #define __NODES_H__
@@ -1114,6 +1101,17 @@ class MixNode : public ShaderNode {
   NODE_SOCKET_API(float, fac)
 };
 
+class CombineColorNode : public ShaderNode {
+ public:
+  SHADER_NODE_CLASS(CombineColorNode)
+  void constant_fold(const ConstantFolder &folder);
+
+  NODE_SOCKET_API(NodeCombSepColorType, color_type)
+  NODE_SOCKET_API(float, r)
+  NODE_SOCKET_API(float, g)
+  NODE_SOCKET_API(float, b)
+};
+
 class CombineRGBNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(CombineRGBNode)
@@ -1161,6 +1159,15 @@ class BrightContrastNode : public ShaderNode {
   NODE_SOCKET_API(float3, color)
   NODE_SOCKET_API(float, bright)
   NODE_SOCKET_API(float, contrast)
+};
+
+class SeparateColorNode : public ShaderNode {
+ public:
+  SHADER_NODE_CLASS(SeparateColorNode)
+  void constant_fold(const ConstantFolder &folder);
+
+  NODE_SOCKET_API(NodeCombSepColorType, color_type)
+  NODE_SOCKET_API(float3, color)
 };
 
 class SeparateRGBNode : public ShaderNode {
@@ -1404,6 +1411,7 @@ class CurvesNode : public ShaderNode {
   NODE_SOCKET_API(float, max_x)
   NODE_SOCKET_API(float, fac)
   NODE_SOCKET_API(float3, value)
+  NODE_SOCKET_API(bool, extrapolate)
 
  protected:
   using ShaderNode::constant_fold;
@@ -1434,6 +1442,7 @@ class FloatCurveNode : public ShaderNode {
   NODE_SOCKET_API(float, max_x)
   NODE_SOCKET_API(float, fac)
   NODE_SOCKET_API(float, value)
+  NODE_SOCKET_API(bool, extrapolate)
 };
 
 class RGBRampNode : public ShaderNode {

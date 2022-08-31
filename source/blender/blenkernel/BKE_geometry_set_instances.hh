@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -56,16 +42,5 @@ struct GeometryInstanceGroup {
  */
 void geometry_set_gather_instances(const GeometrySet &geometry_set,
                                    Vector<GeometryInstanceGroup> &r_instance_groups);
-
-/**
- * Add information about all the attributes on every component of the type. The resulting info
- * will contain the highest complexity data type and the highest priority domain among every
- * attribute with the given name on all of the input components.
- */
-void geometry_set_gather_instances_attribute_info(
-    Span<GeometryInstanceGroup> set_groups,
-    Span<GeometryComponentType> component_types,
-    const Set<std::string> &ignored_attributes,
-    Map<AttributeIDRef, AttributeKind> &r_attributes);
 
 }  // namespace blender::bke

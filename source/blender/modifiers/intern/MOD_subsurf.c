@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 by the Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup modifiers
@@ -56,6 +40,7 @@
 #include "RE_engine.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -211,15 +196,21 @@ static Mesh *subdiv_as_ccg(SubsurfModifierData *smd,
 
 /* Cache settings for lazy CPU evaluation. */
 
-static void subdiv_cache_cpu_evaluation_settings(const ModifierEvalContext *ctx,
-                                                 Mesh *me,
-                                                 SubsurfModifierData *smd)
+static void subdiv_cache_mesh_wrapper_settings(const ModifierEvalContext *ctx,
+                                               Mesh *mesh,
+                                               SubsurfModifierData *smd,
+                                               SubsurfRuntimeData *runtime_data)
 {
   SubdivToMeshSettings mesh_settings;
   subdiv_mesh_settings_init(&mesh_settings, smd, ctx);
-  me->runtime.subsurf_apply_render = (ctx->flag & MOD_APPLY_RENDER) != 0;
-  me->runtime.subsurf_resolution = mesh_settings.resolution;
-  me->runtime.subsurf_use_optimal_display = mesh_settings.use_optimal_display;
+
+  runtime_data->has_gpu_subdiv = true;
+  runtime_data->resolution = mesh_settings.resolution;
+  runtime_data->use_optimal_display = mesh_settings.use_optimal_display;
+  runtime_data->calc_loop_normals = false; /* Set at the end of modifier stack evaluation. */
+  runtime_data->use_loop_normals = (smd->flags & eSubsurfModifierFlag_UseCustomNormals);
+
+  mesh->runtime.subsurf_runtime_data = runtime_data;
 }
 
 /* Modifier itself. */
@@ -232,13 +223,11 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   return result;
 #endif
   SubsurfModifierData *smd = (SubsurfModifierData *)md;
-  SubdivSettings subdiv_settings;
-  BKE_subsurf_modifier_subdiv_settings_init(
-      &subdiv_settings, smd, (ctx->flag & MOD_APPLY_RENDER) != 0);
-  if (subdiv_settings.level == 0) {
+  if (!BKE_subsurf_modifier_runtime_init(smd, (ctx->flag & MOD_APPLY_RENDER) != 0)) {
     return result;
   }
-  SubsurfRuntimeData *runtime_data = BKE_subsurf_modifier_ensure_runtime(smd);
+
+  SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)smd->modifier.runtime;
 
   /* Delay evaluation to the draw code if possible, provided we do not have to apply the modifier.
    */
@@ -250,15 +239,13 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
      * assigned at this stage of modifier stack evaluation. */
     const bool is_editmode = (mesh->edit_mesh != NULL);
     const int required_mode = BKE_subsurf_modifier_eval_required_mode(is_render_mode, is_editmode);
-    if (BKE_subsurf_modifier_can_do_gpu_subdiv_ex(
-            scene, ctx->object, mesh, smd, required_mode, false)) {
-      subdiv_cache_cpu_evaluation_settings(ctx, mesh, smd);
+    if (BKE_subsurf_modifier_can_do_gpu_subdiv(scene, ctx->object, mesh, smd, required_mode)) {
+      subdiv_cache_mesh_wrapper_settings(ctx, mesh, smd, runtime_data);
       return result;
     }
   }
 
-  Subdiv *subdiv = BKE_subsurf_modifier_subdiv_descriptor_ensure(
-      smd, &subdiv_settings, mesh, false);
+  Subdiv *subdiv = BKE_subsurf_modifier_subdiv_descriptor_ensure(runtime_data, mesh, false);
   if (subdiv == NULL) {
     /* Happens on bad topology, but also on empty input mesh. */
     return result;
@@ -298,7 +285,7 @@ static void deformMatrices(ModifierData *md,
                            Mesh *mesh,
                            float (*vertex_cos)[3],
                            float (*deform_matrices)[3][3],
-                           int num_verts)
+                           int verts_num)
 {
 #if !defined(WITH_OPENSUBDIV)
   BKE_modifier_set_error(ctx->object, md, "Disabled, built without OpenSubdiv");
@@ -309,20 +296,16 @@ static void deformMatrices(ModifierData *md,
   (void)deform_matrices;
 
   SubsurfModifierData *smd = (SubsurfModifierData *)md;
-  SubdivSettings subdiv_settings;
-  BKE_subsurf_modifier_subdiv_settings_init(
-      &subdiv_settings, smd, (ctx->flag & MOD_APPLY_RENDER) != 0);
-  if (subdiv_settings.level == 0) {
+  if (!BKE_subsurf_modifier_runtime_init(smd, (ctx->flag & MOD_APPLY_RENDER) != 0)) {
     return;
   }
-  SubsurfRuntimeData *runtime_data = BKE_subsurf_modifier_ensure_runtime(smd);
-  Subdiv *subdiv = BKE_subsurf_modifier_subdiv_descriptor_ensure(
-      smd, &subdiv_settings, mesh, false);
+  SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)smd->modifier.runtime;
+  Subdiv *subdiv = BKE_subsurf_modifier_subdiv_descriptor_ensure(runtime_data, mesh, false);
   if (subdiv == NULL) {
     /* Happens on bad topology, but also on empty input mesh. */
     return;
   }
-  BKE_subdiv_deform_coarse_vertices(subdiv, mesh, vertex_cos, num_verts);
+  BKE_subdiv_deform_coarse_vertices(subdiv, mesh, vertex_cos, verts_num);
   if (subdiv != runtime_data->subdiv) {
     BKE_subdiv_free(subdiv);
   }
@@ -489,7 +472,7 @@ static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
 }
 
 ModifierTypeInfo modifierType_Subsurf = {
-    /* name */ "Subdivision",
+    /* name */ N_("Subdivision"),
     /* structName */ "SubsurfModifierData",
     /* structSize */ sizeof(SubsurfModifierData),
     /* srna */ &RNA_SubsurfModifier,
@@ -506,7 +489,6 @@ ModifierTypeInfo modifierType_Subsurf = {
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
-    /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
 
     /* initData */ initData,

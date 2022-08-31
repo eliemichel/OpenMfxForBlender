@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spoutliner
@@ -47,6 +31,7 @@
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -78,11 +63,18 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_prototypes.h"
 
 #include "outliner_intern.hh"
+#include "tree/tree_display.hh"
 #include "tree/tree_element_seq.hh"
+#include "tree/tree_iterator.hh"
 
 using namespace blender::ed::outliner;
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
 
 /**
  * \note changes to selection are by convention and not essential.
@@ -127,8 +119,8 @@ static void do_outliner_item_posemode_toggle(bContext *C, Scene *scene, Base *ba
   Main *bmain = CTX_data_main(C);
   Object *ob = base->object;
 
-  if (ID_IS_LINKED(ob)) {
-    BKE_report(CTX_wm_reports(C), RPT_WARNING, "Cannot pose libdata");
+  if (!BKE_id_is_editable(CTX_data_main(C), &ob->id)) {
+    BKE_report(CTX_wm_reports(C), RPT_WARNING, "Cannot pose non-editable data");
     return;
   }
 
@@ -215,8 +207,11 @@ void outliner_item_mode_toggle(bContext *C,
   }
 }
 
-/* ****************************************************** */
-/* Outliner Element Selection/Activation on Click */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Outliner Element Selection/Activation on Click Operator
+ * \{ */
 
 static void tree_element_viewlayer_activate(bContext *C, TreeElement *te)
 {
@@ -1187,7 +1182,7 @@ static void outliner_set_properties_tab(bContext *C, TreeElement *te, TreeStoreE
         context = BCONTEXT_OBJECT;
         break;
       case ID_ME:
-      case ID_CU:
+      case ID_CU_LEGACY:
       case ID_MB:
       case ID_IM:
       case ID_LT:
@@ -1198,7 +1193,7 @@ static void outliner_set_properties_tab(bContext *C, TreeElement *te, TreeStoreE
       case ID_AR:
       case ID_GD:
       case ID_LP:
-      case ID_HA:
+      case ID_CV:
       case ID_PT:
       case ID_VO:
         context = BCONTEXT_DATA;
@@ -1463,7 +1458,7 @@ void outliner_item_select(bContext *C,
   /* Clear previous active when activating and clear selection when not extending selection */
   const short clear_flag = (activate ? TSE_ACTIVE : 0) | (extend ? 0 : TSE_SELECTED);
   if (clear_flag) {
-    outliner_flag_set(&space_outliner->tree, clear_flag, false);
+    outliner_flag_set(*space_outliner, clear_flag, false);
   }
 
   if (select_flag & OL_ITEM_SELECT) {
@@ -1537,7 +1532,7 @@ static void do_outliner_range_select(bContext *C,
   const bool active_selected = (tselem->flag & TSE_SELECTED);
 
   if (!extend) {
-    outliner_flag_set(&space_outliner->tree, TSE_SELECTED, false);
+    outliner_flag_set(*space_outliner, TSE_SELECTED, false);
   }
 
   /* Select active if under cursor */
@@ -1559,17 +1554,16 @@ static bool outliner_is_co_within_restrict_columns(const SpaceOutliner *space_ou
                                                    const ARegion *region,
                                                    float view_co_x)
 {
-  return (view_co_x > region->v2d.cur.xmax - outliner_restrict_columns_width(space_outliner));
+  return (view_co_x > region->v2d.cur.xmax - outliner_right_columns_width(space_outliner));
 }
 
 bool outliner_is_co_within_mode_column(SpaceOutliner *space_outliner, const float view_mval[2])
 {
-  /* Mode toggles only show in View Layer and Scenes modes. */
-  if (!ELEM(space_outliner->outlinevis, SO_VIEW_LAYER, SO_SCENES)) {
+  if (!outliner_shows_mode_column(*space_outliner)) {
     return false;
   }
 
-  return space_outliner->flag & SO_MODE_COLUMN && view_mval[0] < UI_UNIT_X;
+  return view_mval[0] < UI_UNIT_X;
 }
 
 static bool outliner_is_co_within_active_mode_column(bContext *C,
@@ -1611,7 +1605,7 @@ static int outliner_item_do_activate_from_cursor(bContext *C,
 
   if (!(te = outliner_find_item_at_y(space_outliner, &space_outliner->tree, view_mval[1]))) {
     if (deselect_all) {
-      changed |= outliner_flag_set(&space_outliner->tree, TSE_SELECTED, false);
+      changed |= outliner_flag_set(*space_outliner, TSE_SELECTED, false);
     }
   }
   /* Don't allow toggle on scene collection */
@@ -1678,10 +1672,15 @@ static int outliner_item_do_activate_from_cursor(bContext *C,
 /* Event can enter-key, then it opens/closes. */
 static int outliner_item_activate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  ARegion *region = CTX_wm_region(C);
+
   const bool extend = RNA_boolean_get(op->ptr, "extend");
   const bool use_range = RNA_boolean_get(op->ptr, "extend_range");
   const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
-  return outliner_item_do_activate_from_cursor(C, event->mval, extend, use_range, deselect_all);
+
+  int mval[2];
+  WM_event_drag_start_mval(event, region, mval);
+  return outliner_item_do_activate_from_cursor(C, mval, extend, use_range, deselect_all);
 }
 
 void OUTLINER_OT_item_activate(wmOperatorType *ot)
@@ -1694,7 +1693,7 @@ void OUTLINER_OT_item_activate(wmOperatorType *ot)
 
   ot->poll = ED_operator_outliner_active;
 
-  ot->flag |= OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   PropertyRNA *prop;
   prop = RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend selection for activation");
@@ -1711,29 +1710,23 @@ void OUTLINER_OT_item_activate(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ****************************************************** */
+/** \} */
 
-/* **************** Box Select Tool ****************** */
-static void outliner_item_box_select(bContext *C,
-                                     SpaceOutliner *space_outliner,
-                                     Scene *scene,
-                                     rctf *rectf,
-                                     TreeElement *te,
-                                     bool select)
+/* -------------------------------------------------------------------- */
+/** \name Box Select Operator
+ * \{ */
+
+static void outliner_box_select(bContext *C,
+                                SpaceOutliner *space_outliner,
+                                const rctf *rectf,
+                                const bool select)
 {
-  TreeStoreElem *tselem = TREESTORE(te);
-
-  if (te->ys <= rectf->ymax && te->ys + UI_UNIT_Y >= rectf->ymin) {
-    outliner_item_select(
-        C, space_outliner, te, (select ? OL_ITEM_SELECT : OL_ITEM_DESELECT) | OL_ITEM_EXTEND);
-  }
-
-  /* Look at its children. */
-  if (TSELEM_OPEN(tselem, space_outliner)) {
-    LISTBASE_FOREACH (TreeElement *, te_sub, &te->subtree) {
-      outliner_item_box_select(C, space_outliner, scene, rectf, te_sub, select);
+  tree_iterator::all_open(*space_outliner, [&](TreeElement *te) {
+    if (te->ys <= rectf->ymax && te->ys + UI_UNIT_Y >= rectf->ymin) {
+      outliner_item_select(
+          C, space_outliner, te, (select ? OL_ITEM_SELECT : OL_ITEM_DESELECT) | OL_ITEM_EXTEND);
     }
-  }
+  });
 }
 
 static int outliner_box_select_exec(bContext *C, wmOperator *op)
@@ -1746,15 +1739,13 @@ static int outliner_box_select_exec(bContext *C, wmOperator *op)
   const eSelectOp sel_op = (eSelectOp)RNA_enum_get(op->ptr, "mode");
   const bool select = (sel_op != SEL_OP_SUB);
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    outliner_flag_set(&space_outliner->tree, TSE_SELECTED, 0);
+    outliner_flag_set(*space_outliner, TSE_SELECTED, 0);
   }
 
   WM_operator_properties_border_to_rctf(op, &rectf);
   UI_view2d_region_to_view_rctf(&region->v2d, &rectf, &rectf);
 
-  LISTBASE_FOREACH (TreeElement *, te, &space_outliner->tree) {
-    outliner_item_box_select(C, space_outliner, scene, &rectf, te, select);
-  }
+  outliner_box_select(C, space_outliner, &rectf, select);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
@@ -1772,8 +1763,9 @@ static int outliner_box_select_invoke(bContext *C, wmOperator *op, const wmEvent
   float view_mval[2];
   const bool tweak = RNA_boolean_get(op->ptr, "tweak");
 
-  UI_view2d_region_to_view(
-      &region->v2d, event->mval[0], event->mval[1], &view_mval[0], &view_mval[1]);
+  int mval[2];
+  WM_event_drag_start_mval(event, region, mval);
+  UI_view2d_region_to_view(&region->v2d, mval[0], mval[1], &view_mval[0], &view_mval[1]);
 
   /* Find element clicked on */
   TreeElement *te = outliner_find_item_at_y(space_outliner, &space_outliner->tree, view_mval[1]);
@@ -1819,9 +1811,11 @@ void OUTLINER_OT_select_box(wmOperatorType *ot)
   WM_operator_properties_select_operation_simple(ot);
 }
 
-/* ****************************************************** */
+/** \} */
 
-/* **************** Walk Select Tool ****************** */
+/* -------------------------------------------------------------------- */
+/** \name Walk Select Operator
+ * \{ */
 
 /* Given a tree element return the rightmost child that is visible in the outliner */
 static TreeElement *outliner_find_rightmost_visible_child(SpaceOutliner *space_outliner,
@@ -1892,7 +1886,7 @@ static TreeElement *outliner_walk_left(SpaceOutliner *space_outliner,
   TreeStoreElem *tselem = TREESTORE(te);
 
   if (TSELEM_OPEN(tselem, space_outliner)) {
-    outliner_item_openclose(space_outliner, te, false, toggle_all);
+    outliner_item_openclose(te, false, toggle_all);
   }
   /* Only walk up a level if the element is closed and not toggling expand */
   else if (!toggle_all && te->parent) {
@@ -1913,7 +1907,7 @@ static TreeElement *outliner_walk_right(SpaceOutliner *space_outliner,
     te = reinterpret_cast<TreeElement *>(te->subtree.first);
   }
   else {
-    outliner_item_openclose(space_outliner, te, true, toggle_all);
+    outliner_item_openclose(te, true, toggle_all);
   }
 
   return te;
@@ -2034,7 +2028,7 @@ void OUTLINER_OT_select_walk(wmOperatorType *ot)
   ot->invoke = outliner_walk_select_invoke;
   ot->poll = ED_operator_outliner_active;
 
-  ot->flag |= OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
   PropertyRNA *prop;
@@ -2046,4 +2040,4 @@ void OUTLINER_OT_select_walk(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ****************************************************** */
+/** \} */

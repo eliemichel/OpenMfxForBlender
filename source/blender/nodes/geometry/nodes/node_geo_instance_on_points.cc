@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "DNA_collection_types.h"
 
@@ -63,8 +49,8 @@ static void add_instances_from_component(
     const GeoNodeExecParams &params,
     const Map<AttributeIDRef, AttributeKind> &attributes_to_propagate)
 {
-  const AttributeDomain domain = ATTR_DOMAIN_POINT;
-  const int domain_size = src_component.attribute_domain_size(domain);
+  const eAttrDomain domain = ATTR_DOMAIN_POINT;
+  const int domain_num = src_component.attribute_domain_size(domain);
 
   VArray<bool> pick_instance;
   VArray<int> indices;
@@ -73,7 +59,7 @@ static void add_instances_from_component(
 
   GeometryComponentFieldContext field_context{src_component, domain};
   const Field<bool> selection_field = params.get_input<Field<bool>>("Selection");
-  fn::FieldEvaluator evaluator{field_context, domain_size};
+  fn::FieldEvaluator evaluator{field_context, domain_num};
   evaluator.set_selection(selection_field);
   /* The evaluator could use the component's stable IDs as a destination directly, but only the
    * selected indices should be copied. */
@@ -84,10 +70,13 @@ static void add_instances_from_component(
   evaluator.evaluate();
 
   const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
+  if (selection.is_empty()) {
+    return;
+  }
 
   /* The initial size of the component might be non-zero when this function is called for multiple
    * component types. */
-  const int start_len = dst_component.instances_amount();
+  const int start_len = dst_component.instances_num();
   const int select_len = selection.index_range().size();
   dst_component.resize(start_len + select_len);
 
@@ -96,7 +85,7 @@ static void add_instances_from_component(
   MutableSpan<float4x4> dst_transforms = dst_component.instance_transforms().slice(start_len,
                                                                                    select_len);
 
-  VArray<float3> positions = src_component.attribute_get_for_read<float3>(
+  VArray<float3> positions = src_component.attributes()->lookup_or_default<float3>(
       "position", domain, {0, 0, 0});
 
   const InstancesComponent *src_instances = instance.get_component_for_read<InstancesComponent>();
@@ -133,12 +122,12 @@ static void add_instances_from_component(
       const bool use_individual_instance = pick_instance[i];
       if (use_individual_instance) {
         if (src_instances != nullptr) {
-          const int src_instances_amount = src_instances->instances_amount();
+          const int src_instances_num = src_instances->instances_num();
           const int original_index = indices[i];
           /* Use #mod_i instead of `%` to get the desirable wrap around behavior where -1
            * refers to the last element. */
-          const int index = mod_i(original_index, std::max(src_instances_amount, 1));
-          if (index < src_instances_amount) {
+          const int index = mod_i(original_index, std::max(src_instances_num, 1));
+          if (index < src_instances_num) {
             /* Get the reference to the source instance. */
             const int src_handle = src_instances->instance_reference_handles()[index];
             dst_handle = handle_mapping[src_handle];
@@ -168,12 +157,12 @@ static void add_instances_from_component(
     }
   }
 
-  bke::CustomDataAttributes &instance_attributes = dst_component.attributes();
+  bke::CustomDataAttributes &instance_attributes = dst_component.instance_attributes();
   for (const auto item : attributes_to_propagate.items()) {
     const AttributeIDRef &attribute_id = item.key;
     const AttributeKind attribute_kind = item.value;
 
-    const GVArray src_attribute = src_component.attribute_get_for_read(
+    const GVArray src_attribute = src_component.attributes()->lookup_or_default(
         attribute_id, ATTR_DOMAIN_POINT, attribute_kind.data_type);
     BLI_assert(src_attribute);
     std::optional<GMutableSpan> dst_attribute_opt = instance_attributes.get_for_write(
@@ -209,36 +198,25 @@ static void node_geo_exec(GeoNodeExecParams params)
   geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
     InstancesComponent &instances = geometry_set.get_component_for_write<InstancesComponent>();
 
+    const Array<GeometryComponentType> types{
+        GEO_COMPONENT_TYPE_MESH, GEO_COMPONENT_TYPE_POINT_CLOUD, GEO_COMPONENT_TYPE_CURVE};
+
     Map<AttributeIDRef, AttributeKind> attributes_to_propagate;
     geometry_set.gather_attributes_for_propagation(
-        {GEO_COMPONENT_TYPE_MESH, GEO_COMPONENT_TYPE_POINT_CLOUD, GEO_COMPONENT_TYPE_CURVE},
-        GEO_COMPONENT_TYPE_INSTANCES,
-        false,
-        attributes_to_propagate);
+        types, GEO_COMPONENT_TYPE_INSTANCES, false, attributes_to_propagate);
     attributes_to_propagate.remove("position");
 
-    if (geometry_set.has<MeshComponent>()) {
-      add_instances_from_component(instances,
-                                   *geometry_set.get_component_for_read<MeshComponent>(),
-                                   instance,
-                                   params,
-                                   attributes_to_propagate);
+    for (const GeometryComponentType type : types) {
+      if (geometry_set.has(type)) {
+        add_instances_from_component(instances,
+                                     *geometry_set.get_component_for_read(type),
+                                     instance,
+                                     params,
+                                     attributes_to_propagate);
+      }
     }
-    if (geometry_set.has<PointCloudComponent>()) {
-      add_instances_from_component(instances,
-                                   *geometry_set.get_component_for_read<PointCloudComponent>(),
-                                   instance,
-                                   params,
-                                   attributes_to_propagate);
-    }
-    if (geometry_set.has<CurveComponent>()) {
-      add_instances_from_component(instances,
-                                   *geometry_set.get_component_for_read<CurveComponent>(),
-                                   instance,
-                                   params,
-                                   attributes_to_propagate);
-    }
-    geometry_set.keep_only({GEO_COMPONENT_TYPE_INSTANCES});
+
+    geometry_set.remove_geometry_during_modify();
   });
 
   /* Unused references may have been added above. Remove those now so that other nodes don't

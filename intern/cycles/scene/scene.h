@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #ifndef __SCENE_H__
 #define __SCENE_H__
@@ -95,7 +82,7 @@ class DeviceScene {
 
   device_vector<uint> patches;
 
-  /* pointcloud */
+  /* point-cloud */
   device_vector<float4> points;
   device_vector<uint> points_shader;
 
@@ -111,7 +98,7 @@ class DeviceScene {
   device_vector<DecomposedTransform> camera_motion;
 
   /* attributes */
-  device_vector<uint4> attributes_map;
+  device_vector<AttributeMap> attributes_map;
   device_vector<float> attributes_float;
   device_vector<float2> attributes_float2;
   device_vector<packed_float3> attributes_float3;
@@ -137,7 +124,7 @@ class DeviceScene {
   /* integrator */
   device_vector<float> sample_pattern_lut;
 
-  /* ies lights */
+  /* IES lights */
   device_vector<float> ies_lights;
 
   KernelData data;
@@ -172,7 +159,7 @@ class SceneParams {
   SceneParams()
   {
     shadingsystem = SHADINGSYSTEM_SVM;
-    bvh_layout = BVH_LAYOUT_BVH2;
+    bvh_layout = BVH_LAYOUT_AUTO;
     bvh_type = BVH_TYPE_DYNAMIC;
     use_bvh_spatial_split = false;
     use_bvh_compact_structure = true;
@@ -209,6 +196,9 @@ class Scene : public NodeOwner {
  public:
   /* Optional name. Is used for logging and reporting. */
   string name;
+
+  /* Maps from Light group names to their pass ID. */
+  map<ustring, int> lightgroups;
 
   /* data */
   BVH *bvh;
@@ -267,7 +257,7 @@ class Scene : public NodeOwner {
   void need_global_attributes(AttributeRequestSet &attributes);
 
   enum MotionType { MOTION_NONE = 0, MOTION_PASS, MOTION_BLUR };
-  MotionType need_motion();
+  MotionType need_motion() const;
   float motion_shutter_time();
 
   bool need_update();

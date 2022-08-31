@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup spoutliner
@@ -66,7 +52,7 @@ bool TreeElementRNACommon::isRNAValid() const
   return rna_ptr_.data != nullptr;
 }
 
-bool TreeElementRNACommon::expandPoll(const SpaceOutliner &) const
+bool TreeElementRNACommon::expandPoll(const SpaceOutliner &UNUSED(space_outliner)) const
 {
   return isRNAValid();
 }
@@ -138,7 +124,7 @@ void TreeElementRNAStruct::expand(SpaceOutliner &space_outliner) const
     }
   }
   else if (tot) {
-    legacy_te_.flag |= TE_LAZY_CLOSED;
+    legacy_te_.flag |= TE_PRETEND_HAS_CHILDREN;
   }
 }
 
@@ -186,7 +172,7 @@ void TreeElementRNAProperty::expand(SpaceOutliner &space_outliner) const
             &space_outliner, &legacy_te_.subtree, &pptr, &legacy_te_, TSE_RNA_STRUCT, -1);
       }
       else {
-        legacy_te_.flag |= TE_LAZY_CLOSED;
+        legacy_te_.flag |= TE_PRETEND_HAS_CHILDREN;
       }
     }
   }
@@ -203,7 +189,7 @@ void TreeElementRNAProperty::expand(SpaceOutliner &space_outliner) const
       }
     }
     else if (tot) {
-      legacy_te_.flag |= TE_LAZY_CLOSED;
+      legacy_te_.flag |= TE_PRETEND_HAS_CHILDREN;
     }
   }
   else if (ELEM(proptype, PROP_BOOLEAN, PROP_INT, PROP_FLOAT)) {
@@ -221,7 +207,7 @@ void TreeElementRNAProperty::expand(SpaceOutliner &space_outliner) const
       }
     }
     else if (tot) {
-      legacy_te_.flag |= TE_LAZY_CLOSED;
+      legacy_te_.flag |= TE_PRETEND_HAS_CHILDREN;
     }
   }
 }

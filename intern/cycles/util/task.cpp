@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "util/task.h"
 #include "util/foreach.h"
@@ -83,7 +70,7 @@ void TaskScheduler::init(int num_threads)
   }
   if (num_threads > 0) {
     /* Automatic number of threads. */
-    VLOG(1) << "Overriding number of TBB threads to " << num_threads << ".";
+    VLOG_INFO << "Overriding number of TBB threads to " << num_threads << ".";
     global_control = new tbb::global_control(tbb::global_control::max_allowed_parallelism,
                                              num_threads);
     active_num_threads = num_threads;

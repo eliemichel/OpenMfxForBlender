@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Apache License, Version 2.0
+# SPDX-License-Identifier: Apache-2.0
 
 import argparse
 import os
@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 
 def setup():
@@ -63,7 +64,7 @@ def setup():
         collection = bpy.data.collections.new("Reflection")
         collection.objects.link(plane)
         # Add all lights to light the plane
-        if invert == False:
+        if not invert:
             for light in bpy.data.objects:
                 if light.type == 'LIGHT':
                     collection.objects.link(light)
@@ -138,6 +139,11 @@ def main():
     report.set_pixelated(True)
     report.set_reference_dir("eevee_renders")
     report.set_compare_engine('cycles', 'CPU')
+
+    test_dir_name = Path(test_dir).name
+    if test_dir_name.startswith('image'):
+        report.set_fail_threshold(0.051)
+
     ok = report.run(test_dir, blender, get_arguments, batch=True)
 
     sys.exit(not ok)

@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup blenloader
@@ -37,6 +23,7 @@
 #include "DNA_curveprofile_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_light_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -58,6 +45,7 @@
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
+#include "BKE_main_namemap.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -68,6 +56,8 @@
 
 #include "BLO_readfile.h"
 
+#include "BLT_translation.h"
+
 #include "versioning_common.h"
 
 /* Make preferences read-only, use versioning_userdef.c. */
@@ -76,8 +66,9 @@
 static bool blo_is_builtin_template(const char *app_template)
 {
   /* For all builtin templates shipped with Blender. */
-  return (!app_template ||
-          STR_ELEM(app_template, "2D_Animation", "Sculpting", "VFX", "Video_Editing"));
+  return (
+      !app_template ||
+      STR_ELEM(app_template, N_("2D_Animation"), N_("Sculpting"), N_("VFX"), N_("Video_Editing")));
 }
 
 static void blo_update_defaults_screen(bScreen *screen,
@@ -147,6 +138,14 @@ static void blo_update_defaults_screen(bScreen *screen,
           }
         }
       }
+      else {
+        /* Open properties panel by default. */
+        LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+          if (region->regiontype == RGN_TYPE_UI) {
+            region->flag &= ~RGN_FLAG_HIDDEN;
+          }
+        }
+      }
     }
     else if (area->spacetype == SPACE_GRAPH) {
       SpaceGraph *sipo = area->spacedata.first;
@@ -198,6 +197,8 @@ static void blo_update_defaults_screen(bScreen *screen,
     else if (area->spacetype == SPACE_CLIP) {
       SpaceClip *sclip = area->spacedata.first;
       sclip->around = V3D_AROUND_CENTER_MEDIAN;
+      sclip->mask_info.blend_factor = 0.7f;
+      sclip->mask_info.draw_flag = MASK_DRAWFLAG_SPLINE;
     }
   }
 
@@ -490,8 +491,11 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
         /* Default only has one window. */
         if (layout->screen) {
           bScreen *screen = layout->screen;
-          BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
-          BLI_libblock_ensure_unique_name(bmain, screen->id.name);
+          if (!STREQ(screen->id.name + 2, workspace->id.name + 2)) {
+            BKE_main_namemap_remove_name(bmain, &screen->id, screen->id.name + 2);
+            BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
+            BLI_libblock_ensure_unique_name(bmain, screen->id.name);
+          }
         }
 
         /* For some reason we have unused screens, needed until re-saving.
@@ -546,11 +550,13 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
     /* Match default for new meshes. */
     mesh->smoothresh = DEG2RADF(30);
+    /* Match voxel remesher options for all existing meshes in templates. */
+    mesh->flag |= ME_REMESH_REPROJECT_VOLUME | ME_REMESH_REPROJECT_PAINT_MASK |
+                  ME_REMESH_REPROJECT_SCULPT_FACE_SETS | ME_REMESH_REPROJECT_VERTEX_COLORS;
 
     /* For Sculpting template. */
     if (app_template && STREQ(app_template, "Sculpting")) {
       mesh->remesh_voxel_size = 0.035f;
-      mesh->flag |= ME_REMESH_FIX_POLES | ME_REMESH_REPROJECT_VOLUME;
       BKE_mesh_smooth_flag_set(mesh, false);
     }
     else {
@@ -575,14 +581,14 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   /* Materials */
   for (Material *ma = bmain->materials.first; ma; ma = ma->id.next) {
     /* Update default material to be a bit more rough. */
-    ma->roughness = 0.4f;
+    ma->roughness = 0.5f;
 
     if (ma->nodetree) {
       LISTBASE_FOREACH (bNode *, node, &ma->nodetree->nodes) {
         if (node->type == SH_NODE_BSDF_PRINCIPLED) {
           bNodeSocket *roughness_socket = nodeFindSocket(node, SOCK_IN, "Roughness");
           bNodeSocketValueFloat *roughness_data = roughness_socket->default_value;
-          roughness_data->value = 0.4f;
+          roughness_data->value = 0.5f;
           node->custom2 = SHD_SUBSURFACE_RANDOM_WALK;
           BKE_ntree_update_tag_node_property(ma->nodetree, node);
         }

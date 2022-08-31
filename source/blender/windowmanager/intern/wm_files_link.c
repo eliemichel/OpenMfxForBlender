@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup wm
@@ -454,7 +438,7 @@ void WM_OT_link(wmOperatorType *ot)
   ot->exec = wm_link_append_exec;
   ot->poll = wm_link_append_poll;
 
-  ot->flag |= OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_FOLDER | FILE_TYPE_BLENDER | FILE_TYPE_BLENDERLIB,
@@ -478,7 +462,7 @@ void WM_OT_append(wmOperatorType *ot)
   ot->exec = wm_link_append_exec;
   ot->poll = wm_link_append_poll;
 
-  ot->flag |= OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_FOLDER | FILE_TYPE_BLENDER | FILE_TYPE_BLENDERLIB,
@@ -772,10 +756,10 @@ static int wm_lib_relocate_exec_do(bContext *C, wmOperator *op, bool do_reload)
       }
     }
 
-    if (do_reload) {
-      BKE_blendfile_link_append_context_flag_set(
-          lapp_context, BLO_LIBLINK_USE_PLACEHOLDERS | BLO_LIBLINK_FORCE_INDIRECT, true);
-    }
+    BKE_blendfile_link_append_context_flag_set(lapp_context,
+                                               BLO_LIBLINK_FORCE_INDIRECT |
+                                                   (do_reload ? BLO_LIBLINK_USE_PLACEHOLDERS : 0),
+                                               true);
 
     BKE_blendfile_library_relocate(lapp_context, op->reports, lib, do_reload);
 
@@ -819,7 +803,7 @@ void WM_OT_lib_relocate(wmOperatorType *ot)
   ot->invoke = wm_lib_relocate_invoke;
   ot->exec = wm_lib_relocate_exec;
 
-  ot->flag |= OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   prop = RNA_def_string(ot->srna, "library", NULL, MAX_NAME, "Library", "Library to relocate");
   RNA_def_property_flag(prop, PROP_HIDDEN);
@@ -849,7 +833,7 @@ void WM_OT_lib_reload(wmOperatorType *ot)
 
   ot->exec = wm_lib_reload_exec;
 
-  ot->flag |= OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   prop = RNA_def_string(ot->srna, "library", NULL, MAX_NAME, "Library", "Library to reload");
   RNA_def_property_flag(prop, PROP_HIDDEN);

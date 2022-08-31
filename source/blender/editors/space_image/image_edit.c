@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spimage
@@ -36,6 +20,7 @@
 #include "BKE_image.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
 
 #include "IMB_imbuf_types.h"
 
@@ -228,13 +213,7 @@ void ED_space_image_get_size(SpaceImage *sima, int *r_width, int *r_height)
   }
   else if (sima->image && sima->image->type == IMA_TYPE_R_RESULT && scene) {
     /* not very important, just nice */
-    *r_width = (scene->r.xsch * scene->r.size) / 100;
-    *r_height = (scene->r.ysch * scene->r.size) / 100;
-
-    if ((scene->r.mode & R_BORDER) && (scene->r.mode & R_CROP)) {
-      *r_width *= BLI_rctf_size_x(&scene->r.border);
-      *r_height *= BLI_rctf_size_y(&scene->r.border);
-    }
+    BKE_render_resolution(&scene->r, true, r_width, r_height);
   }
   /* I know a bit weak... but preview uses not actual image size */
   // XXX else if (image_preview_active(sima, r_width, r_height));
@@ -499,6 +478,16 @@ bool ED_space_image_maskedit_poll(bContext *C)
   return false;
 }
 
+bool ED_space_image_maskedit_visible_splines_poll(bContext *C)
+{
+  if (!ED_space_image_maskedit_poll(C)) {
+    return false;
+  }
+
+  const SpaceImage *space_image = CTX_wm_space_image(C);
+  return space_image->mask_info.draw_flag & MASK_DRAWFLAG_SPLINE;
+}
+
 bool ED_space_image_paint_curve(const bContext *C)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
@@ -522,6 +511,16 @@ bool ED_space_image_maskedit_mask_poll(bContext *C)
   }
 
   return false;
+}
+
+bool ED_space_image_maskedit_mask_visible_splines_poll(bContext *C)
+{
+  if (!ED_space_image_maskedit_mask_poll(C)) {
+    return false;
+  }
+
+  const SpaceImage *space_image = CTX_wm_space_image(C);
+  return space_image->mask_info.draw_flag & MASK_DRAWFLAG_SPLINE;
 }
 
 bool ED_space_image_cursor_poll(bContext *C)

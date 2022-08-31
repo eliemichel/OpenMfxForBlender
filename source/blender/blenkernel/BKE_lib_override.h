@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2016 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2016 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -76,9 +60,50 @@ void BKE_lib_override_library_clear(struct IDOverrideLibrary *override, bool do_
 void BKE_lib_override_library_free(struct IDOverrideLibrary **override, bool do_id_user);
 
 /**
+ * Return the actual #IDOverrideLibrary data 'controlling' the given `id`, and the actual ID owning
+ * it.
+ *
+ * \note This is especially useful when `id` is a non-real override (e.g. embedded ID like a master
+ * collection or root node tree, or a shape key).
+ *
+ * \param owner_id_hint: If not NULL, a potential owner for the given override-embedded `id`.
+ * \param r_owner_id: If given, will be set with the actual ID owning the return liboverride data.
+ */
+IDOverrideLibrary *BKE_lib_override_library_get(struct Main *bmain,
+                                                struct ID *id,
+                                                struct ID *owner_id_hint,
+                                                struct ID **r_owner_id);
+
+/**
  * Check if given ID has some override rules that actually indicate the user edited it.
  */
-bool BKE_lib_override_library_is_user_edited(struct ID *id);
+bool BKE_lib_override_library_is_user_edited(const struct ID *id);
+
+/**
+ * Check if given ID is a system override.
+ */
+bool BKE_lib_override_library_is_system_defined(const struct Main *bmain, const struct ID *id);
+
+/**
+ * Check if given Override Property for given ID is animated (through a F-Curve in an Action, or
+ * from a driver).
+ *
+ * \param override_rna_prop: if not NULL, the RNA property matching the given path in the
+ * `override_prop`.
+ * \param rnaprop_index: Array in the RNA property, 0 if unknown or irrelevant.
+ */
+bool BKE_lib_override_library_property_is_animated(const ID *id,
+                                                   const IDOverrideLibraryProperty *override_prop,
+                                                   const struct PropertyRNA *override_rna_prop,
+                                                   const int rnaprop_index);
+
+/**
+ * Check if given ID is a leaf in its liboverride hierarchy (i.e. if it does not use any other
+ * override ID).
+ *
+ * NOTE: Embedded IDs of override IDs are not considered as leaves.
+ */
+bool BKE_lib_override_library_is_hierarchy_leaf(struct Main *bmain, struct ID *id);
 
 /**
  * Create an overridden local copy of linked reference.
@@ -100,17 +125,36 @@ struct ID *BKE_lib_override_library_create_from_id(struct Main *bmain,
  * main. You can add more local IDs to be remapped to use new overriding ones by setting their
  * LIB_TAG_DOIT tag.
  *
- * \param reference_library: the library from which the linked data being overridden come from
- * (i.e. the library of the linked reference ID).
+ * \param owner_library: the library in which the overrides should be created. Besides versioning
+ * and resync code path, this should always be NULL (i.e. the local .blend file).
+ *
+ * \param id_root_reference: the linked ID that is considered as the root of the overridden
+ * hierarchy.
+ *
+ * \param id_hierarchy_root: the override ID that is the root of the hierarchy. May be NULL, in
+ * which case it is assumed that the given `id_root_reference` is tagged for override, and its
+ * newly created override will be used as hierarchy root. Must be NULL if
+ * `id_hierarchy_root_reference` is not NULL.
+ *
+ * \param id_hierarchy_root_reference: the linked ID that is the root of the hierarchy. Must be
+ * tagged for override. May be NULL, in which case it is assumed that the given `id_root_reference`
+ * is tagged for override, and its newly created override will be used as hierarchy root. Must be
+ * NULL if `id_hierarchy_root` is not NULL.
  *
  * \param do_no_main: Create the new override data outside of Main database.
  * Used for resyncing of linked overrides.
  *
+ * \param do_fully_editable: if true, tag all created overrides as user-editable by default.
+ *
  * \return \a true on success, \a false otherwise.
  */
 bool BKE_lib_override_library_create_from_tag(struct Main *bmain,
-                                              const struct Library *reference_library,
-                                              bool do_no_main);
+                                              struct Library *owner_library,
+                                              const struct ID *id_root_reference,
+                                              struct ID *id_hierarchy_root,
+                                              const struct ID *id_hierarchy_root_reference,
+                                              bool do_no_main,
+                                              const bool do_fully_editable);
 /**
  * Advanced 'smart' function to create fully functional overrides.
  *
@@ -122,19 +166,38 @@ bool BKE_lib_override_library_create_from_tag(struct Main *bmain,
  *
  * \param view_layer: the active view layer to search instantiated collections in, can be NULL (in
  *                    which case \a scene's master collection children hierarchy is used instead).
- * \param id_root: The root ID to create an override from.
- * \param id_reference: Some reference ID used to do some post-processing after overrides have been
- * created, may be NULL. Typically, the Empty object instantiating the linked collection we
- * override, currently.
+ *
+ * \param owner_library: the library in which the overrides should be created. Besides versioning
+ * and resync code path, this should always be NULL (i.e. the local .blend file).
+ *
+ * \param id_root_reference: The linked root ID to create an override from. May be a sub-root of
+ * the overall hierarchy, in which case calling code is expected to have already tagged required
+ * 'path' of IDs leading from the given `id_hierarchy_root` to the given `id_root`.
+ *
+ * \param id_hierarchy_root_reference: The ID to be used a hierarchy root of the overrides to be
+ * created. Can be either the linked root ID of the whole override hierarchy, (typically the same
+ * as `id_root`, unless a sub-part only of the hierarchy is overridden), or the already existing
+ * override hierarchy root if part of the hierarchy is already overridden.
+ *
+ * \param id_instance_hint: Some ID used as hint/reference to do some post-processing after
+ * overrides have been created, may be NULL. Typically, the Empty object instantiating the linked
+ * collection we override, currently.
+ *
  * \param r_id_root_override: if not NULL, the override generated for the given \a id_root.
+ *
+ * \param do_fully_editable: if true, tag all created overrides as user-editable by default.
+ *
  * \return true if override was successfully created.
  */
 bool BKE_lib_override_library_create(struct Main *bmain,
                                      struct Scene *scene,
                                      struct ViewLayer *view_layer,
-                                     struct ID *id_root,
-                                     struct ID *id_reference,
-                                     struct ID **r_id_root_override);
+                                     struct Library *owner_library,
+                                     struct ID *id_root_reference,
+                                     struct ID *id_hierarchy_root_reference,
+                                     struct ID *id_instance_hint,
+                                     struct ID **r_id_root_override,
+                                     const bool do_fully_editable);
 /**
  * Create a library override template.
  */
@@ -160,6 +223,15 @@ bool BKE_lib_override_library_proxy_convert(struct Main *bmain,
  */
 void BKE_lib_override_library_main_proxy_convert(struct Main *bmain,
                                                  struct BlendFileReadReport *reports);
+
+/**
+ * Find and set the 'hierarchy root' ID pointer of all library overrides in given `bmain`.
+ *
+ * NOTE: Cannot be called from `do_versions_after_linking` as this code needs a single complete
+ * Main database, not a split-by-libraries one.
+ */
+void BKE_lib_override_library_main_hierarchy_root_ensure(struct Main *bmain);
+
 /**
  * Advanced 'smart' function to resync, re-create fully functional overrides up-to-date with linked
  * data, from an existing override hierarchy.
@@ -237,11 +309,14 @@ void BKE_lib_override_library_property_delete(struct IDOverrideLibrary *override
  *
  * \param idpoin: Pointer to the override ID.
  * \param library_prop: The library override property to find the matching RNA property for.
+ * \param r_index: The RNA array flat index (i.e. flattened index in case of multi-dimensional
+ * array properties). See #RNA_path_resolve_full family of functions for details.
  */
 bool BKE_lib_override_rna_property_find(struct PointerRNA *idpoin,
                                         const struct IDOverrideLibraryProperty *library_prop,
                                         struct PointerRNA *r_override_poin,
-                                        struct PropertyRNA **r_override_prop);
+                                        struct PropertyRNA **r_override_prop,
+                                        int *r_index);
 
 /**
  * Find override property operation from given sub-item(s), if it exists.
@@ -344,12 +419,22 @@ bool BKE_lib_override_library_main_operations_create(struct Main *bmain, bool fo
 
 /**
  * Reset all overrides in given \a id_root, while preserving ID relations.
+ *
+ * \param do_reset_system_override: If \a true, reset the given ID as a system override one (i.e.
+ * non-editable).
  */
-void BKE_lib_override_library_id_reset(struct Main *bmain, struct ID *id_root);
+void BKE_lib_override_library_id_reset(struct Main *bmain,
+                                       struct ID *id_root,
+                                       bool do_reset_system_override);
 /**
  * Reset all overrides in given \a id_root and its dependencies, while preserving ID relations.
+ *
+ * \param do_reset_system_override: If \a true, reset the given ID and all of its descendants in
+ * the override hierarchy as system override ones (i.e. non-editable).
  */
-void BKE_lib_override_library_id_hierarchy_reset(struct Main *bmain, struct ID *id_root);
+void BKE_lib_override_library_id_hierarchy_reset(struct Main *bmain,
+                                                 struct ID *id_root,
+                                                 bool do_reset_system_override);
 
 /**
  * Set or clear given tag in all operations in that override property data.

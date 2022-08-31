@@ -1,24 +1,7 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * - Blender Foundation, 2003-2009
- * - Peter Schlaile <peter [at] schlaile [dot] de> 2005/2006
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved.
+ *           2003-2009 Blender Foundation.
+ *           2005-2006 Peter Schlaile <peter [at] schlaile [dot] de> */
 
 /** \file
  * \ingroup bke
@@ -37,6 +20,8 @@
 #include "BKE_scene.h"
 
 #include "SEQ_iterator.h"
+#include "SEQ_relations.h"
+#include "SEQ_render.h"
 #include "SEQ_time.h"
 #include "render.h"
 
@@ -118,13 +103,15 @@ bool SEQ_collection_has_strip(const Sequence *seq, const SeqCollection *collecti
 }
 
 SeqCollection *SEQ_query_by_reference(Sequence *seq_reference,
+                                      const Scene *scene,
                                       ListBase *seqbase,
-                                      void seq_query_func(Sequence *seq_reference,
+                                      void seq_query_func(const Scene *scene,
+                                                          Sequence *seq_reference,
                                                           ListBase *seqbase,
                                                           SeqCollection *collection))
 {
   SeqCollection *collection = SEQ_collection_create(__func__);
-  seq_query_func(seq_reference, seqbase, collection);
+  seq_query_func(scene, seq_reference, seqbase, collection);
   return collection;
 }
 bool SEQ_collection_append_strip(Sequence *seq, SeqCollection *collection)
@@ -161,9 +148,11 @@ void SEQ_collection_exclude(SeqCollection *collection, SeqCollection *exclude_el
   SEQ_collection_free(exclude_elements);
 }
 
-void SEQ_collection_expand(ListBase *seqbase,
+void SEQ_collection_expand(const Scene *scene,
+                           ListBase *seqbase,
                            SeqCollection *collection,
-                           void seq_query_func(Sequence *seq_reference,
+                           void seq_query_func(const Scene *scene,
+                                               Sequence *seq_reference,
                                                ListBase *seqbase,
                                                SeqCollection *collection))
 {
@@ -172,7 +161,8 @@ void SEQ_collection_expand(ListBase *seqbase,
 
   Sequence *seq;
   SEQ_ITERATOR_FOREACH (seq, collection) {
-    SEQ_collection_merge(query_matches, SEQ_query_by_reference(seq, seqbase, seq_query_func));
+    SEQ_collection_merge(query_matches,
+                         SEQ_query_by_reference(seq, scene, seqbase, seq_query_func));
   }
 
   /* Merge all expanded results in provided SeqIteratorCollection. */
@@ -234,12 +224,14 @@ SeqCollection *SEQ_query_selected_strips(ListBase *seqbase)
   return collection;
 }
 
-static SeqCollection *query_strips_at_frame(ListBase *seqbase, const int timeline_frame)
+static SeqCollection *query_strips_at_frame(const Scene *scene,
+                                            ListBase *seqbase,
+                                            const int timeline_frame)
 {
   SeqCollection *collection = SEQ_collection_create(__func__);
 
   LISTBASE_FOREACH (Sequence *, seq, seqbase) {
-    if (SEQ_time_strip_intersects_frame(seq, timeline_frame)) {
+    if (SEQ_time_strip_intersects_frame(scene, seq, timeline_frame)) {
       SEQ_collection_append_strip(seq, collection);
     }
   }
@@ -257,15 +249,6 @@ static void collection_filter_channel_up_to_incl(SeqCollection *collection, cons
   }
 }
 
-static bool seq_is_effect_of(const Sequence *seq_effect, const Sequence *possibly_input)
-{
-  if (seq_effect->seq1 == possibly_input || seq_effect->seq2 == possibly_input ||
-      seq_effect->seq3 == possibly_input) {
-    return true;
-  }
-  return false;
-}
-
 /* Check if seq must be rendered. This depends on whole stack in some cases, not only seq itself.
  * Order of applying these conditions is important. */
 static bool must_render_strip(const Sequence *seq, SeqCollection *strips_at_timeline_frame)
@@ -278,7 +261,8 @@ static bool must_render_strip(const Sequence *seq, SeqCollection *strips_at_time
       return false;
     }
 
-    if ((seq_iter->type & SEQ_TYPE_EFFECT) != 0 && seq_is_effect_of(seq_iter, seq)) {
+    if ((seq_iter->type & SEQ_TYPE_EFFECT) != 0 &&
+        SEQ_relation_is_effect_of_strip(seq_iter, seq)) {
       /* Strips in same channel or higher than its effect are rendered. */
       if (seq->machine >= seq_iter->machine) {
         return true;
@@ -302,14 +286,14 @@ static bool must_render_strip(const Sequence *seq, SeqCollection *strips_at_time
 }
 
 /* Remove strips we don't want to render from collection. */
-static void collection_filter_rendered_strips(SeqCollection *collection)
+static void collection_filter_rendered_strips(ListBase *channels, SeqCollection *collection)
 {
   Sequence *seq;
 
   /* Remove sound strips and muted strips from collection, because these are not rendered.
    * Function #must_render_strip() don't have to check for these strips anymore. */
   SEQ_ITERATOR_FOREACH (seq, collection) {
-    if (seq->type == SEQ_TYPE_SOUND_RAM || (seq->flag & SEQ_MUTE) != 0) {
+    if (seq->type == SEQ_TYPE_SOUND_RAM || SEQ_render_is_muted(channels, seq)) {
       SEQ_collection_remove_strip(seq, collection);
     }
   }
@@ -322,15 +306,17 @@ static void collection_filter_rendered_strips(SeqCollection *collection)
   }
 }
 
-SeqCollection *SEQ_query_rendered_strips(ListBase *seqbase,
+SeqCollection *SEQ_query_rendered_strips(const Scene *scene,
+                                         ListBase *channels,
+                                         ListBase *seqbase,
                                          const int timeline_frame,
                                          const int displayed_channel)
 {
-  SeqCollection *collection = query_strips_at_frame(seqbase, timeline_frame);
+  SeqCollection *collection = query_strips_at_frame(scene, seqbase, timeline_frame);
   if (displayed_channel != 0) {
     collection_filter_channel_up_to_incl(collection, displayed_channel);
   }
-  collection_filter_rendered_strips(collection);
+  collection_filter_rendered_strips(channels, collection);
   return collection;
 }
 
@@ -346,7 +332,8 @@ SeqCollection *SEQ_query_unselected_strips(ListBase *seqbase)
   return collection;
 }
 
-void SEQ_query_strip_effect_chain(Sequence *seq_reference,
+void SEQ_query_strip_effect_chain(const Scene *scene,
+                                  Sequence *seq_reference,
                                   ListBase *seqbase,
                                   SeqCollection *collection)
 {
@@ -357,13 +344,13 @@ void SEQ_query_strip_effect_chain(Sequence *seq_reference,
   /* Find all strips that seq_reference is connected to. */
   if (seq_reference->type & SEQ_TYPE_EFFECT) {
     if (seq_reference->seq1) {
-      SEQ_query_strip_effect_chain(seq_reference->seq1, seqbase, collection);
+      SEQ_query_strip_effect_chain(scene, seq_reference->seq1, seqbase, collection);
     }
     if (seq_reference->seq2) {
-      SEQ_query_strip_effect_chain(seq_reference->seq2, seqbase, collection);
+      SEQ_query_strip_effect_chain(scene, seq_reference->seq2, seqbase, collection);
     }
     if (seq_reference->seq3) {
-      SEQ_query_strip_effect_chain(seq_reference->seq3, seqbase, collection);
+      SEQ_query_strip_effect_chain(scene, seq_reference->seq3, seqbase, collection);
     }
   }
 
@@ -371,7 +358,7 @@ void SEQ_query_strip_effect_chain(Sequence *seq_reference,
   LISTBASE_FOREACH (Sequence *, seq_test, seqbase) {
     if (seq_test->seq1 == seq_reference || seq_test->seq2 == seq_reference ||
         seq_test->seq3 == seq_reference) {
-      SEQ_query_strip_effect_chain(seq_test, seqbase, collection);
+      SEQ_query_strip_effect_chain(scene, seq_test, seqbase, collection);
     }
   }
 }

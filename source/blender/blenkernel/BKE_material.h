@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -68,7 +52,7 @@ void BKE_object_material_remap_calc(struct Object *ob_dst,
  */
 void BKE_object_material_from_eval_data(struct Main *bmain,
                                         struct Object *ob_orig,
-                                        struct ID *data_eval);
+                                        const struct ID *data_eval);
 struct Material *BKE_material_add(struct Main *bmain, const char *name);
 struct Material *BKE_gpencil_material_add(struct Main *bmain, const char *name);
 void BKE_gpencil_material_attr_init(struct Material *ma);
@@ -103,6 +87,17 @@ struct Material *BKE_object_material_get(struct Object *ob, short act);
 void BKE_id_material_assign(struct Main *bmain, struct ID *id, struct Material *ma, short act);
 void BKE_object_material_assign(
     struct Main *bmain, struct Object *ob, struct Material *ma, short act, int assign_type);
+
+/**
+ * Similar to #BKE_object_material_assign with #BKE_MAT_ASSIGN_OBDATA type,
+ * but does not scan whole Main for other usages of the same obdata. Only
+ * use in cases where you know that the object's obdata is only used by this one
+ * object.
+ */
+void BKE_object_material_assign_single_obdata(struct Main *bmain,
+                                              struct Object *ob,
+                                              struct Material *ma,
+                                              short act);
 /**
  * \warning this calls many more update calls per object then are needed, could be optimized.
  */
@@ -120,7 +115,9 @@ bool BKE_object_material_slot_used(struct Object *object, short actcol);
 struct Material *BKE_gpencil_material(struct Object *ob, short act);
 struct MaterialGPencilStyle *BKE_gpencil_material_settings(struct Object *ob, short act);
 
-void BKE_texpaint_slot_refresh_cache(struct Scene *scene, struct Material *ma);
+void BKE_texpaint_slot_refresh_cache(struct Scene *scene,
+                                     struct Material *ma,
+                                     const struct Object *ob);
 void BKE_texpaint_slots_refresh_object(struct Scene *scene, struct Object *ob);
 struct bNode *BKE_texpaint_slot_material_find_node(struct Material *ma, short texpaint_slot);
 

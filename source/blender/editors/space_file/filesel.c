@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spfile
@@ -824,7 +808,7 @@ bool ED_fileselect_layout_isect_rect(const FileLayout *layout,
   return BLI_rcti_isect(&maskrect, rect, r_dst);
 }
 
-void ED_fileselect_layout_tilepos(FileLayout *layout, int tile, int *x, int *y)
+void ED_fileselect_layout_tilepos(const FileLayout *layout, int tile, int *x, int *y)
 {
   if (layout->flag == FILE_LAYOUT_HOR) {
     *x = layout->tile_border_x +
@@ -999,6 +983,7 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *region)
 
   if (params->display == FILE_IMGDISPLAY) {
     const float pad_fac = compact ? 0.15f : 0.3f;
+    /* Matches UI_preview_tile_size_x()/_y() by default. */
     layout->prv_w = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_X;
     layout->prv_h = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_Y;
     layout->tile_border_x = pad_fac * UI_UNIT_X;
@@ -1025,6 +1010,7 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *region)
   else if (params->display == FILE_VERTICALDISPLAY) {
     int rowcount;
 
+    /* Matches UI_preview_tile_size_x()/_y() by default. */
     layout->prv_w = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_X;
     layout->prv_h = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_Y;
     layout->tile_border_x = 0.4f * UI_UNIT_X;
@@ -1046,6 +1032,7 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *region)
     layout->flag = FILE_LAYOUT_VER;
   }
   else if (params->display == FILE_HORIZONTALDISPLAY) {
+    /* Matches UI_preview_tile_size_x()/_y() by default. */
     layout->prv_w = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_X;
     layout->prv_h = ((float)params->thumbnail_size / 20.0f) * UI_UNIT_Y;
     layout->tile_border_x = 0.4f * UI_UNIT_X;
@@ -1141,8 +1128,8 @@ int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matche
    */
   for (int i = 0; i < n; i++) {
     FileDirEntry *file = filelist_file(sfile->files, i);
-    /* Do not check whether file is a file or dir here! Causes T44243
-     * (we do accept dirs at this stage). */
+    /* Do not check whether file is a file or dir here! Causes: T44243
+     * (we do accept directories at this stage). */
     if (fnmatch(pattern, file->relpath, 0) == 0) {
       filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_SELECTED, CHECK_ALL);
       if (!match) {
@@ -1375,6 +1362,24 @@ ScrArea *ED_fileselect_handler_area_find(const wmWindow *win, const wmOperator *
       if (sfile->op == file_operator) {
         return area;
       }
+    }
+  }
+
+  return NULL;
+}
+
+ScrArea *ED_fileselect_handler_area_find_any_with_op(const wmWindow *win)
+{
+  const bScreen *screen = WM_window_get_active_screen(win);
+
+  ED_screen_areas_iter (win, screen, area) {
+    if (area->spacetype != SPACE_FILE) {
+      continue;
+    }
+
+    const SpaceFile *sfile = area->spacedata.first;
+    if (sfile->op) {
+      return area;
     }
   }
 

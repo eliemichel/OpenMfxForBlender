@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 by Janne Karhu.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 by Janne Karhu. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -74,6 +58,7 @@
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_legacy_convert.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
@@ -186,7 +171,7 @@ static void particle_settings_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 
   if (psett->effector_weights) {
-    BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, psett->effector_weights->group, IDWALK_CB_NOP);
+    BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, psett->effector_weights->group, IDWALK_CB_USER);
   }
 
   if (psett->pd) {
@@ -1265,7 +1250,9 @@ typedef struct ParticleInterpolationData {
   PTCacheEditPoint *epoint;
   PTCacheEditKey *ekey[2];
 
-  float birthtime, dietime;
+  float birthtime;
+  /** Die on this frame, see #ParticleData.dietime for details. */
+  float dietime;
   int bspline;
 } ParticleInterpolationData;
 /**
@@ -1327,15 +1314,15 @@ static void get_pointcache_keys_for_time(Object *UNUSED(ob),
 }
 static int get_pointcache_times_for_particle(PointCache *cache,
                                              int index,
-                                             float *start,
-                                             float *end)
+                                             float *r_start,
+                                             float *r_dietime)
 {
   PTCacheMem *pm;
   int ret = 0;
 
   for (pm = cache->mem_cache.first; pm; pm = pm->next) {
     if (BKE_ptcache_mem_index_find(pm, index) >= 0) {
-      *start = pm->frame;
+      *r_start = pm->frame;
       ret++;
       break;
     }
@@ -1343,7 +1330,8 @@ static int get_pointcache_times_for_particle(PointCache *cache,
 
   for (pm = cache->mem_cache.last; pm; pm = pm->prev) {
     if (BKE_ptcache_mem_index_find(pm, index) >= 0) {
-      *end = pm->frame;
+      /* Die *after* the last available frame. */
+      *r_dietime = pm->frame + 1;
       ret++;
       break;
     }
@@ -1359,7 +1347,9 @@ float psys_get_dietime_from_cache(PointCache *cache, int index)
 
   for (pm = cache->mem_cache.last; pm; pm = pm->prev) {
     if (BKE_ptcache_mem_index_find(pm, index) >= 0) {
-      return (float)pm->frame;
+      /* Die *after* the last available frame. */
+      dietime = pm->frame + 1;
+      break;
     }
   }
 
@@ -1390,14 +1380,14 @@ static void init_particle_interpolation(Object *ob,
     pind->dietime = (key + pa->totkey - 1)->time;
   }
   else if (pind->cache) {
-    float start = 0.0f, end = 0.0f;
+    float start = 0.0f, dietime = 0.0f;
     get_pointcache_keys_for_time(ob, pind->cache, &pind->pm, -1, 0.0f, NULL, NULL);
     pind->birthtime = pa ? pa->time : pind->cache->startframe;
-    pind->dietime = pa ? pa->dietime : pind->cache->endframe;
+    pind->dietime = pa ? pa->dietime : (pind->cache->endframe + 1);
 
-    if (get_pointcache_times_for_particle(pind->cache, pa - psys->particles, &start, &end)) {
+    if (get_pointcache_times_for_particle(pind->cache, pa - psys->particles, &start, &dietime)) {
       pind->birthtime = MAX2(pind->birthtime, start);
-      pind->dietime = MIN2(pind->dietime, end);
+      pind->dietime = MIN2(pind->dietime, dietime);
     }
   }
   else {
@@ -1678,7 +1668,7 @@ void psys_interpolate_face(Mesh *mesh,
                            const float (*vert_normals)[3],
                            MFace *mface,
                            MTFace *tface,
-                           float (*orcodata)[3],
+                           const float (*orcodata)[3],
                            float w[4],
                            float vec[3],
                            float nor[3],
@@ -1691,7 +1681,7 @@ void psys_interpolate_face(Mesh *mesh,
   float *uv1, *uv2, *uv3, *uv4;
   float n1[3], n2[3], n3[3], n4[3];
   float tuv[4][2];
-  float *o1, *o2, *o3, *o4;
+  const float *o1, *o2, *o3, *o4;
 
   v1 = mvert[mface->v1].co;
   v2 = mvert[mface->v2].co;
@@ -1914,9 +1904,10 @@ int psys_particle_dm_face_lookup(Mesh *mesh_final,
                                  struct LinkNode **poly_nodes)
 {
   MFace *mtessface_final;
-  OrigSpaceFace *osface_final;
+  const OrigSpaceFace *osface_final;
   int pindex_orig;
-  float uv[2], (*faceuv)[2];
+  float uv[2];
+  const float(*faceuv)[2];
 
   const int *index_mf_to_mpoly_deformed = NULL;
   const int *index_mf_to_mpoly = NULL;
@@ -2059,11 +2050,7 @@ static int psys_map_index_on_dm(Mesh *mesh,
     }
     else { /* FROM_FACE/FROM_VOLUME */
            /* find a face on the derived mesh that uses this face */
-      MFace *mface;
-      OrigSpaceFace *osface;
-      int i;
-
-      i = index_dmcache;
+      int i = index_dmcache;
 
       if (i == DMCACHE_NOTFOUND || i >= mesh->totface) {
         return 0;
@@ -2073,8 +2060,8 @@ static int psys_map_index_on_dm(Mesh *mesh,
 
       /* modify the original weights to become
        * weights for the derived mesh face */
-      osface = CustomData_get_layer(&mesh->fdata, CD_ORIGSPACE);
-      mface = &mesh->mface[i];
+      OrigSpaceFace *osface = CustomData_get_layer(&mesh->fdata, CD_ORIGSPACE);
+      const MFace *mface = &mesh->mface[i];
 
       if (osface == NULL) {
         mapfw[0] = mapfw[1] = mapfw[2] = mapfw[3] = 0.0f;
@@ -2101,7 +2088,7 @@ void psys_particle_on_dm(Mesh *mesh_final,
                          float orco[3])
 {
   float tmpnor[3], mapfw[4];
-  float(*orcodata)[3];
+  const float(*orcodata)[3];
   int mapindex;
 
   if (!psys_map_index_on_dm(
@@ -2290,7 +2277,7 @@ void psys_emitter_customdata_mask(ParticleSystem *psys, CustomData_MeshMasks *r_
     r_cddata_masks->fmask |= CD_MASK_MTFACE;
   }
 
-  /* ask for vertexgroups if we need them */
+  /* Ask for vertex-groups if we need them. */
   for (i = 0; i < PSYS_TOT_VG; i++) {
     if (psys->vgroup[i]) {
       r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
@@ -2401,12 +2388,12 @@ void precalc_guides(ParticleSimulationData *sim, ListBase *effectors)
   }
 }
 
-int do_guides(Depsgraph *depsgraph,
-              ParticleSettings *part,
-              ListBase *effectors,
-              ParticleKey *state,
-              int index,
-              float time)
+bool do_guides(Depsgraph *depsgraph,
+               ParticleSettings *part,
+               ListBase *effectors,
+               ParticleKey *state,
+               int index,
+               float time)
 {
   CurveMapping *clumpcurve = (part->child_flag & PART_CHILD_USE_CLUMP_CURVE) ? part->clumpcurve :
                                                                                NULL;
@@ -2677,8 +2664,8 @@ void psys_find_parents(ParticleSimulationData *sim, const bool use_render_params
   int from = PART_FROM_FACE;
   totparent = (int)(totchild * part->parents * 0.3f);
 
-  if (use_render_params && part->child_nbr && part->ren_child_nbr) {
-    totparent *= (float)part->child_nbr / (float)part->ren_child_nbr;
+  if (use_render_params && part->child_percent && part->child_render_percent) {
+    totparent *= (float)part->child_percent / (float)part->child_render_percent;
   }
 
   /* hard limit, workaround for it being ignored above */
@@ -2752,8 +2739,8 @@ static bool psys_thread_context_init_path(ParticleThreadContext *ctx,
   if (totchild && part->childtype == PART_CHILD_FACES) {
     totparent = (int)(totchild * part->parents * 0.3f);
 
-    if (use_render_params && part->child_nbr && part->ren_child_nbr) {
-      totparent *= (float)part->child_nbr / (float)part->ren_child_nbr;
+    if (use_render_params && part->child_percent && part->child_render_percent) {
+      totparent *= (float)part->child_percent / (float)part->child_render_percent;
     }
 
     /* part->parents could still be 0 so we can't test with totparent */
@@ -3205,7 +3192,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
     return;
   }
 
-  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_LOW);
+  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_HIGH);
   totchild = ctx.totchild;
   totparent = ctx.totparent;
 
@@ -3639,7 +3626,7 @@ static void psys_cache_edit_paths_iter(void *__restrict iter_data_v,
         BKE_defvert_weight_to_rgb(ca->col, pind.hkey[1]->weight);
       }
       else {
-        /* warning: copied from 'do_particle_interpolation' (without 'mvert' array stepping) */
+        /* WARNING: copied from 'do_particle_interpolation' (without 'mvert' array stepping) */
         float real_t;
         if (result.time < 0.0f) {
           real_t = -result.time;
@@ -3807,7 +3794,7 @@ void psys_get_from_key(ParticleKey *key, float loc[3], float vel[3], float rot[4
   }
 }
 
-static void triatomat(float *v1, float *v2, float *v3, float (*uv)[2], float mat[4][4])
+static void triatomat(float *v1, float *v2, float *v3, const float (*uv)[2], float mat[4][4])
 {
   float det, w1, w2, d1[2], d2[2];
 
@@ -3853,8 +3840,7 @@ static void psys_face_mat(Object *ob, Mesh *mesh, ParticleData *pa, float mat[4]
 {
   float v[3][3];
   MFace *mface;
-  OrigSpaceFace *osface;
-  float(*orcodata)[3];
+  const float(*orcodata)[3];
 
   int i = (ELEM(pa->num_dmcache, DMCACHE_ISCHILD, DMCACHE_NOTFOUND)) ? pa->num : pa->num_dmcache;
   if (i == -1 || i >= mesh->totface) {
@@ -3863,7 +3849,7 @@ static void psys_face_mat(Object *ob, Mesh *mesh, ParticleData *pa, float mat[4]
   }
 
   mface = &mesh->mface[i];
-  osface = CustomData_get(&mesh->fdata, i, CD_ORIGSPACE);
+  const OrigSpaceFace *osface = CustomData_get(&mesh->fdata, i, CD_ORIGSPACE);
 
   if (orco && (orcodata = CustomData_get_layer(&mesh->vdata, CD_ORCO))) {
     copy_v3_v3(v[0], orcodata[mface->v1]);
@@ -4170,7 +4156,7 @@ static int get_particle_uv(Mesh *mesh,
                            bool from_vert)
 {
   MFace *mf;
-  MTFace *tf;
+  const MTFace *tf;
   int i;
 
   tf = CustomData_get_layer_named(&mesh->fdata, CD_MTFACE, name);
@@ -4663,7 +4649,7 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
        * account when subdividing for instance. */
       pind.mesh = psys_in_edit_mode(sim->depsgraph, psys) ?
                       NULL :
-                      psys->hair_out_mesh; /* XXX(@sybren) EEK. */
+                      psys->hair_out_mesh; /* XXX(@sybren): EEK. */
       init_particle_interpolation(sim->ob, psys, pa, &pind);
       do_particle_interpolation(psys, p, pa, t, &pind, state);
 
@@ -5050,7 +5036,6 @@ void psys_get_dupli_texture(ParticleSystem *psys,
                             float uv[2],
                             float orco[3])
 {
-  MFace *mface;
   float loc[3];
   int num;
 
@@ -5074,9 +5059,9 @@ void psys_get_dupli_texture(ParticleSystem *psys,
         const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
 
         if (uv_idx >= 0) {
-          MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
+          const MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
           if (mtface != NULL) {
-            mface = CustomData_get(&psmd->mesh_final->fdata, cpa->num, CD_MFACE);
+            const MFace *mface = CustomData_get(&psmd->mesh_final->fdata, cpa->num, CD_MFACE);
             mtface += cpa->num;
             psys_interpolate_uvs(mtface, mface->v4, cpa->fuv, uv);
           }
@@ -5118,8 +5103,8 @@ void psys_get_dupli_texture(ParticleSystem *psys,
       const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
 
       if (uv_idx >= 0) {
-        MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
-        mface = CustomData_get(&psmd->mesh_final->fdata, num, CD_MFACE);
+        const MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
+        const MFace *mface = CustomData_get(&psmd->mesh_final->fdata, num, CD_MFACE);
         mtface += num;
         psys_interpolate_uvs(mtface, mface->v4, pa->fuv, uv);
       }

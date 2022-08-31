@@ -1,24 +1,7 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * - Blender Foundation, 2003-2009
- * - Peter Schlaile <peter [at] schlaile [dot] de> 2005/2006
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved.
+ *           2003-2009 Blender Foundation.
+ *           2005-2006 Peter Schlaile <peter [at] schlaile [dot] de> */
 
 /** \file
  * \ingroup bke
@@ -60,6 +43,7 @@
 #include "SEQ_relations.h"
 #include "SEQ_render.h"
 #include "SEQ_sequencer.h"
+#include "SEQ_time.h"
 
 #include "multiview.h"
 #include "proxy.h"
@@ -139,7 +123,7 @@ bool seq_proxy_get_custom_file_fname(Sequence *seq, char *name, const int view_i
   return true;
 }
 
-static bool seq_proxy_get_fname(Editing *ed,
+static bool seq_proxy_get_fname(Scene *scene,
                                 Sequence *seq,
                                 int timeline_frame,
                                 eSpaceSeq_Proxy_RenderSize render_size,
@@ -148,6 +132,7 @@ static bool seq_proxy_get_fname(Editing *ed,
 {
   char dir[PROXY_MAXFILE];
   char suffix[24] = {'\0'};
+  Editing *ed = SEQ_editing_get(scene);
   StripProxy *proxy = seq->strip->proxy;
 
   if (proxy == NULL) {
@@ -195,7 +180,7 @@ static bool seq_proxy_get_fname(Editing *ed,
                "%s/images/%d/%s_proxy%s",
                dir,
                proxy_size_number,
-               SEQ_render_give_stripelem(seq, timeline_frame)->name,
+               SEQ_render_give_stripelem(scene, seq, timeline_frame)->name,
                suffix);
   BLI_path_abs(name, BKE_main_blendfile_path_from_global());
   strcat(name, ".jpg");
@@ -218,7 +203,6 @@ ImBuf *seq_proxy_fetch(const SeqRenderData *context, Sequence *seq, int timeline
   char name[PROXY_MAXFILE];
   StripProxy *proxy = seq->strip->proxy;
   const eSpaceSeq_Proxy_RenderSize psize = context->preview_render_size;
-  Editing *ed = context->scene->ed;
   StripAnim *sanim;
 
   /* only use proxies, if they are enabled (even if present!) */
@@ -227,9 +211,11 @@ ImBuf *seq_proxy_fetch(const SeqRenderData *context, Sequence *seq, int timeline
   }
 
   if (proxy->storage & SEQ_STORAGE_PROXY_CUSTOM_FILE) {
-    int frameno = (int)seq_give_frame_index(seq, timeline_frame) + seq->anim_startofs;
+    int frameno = (int)seq_give_frame_index(context->scene, seq, timeline_frame) +
+                  seq->anim_startofs;
     if (proxy->anim == NULL) {
-      if (seq_proxy_get_fname(ed, seq, timeline_frame, psize, name, context->view_id) == 0) {
+      if (seq_proxy_get_fname(
+              context->scene, seq, timeline_frame, psize, name, context->view_id) == 0) {
         return NULL;
       }
 
@@ -248,7 +234,8 @@ ImBuf *seq_proxy_fetch(const SeqRenderData *context, Sequence *seq, int timeline
     return IMB_anim_absolute(proxy->anim, frameno, IMB_TC_NONE, IMB_PROXY_NONE);
   }
 
-  if (seq_proxy_get_fname(ed, seq, timeline_frame, psize, name, context->view_id) == 0) {
+  if (seq_proxy_get_fname(context->scene, seq, timeline_frame, psize, name, context->view_id) ==
+      0) {
     return NULL;
   }
 
@@ -276,9 +263,10 @@ static void seq_proxy_build_frame(const SeqRenderData *context,
   int quality;
   int rectx, recty;
   ImBuf *ibuf_tmp, *ibuf;
-  Editing *ed = context->scene->ed;
+  Scene *scene = context->scene;
 
-  if (!seq_proxy_get_fname(ed, seq, timeline_frame, proxy_render_size, name, context->view_id)) {
+  if (!seq_proxy_get_fname(
+          scene, seq, timeline_frame, proxy_render_size, name, context->view_id)) {
     return;
   }
 
@@ -523,15 +511,11 @@ void SEQ_proxy_rebuild(SeqIndexBuildContext *context,
   }
 
   /* fail safe code */
+  int width, height;
+  BKE_render_resolution(&scene->r, false, &width, &height);
 
-  SEQ_render_new_render_data(bmain,
-                             context->depsgraph,
-                             context->scene,
-                             roundf((scene->r.size * (float)scene->r.xsch) / 100.0f),
-                             roundf((scene->r.size * (float)scene->r.ysch) / 100.0f),
-                             100,
-                             false,
-                             &render_context);
+  SEQ_render_new_render_data(
+      bmain, context->depsgraph, context->scene, width, height, 100, false, &render_context);
 
   render_context.skip_cache = true;
   render_context.is_proxy_render = true;
@@ -540,8 +524,8 @@ void SEQ_proxy_rebuild(SeqIndexBuildContext *context,
   SeqRenderState state;
   seq_render_state_init(&state);
 
-  for (timeline_frame = seq->startdisp + seq->startstill;
-       timeline_frame < seq->enddisp - seq->endstill;
+  for (timeline_frame = SEQ_time_left_handle_frame_get(scene, seq);
+       timeline_frame < SEQ_time_right_handle_frame_get(scene, seq);
        timeline_frame++) {
     if (context->size_flags & IMB_PROXY_25) {
       seq_proxy_build_frame(&render_context, &state, seq, timeline_frame, 25, overwrite);
@@ -556,26 +540,15 @@ void SEQ_proxy_rebuild(SeqIndexBuildContext *context,
       seq_proxy_build_frame(&render_context, &state, seq, timeline_frame, 100, overwrite);
     }
 
-    *progress = (float)(timeline_frame - seq->startdisp - seq->startstill) /
-                (seq->enddisp - seq->endstill - seq->startdisp - seq->startstill);
+    *progress = (float)(timeline_frame - SEQ_time_left_handle_frame_get(scene, seq)) /
+                (SEQ_time_right_handle_frame_get(scene, seq) -
+                 SEQ_time_left_handle_frame_get(scene, seq));
     *do_update = true;
 
     if (*stop || G.is_break) {
       break;
     }
   }
-}
-
-static bool seq_orig_free_anims(Sequence *seq_iter, void *data)
-{
-  SessionUUID orig_seq_uuid = ((SeqIndexBuildContext *)data)->orig_seq_uuid;
-
-  if (BLI_session_uuid_is_equal(&seq_iter->runtime.session_uuid, &orig_seq_uuid)) {
-    for (StripAnim *sanim = seq_iter->anims.first; sanim; sanim = sanim->next) {
-      IMB_close_anim_proxies(sanim->anim);
-    }
-  }
-  return true;
 }
 
 void SEQ_proxy_rebuild_finish(SeqIndexBuildContext *context, bool stop)
@@ -586,9 +559,6 @@ void SEQ_proxy_rebuild_finish(SeqIndexBuildContext *context, bool stop)
     for (sanim = context->seq->anims.first; sanim; sanim = sanim->next) {
       IMB_close_anim_proxies(sanim->anim);
     }
-
-    /* `context->seq_orig` may have been removed during building. */
-    SEQ_for_each_callback(&context->scene->ed->seqbase, seq_orig_free_anims, context);
 
     IMB_anim_index_rebuild_finish(context->index_context, stop);
   }

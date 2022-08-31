@@ -1,20 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. */
 
 /** \file
  * \ingroup edanimation
@@ -233,7 +218,7 @@ static short ob_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
+  filter = ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FCURVESONLY;
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* Loop through each F-Curve, applying the operation as required,
@@ -282,7 +267,7 @@ static short scene_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
+  filter = ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FCURVESONLY;
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* Loop through each F-Curve, applying the operation as required,
@@ -459,7 +444,7 @@ void ANIM_animdata_keyframe_callback(bAnimContext *ac,
   ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   for (ale = anim_data.first; ale; ale = ale->next) {
-    ANIM_fcurve_keyframes_loop(NULL, ale->key_data, NULL, callback_fn, calchandles_fcurve);
+    ANIM_fcurve_keyframes_loop(NULL, ale->key_data, NULL, callback_fn, BKE_fcurve_handles_recalc);
     ale->update |= ANIM_UPDATE_DEFAULT;
   }
 
@@ -846,7 +831,7 @@ static short snap_bezier_cframe(KeyframeEditData *ked, BezTriple *bezt)
 {
   const Scene *scene = ked->scene;
   if (bezt->f2 & SELECT) {
-    bezt->vec[1][0] = (float)CFRA;
+    bezt->vec[1][0] = (float)scene->r.cfra;
   }
   return 0;
 }
@@ -944,7 +929,7 @@ static short mirror_bezier_cframe(KeyframeEditData *ked, BezTriple *bezt)
   const Scene *scene = ked->scene;
 
   if (bezt->f2 & SELECT) {
-    mirror_bezier_xaxis_ex(bezt, CFRA);
+    mirror_bezier_xaxis_ex(bezt, scene->r.cfra);
   }
 
   return 0;
@@ -1307,8 +1292,8 @@ void ANIM_fcurve_equalize_keyframes_loop(FCurve *fcu,
 {
   uint i;
   BezTriple *bezt;
-  const float flat_direction_left[2] = {-handle_length, 0.f};
-  const float flat_direction_right[2] = {handle_length, 0.f};
+  const float flat_direction_left[2] = {-handle_length, 0.0f};
+  const float flat_direction_right[2] = {handle_length, 0.0f};
 
   /* Loop through an F-Curves keyframes. */
   for (bezt = fcu->bezt, i = 0; i < fcu->totvert; bezt++, i++) {
@@ -1318,6 +1303,12 @@ void ANIM_fcurve_equalize_keyframes_loop(FCurve *fcu,
 
     /* Perform handle equalization if mode is 'Both' or 'Left'. */
     if (mode & EQUALIZE_HANDLES_LEFT) {
+      /*If left handle type is 'Auto', 'Auto Clamped', or 'Vector', convert handles to 'Aligned'.*/
+      if (ELEM(bezt->h1, HD_AUTO, HD_AUTO_ANIM, HD_VECT)) {
+        bezt->h1 = HD_ALIGN;
+        bezt->h2 = HD_ALIGN;
+      }
+
       if (flatten) {
         handle_flatten(bezt->vec, 0, flat_direction_left);
       }
@@ -1328,6 +1319,13 @@ void ANIM_fcurve_equalize_keyframes_loop(FCurve *fcu,
 
     /* Perform handle equalization if mode is 'Both' or 'Right'. */
     if (mode & EQUALIZE_HANDLES_RIGHT) {
+      /*If right handle type is 'Auto', 'Auto Clamped', or 'Vector', convert handles to
+       * 'Aligned'.*/
+      if (ELEM(bezt->h2, HD_AUTO, HD_AUTO_ANIM, HD_VECT)) {
+        bezt->h1 = HD_ALIGN;
+        bezt->h2 = HD_ALIGN;
+      }
+
       if (flatten) {
         handle_flatten(bezt->vec, 2, flat_direction_right);
       }

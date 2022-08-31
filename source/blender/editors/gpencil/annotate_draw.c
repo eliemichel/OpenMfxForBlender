@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008, Blender Foundation
- * This is a new part of Blender
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. */
 
 /** \file
  * \ingroup edgpencil
@@ -126,7 +110,9 @@ static void annotation_draw_stroke_arrow_buffer(uint pos,
   immEnd();
 }
 
-/* draw stroke defined in buffer (simple ogl lines/points for now, as dotted lines) */
+/**
+ * Draw stroke defined in buffer (simple GPU lines/points for now, as dotted lines).
+ */
 static void annotation_draw_stroke_buffer(bGPdata *gps,
                                           short thickness,
                                           short dflag,
@@ -314,7 +300,9 @@ static void annotation_draw_stroke_point(const bGPDspoint *points,
   immUnbindProgram();
 }
 
-/* draw a given stroke in 3d (i.e. in 3d-space), using simple ogl lines */
+/**
+ * Draw a given stroke in 3d (i.e. in 3d-space), using simple GPU lines.
+ */
 static void annotation_draw_stroke_3d(
     const bGPDspoint *points, int totpoints, short thickness, const float ink[4], bool cyclic)
 {
@@ -853,7 +841,8 @@ void ED_annotation_draw_2dimage(const bContext *C)
   }
 
   /* draw it! */
-  annotation_draw_data_all(scene, gpd, offsx, offsy, sizex, sizey, CFRA, dflag, area->spacetype);
+  annotation_draw_data_all(
+      scene, gpd, offsx, offsy, sizex, sizey, scene->r.cfra, dflag, area->spacetype);
 }
 
 void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
@@ -889,7 +878,7 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
   }
 
   annotation_draw_data_all(
-      scene, gpd, 0, 0, region->winx, region->winy, CFRA, dflag, area->spacetype);
+      scene, gpd, 0, 0, region->winx, region->winy, scene->r.cfra, dflag, area->spacetype);
 }
 
 void ED_annotation_draw_view3d(
@@ -940,7 +929,8 @@ void ED_annotation_draw_view3d(
   }
 
   /* draw it! */
-  annotation_draw_data_all(scene, gpd, offsx, offsy, winx, winy, CFRA, dflag, v3d->spacetype);
+  annotation_draw_data_all(
+      scene, gpd, offsx, offsy, winx, winy, scene->r.cfra, dflag, v3d->spacetype);
 }
 
 void ED_annotation_draw_ex(

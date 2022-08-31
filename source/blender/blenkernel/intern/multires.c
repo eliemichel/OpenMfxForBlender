@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 by Nicholas Bishop
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 by Nicholas Bishop. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -1037,7 +1021,7 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
   CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
   Object *ob;
   Mesh *me;
-  MDisps *mdisps;
+  const MDisps *mdisps;
   MultiresModifierData *mmd;
 
   ob = ccgdm->multires.ob;
@@ -1419,7 +1403,7 @@ static void multires_apply_smat(struct Depsgraph *UNUSED(depsgraph),
   }
 }
 
-int multires_mdisp_corners(MDisps *s)
+int multires_mdisp_corners(const MDisps *s)
 {
   int lvl = 13;
 

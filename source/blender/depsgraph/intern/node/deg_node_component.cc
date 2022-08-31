@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2013 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2013 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup depsgraph
@@ -83,7 +67,10 @@ uint64_t ComponentNode::OperationIDKey::hash() const
 }
 
 ComponentNode::ComponentNode()
-    : entry_operation(nullptr), exit_operation(nullptr), affects_directly_visible(false)
+    : entry_operation(nullptr),
+      exit_operation(nullptr),
+      possibly_affects_visible_id(false),
+      affects_visible_id(false)
 {
   operations_map = new Map<ComponentNode::OperationIDKey, OperationNode *>();
 }
@@ -106,7 +93,7 @@ string ComponentNode::identifier() const
   const string idname = this->owner->name;
   const string typebuf = "" + to_string(static_cast<int>(type)) + ")";
   return typebuf + name + " : " + idname +
-         "( affects_directly_visible: " + (affects_directly_visible ? "true" : "false") + ")";
+         "( affects_visible_id: " + (affects_visible_id ? "true" : "false") + ")";
 }
 
 OperationNode *ComponentNode::find_operation(OperationIDKey key) const
@@ -231,10 +218,9 @@ void ComponentNode::clear_operations()
 
 void ComponentNode::tag_update(Depsgraph *graph, eUpdateSource source)
 {
-  OperationNode *entry_op = get_entry_operation();
-  if (entry_op != nullptr && entry_op->flag & DEPSOP_FLAG_NEEDS_UPDATE) {
-    return;
-  }
+  /* Note that the node might already be tagged for an update due invisible state of the node
+   * during previous dependency evaluation. Here the node gets re-tagged, so we need to give
+   * the evaluated clues that evaluation needs to happen again. */
   for (OperationNode *op_node : operations) {
     op_node->tag_update(graph, source);
   }
@@ -339,7 +325,6 @@ DEG_COMPONENT_NODE_DEFINE(Particles, PARTICLE_SYSTEM, ID_RECALC_GEOMETRY);
 DEG_COMPONENT_NODE_DEFINE(ParticleSettings, PARTICLE_SETTINGS, 0);
 DEG_COMPONENT_NODE_DEFINE(PointCache, POINT_CACHE, 0);
 DEG_COMPONENT_NODE_DEFINE(Pose, EVAL_POSE, ID_RECALC_GEOMETRY);
-DEG_COMPONENT_NODE_DEFINE(Proxy, PROXY, ID_RECALC_GEOMETRY);
 DEG_COMPONENT_NODE_DEFINE(Sequencer, SEQUENCER, 0);
 DEG_COMPONENT_NODE_DEFINE(Shading, SHADING, ID_RECALC_SHADING);
 DEG_COMPONENT_NODE_DEFINE(Transform, TRANSFORM, ID_RECALC_TRANSFORM);
@@ -373,7 +358,6 @@ void deg_register_component_depsnodes()
   register_node_typeinfo(&DNTI_PARTICLE_SETTINGS);
   register_node_typeinfo(&DNTI_POINT_CACHE);
   register_node_typeinfo(&DNTI_IMAGE_ANIMATION);
-  register_node_typeinfo(&DNTI_PROXY);
   register_node_typeinfo(&DNTI_EVAL_POSE);
   register_node_typeinfo(&DNTI_SEQUENCER);
   register_node_typeinfo(&DNTI_SHADING);

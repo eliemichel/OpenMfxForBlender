@@ -34,7 +34,6 @@
 #include "BKE_mesh.h" // BKE_mesh_new_nomain
 #include "BKE_main.h" // BKE_main_blendfile_path_from_global
 #include "BKE_customdata.h"
-#include "BKE_geometry_set.hh" // GeometryComponentFieldContext
 
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
@@ -46,8 +45,7 @@
 
 #include <cassert>
 
-using blender::fn::GVArray;
-using blender::bke::GeometryComponentFieldContext;
+using blender::GVArray;
 
 #ifndef max
 #  define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -742,12 +740,13 @@ OfxStatus BlenderMfxHost::setupCornerColorAttributes(OfxMeshHandle ofxMesh,
                                                      const ElementCounts &counts,
                                                      CallbackList &afterAllocate) const
 {
-  int layerCount = CustomData_number_of_layers(&blenderMesh->ldata, CD_MLOOPCOL);
+  int layerCount = CustomData_number_of_layers(&blenderMesh->ldata, CD_PROP_COLOR);
   char name[MAX_ATTRIB_NAME];
   for (int k = 0; k < layerCount; ++k) {
     sprintf(name, "%s%d", prefix, k);
 
-    MLoopCol *vcolorData = (MLoopCol *)CustomData_get_layer_n(&blenderMesh->ldata, CD_MLOOPCOL, k);
+    MLoopCol *vcolorData = (MLoopCol *)CustomData_get_layer_n(
+        &blenderMesh->ldata, CD_PROP_COLOR, k);
     if (nullptr != vcolorData) {
       setupCornerAttribute(ofxMesh,
                            name,
@@ -1057,8 +1056,9 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
         uv_data[i].uv[0] = uv[0];
         uv_data[i].uv[1] = uv[1];
       }
-      blenderMesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
-      blenderMesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
+      // elie: What is the new way to signal dirtyness? Or is it no longer required?
+      //blenderMesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
+      //blenderMesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
     }
   }
 
@@ -1087,14 +1087,15 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
     int ofxAttribStride = ofxAttrib.properties[kOfxMeshAttribPropStride].value[0].as_int;
     
     //blender::bke::StrongAnonymousAttributeID id(requestedAttrib.name());
-    const AttributeDomain domain = ATTR_DOMAIN_POINT;  // TODO
-    blender::bke::OutputAttribute_Typed<float> attribute;
-    attribute = component.attribute_try_get_for_output_only<float>(outputAttributes[i].get(), domain);
-    float *destData = attribute.as_span().data();
+    const eAttrDomain domain = ATTR_DOMAIN_POINT;  // TODO
+    blender::bke::SpanAttributeWriter<float> attribute;
+    attribute = component.attributes_for_write()->lookup_or_add_for_write_only_span<float>(outputAttributes[i].get(),
+                                                                   domain);
+    float *destData = attribute.span.data();
     for (int k = 0; k < counts.ofxPointCount; ++k) {
       destData[k] = *attributeAt<float>(ofxAttribData, ofxAttribStride, k);
     }
-    attribute.save();
+    attribute.finish();
     ++i;
   }
 

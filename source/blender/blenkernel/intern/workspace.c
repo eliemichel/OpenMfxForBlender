@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -81,6 +67,8 @@ static void workspace_foreach_id(ID *id, LibraryForeachIDData *data)
 {
   WorkSpace *workspace = (WorkSpace *)id;
 
+  BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, workspace->pin_scene, IDWALK_CB_NOP);
+
   LISTBASE_FOREACH (WorkSpaceLayout *, layout, &workspace->layouts) {
     BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, layout->screen, IDWALK_CB_USER);
   }
@@ -133,6 +121,15 @@ static void workspace_blend_read_lib(BlendLibReader *reader, ID *id)
 {
   WorkSpace *workspace = (WorkSpace *)id;
   Main *bmain = BLO_read_lib_get_main(reader);
+
+  /* Do not keep the scene reference when appending a workspace. Setting a scene for a workspace is
+   * a convenience feature, but the workspace should never truly depend on scene data. */
+  if (ID_IS_LINKED(id)) {
+    workspace->pin_scene = NULL;
+  }
+  else {
+    BLO_read_id_address(reader, NULL, &workspace->pin_scene);
+  }
 
   /* Restore proper 'parent' pointers to relevant data, and clean up unused/invalid entries. */
   LISTBASE_FOREACH_MUTABLE (WorkSpaceDataRelation *, relation, &workspace->hook_layout_relations) {

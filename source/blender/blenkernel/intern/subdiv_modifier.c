@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 #include "BKE_subdiv_modifier.h"
 
@@ -35,22 +19,39 @@
 
 #include "opensubdiv_capi.h"
 
-void BKE_subsurf_modifier_subdiv_settings_init(SubdivSettings *settings,
-                                               const SubsurfModifierData *smd,
-                                               const bool use_render_params)
+bool BKE_subsurf_modifier_runtime_init(SubsurfModifierData *smd, const bool use_render_params)
 {
   const int requested_levels = (use_render_params) ? smd->renderLevels : smd->levels;
 
-  settings->is_simple = (smd->subdivType == SUBSURF_TYPE_SIMPLE);
-  settings->is_adaptive = !(smd->flags & eSubsurfModifierFlag_UseRecursiveSubdivision);
-  settings->level = settings->is_simple ?
-                        1 :
-                        (settings->is_adaptive ? smd->quality : requested_levels);
-  settings->use_creases = (smd->flags & eSubsurfModifierFlag_UseCrease);
-  settings->vtx_boundary_interpolation = BKE_subdiv_vtx_boundary_interpolation_from_subsurf(
+  SubdivSettings settings;
+  settings.is_simple = (smd->subdivType == SUBSURF_TYPE_SIMPLE);
+  settings.is_adaptive = !(smd->flags & eSubsurfModifierFlag_UseRecursiveSubdivision);
+  settings.level = settings.is_simple ? 1 :
+                                        (settings.is_adaptive ? smd->quality : requested_levels);
+  settings.use_creases = (smd->flags & eSubsurfModifierFlag_UseCrease);
+  settings.vtx_boundary_interpolation = BKE_subdiv_vtx_boundary_interpolation_from_subsurf(
       smd->boundary_smooth);
-  settings->fvar_linear_interpolation = BKE_subdiv_fvar_interpolation_from_uv_smooth(
+  settings.fvar_linear_interpolation = BKE_subdiv_fvar_interpolation_from_uv_smooth(
       smd->uv_smooth);
+
+  SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)smd->modifier.runtime;
+  if (settings.level == 0) {
+    /* Modifier is effectively disabled, but still update settings if runtime data
+     * was already allocated. */
+    if (runtime_data) {
+      runtime_data->settings = settings;
+    }
+
+    return false;
+  }
+
+  /* Allocate runtime data if it did not exist yet. */
+  if (runtime_data == NULL) {
+    runtime_data = MEM_callocN(sizeof(*runtime_data), "subsurf runtime");
+    smd->modifier.runtime = runtime_data;
+  }
+  runtime_data->settings = settings;
+  return true;
 }
 
 static ModifierData *modifier_get_last_enabled_for_mode(const Scene *scene,
@@ -93,8 +94,7 @@ static bool is_subdivision_evaluation_possible_on_gpu(void)
     return false;
   }
 
-  const int available_evaluators = openSubdiv_getAvailableEvaluators();
-  if ((available_evaluators & OPENSUBDIV_EVALUATOR_GLSL_COMPUTE) == 0) {
+  if (GPU_max_compute_shader_storage_blocks() < MAX_GPU_SUBDIV_SSBOS) {
     return false;
   }
 
@@ -105,7 +105,7 @@ bool BKE_subsurf_modifier_force_disable_gpu_evaluation_for_mesh(const SubsurfMod
                                                                 const Mesh *mesh)
 {
   if ((U.gpu_flag & USER_GPU_FLAG_SUBDIVISION_EVALUATION) == 0) {
-    /* GPU subdivision is explicitely disabled, so we don't force it. */
+    /* GPU subdivision is explicitly disabled, so we don't force it. */
     return false;
   }
 
@@ -117,12 +117,11 @@ bool BKE_subsurf_modifier_force_disable_gpu_evaluation_for_mesh(const SubsurfMod
   return subsurf_modifier_use_autosmooth_or_split_normals(smd, mesh);
 }
 
-bool BKE_subsurf_modifier_can_do_gpu_subdiv_ex(const Scene *scene,
-                                               const Object *ob,
-                                               const Mesh *mesh,
-                                               const SubsurfModifierData *smd,
-                                               int required_mode,
-                                               bool skip_check_is_last)
+bool BKE_subsurf_modifier_can_do_gpu_subdiv(const Scene *scene,
+                                            const Object *ob,
+                                            const Mesh *mesh,
+                                            const SubsurfModifierData *smd,
+                                            int required_mode)
 {
   if ((U.gpu_flag & USER_GPU_FLAG_SUBDIVISION_EVALUATION) == 0) {
     return false;
@@ -134,61 +133,35 @@ bool BKE_subsurf_modifier_can_do_gpu_subdiv_ex(const Scene *scene,
     return false;
   }
 
-  if (!skip_check_is_last) {
-    ModifierData *md = modifier_get_last_enabled_for_mode(scene, ob, required_mode);
-    if (md != (const ModifierData *)smd) {
-      return false;
-    }
+  ModifierData *md = modifier_get_last_enabled_for_mode(scene, ob, required_mode);
+  if (md != (const ModifierData *)smd) {
+    return false;
   }
 
   return is_subdivision_evaluation_possible_on_gpu();
 }
 
-bool BKE_subsurf_modifier_can_do_gpu_subdiv(const Scene *scene,
-                                            const Object *ob,
-                                            const Mesh *mesh,
-                                            int required_mode)
+bool BKE_subsurf_modifier_has_gpu_subdiv(const Mesh *mesh)
 {
-  ModifierData *md = modifier_get_last_enabled_for_mode(scene, ob, required_mode);
-
-  if (!md) {
-    return false;
-  }
-
-  if (md->type != eModifierType_Subsurf) {
-    return false;
-  }
-
-  return BKE_subsurf_modifier_can_do_gpu_subdiv_ex(
-      scene, ob, mesh, (SubsurfModifierData *)md, required_mode, true);
+  SubsurfRuntimeData *runtime_data = mesh->runtime.subsurf_runtime_data;
+  return runtime_data && runtime_data->has_gpu_subdiv;
 }
 
 void (*BKE_subsurf_modifier_free_gpu_cache_cb)(Subdiv *subdiv) = NULL;
 
-Subdiv *BKE_subsurf_modifier_subdiv_descriptor_ensure(const SubsurfModifierData *smd,
-                                                      const SubdivSettings *subdiv_settings,
+Subdiv *BKE_subsurf_modifier_subdiv_descriptor_ensure(SubsurfRuntimeData *runtime_data,
                                                       const Mesh *mesh,
                                                       const bool for_draw_code)
 {
-  SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)smd->modifier.runtime;
   if (runtime_data->subdiv && runtime_data->set_by_draw_code != for_draw_code) {
     BKE_subdiv_free(runtime_data->subdiv);
     runtime_data->subdiv = NULL;
   }
-  Subdiv *subdiv = BKE_subdiv_update_from_mesh(runtime_data->subdiv, subdiv_settings, mesh);
+  Subdiv *subdiv = BKE_subdiv_update_from_mesh(
+      runtime_data->subdiv, &runtime_data->settings, mesh);
   runtime_data->subdiv = subdiv;
   runtime_data->set_by_draw_code = for_draw_code;
   return subdiv;
-}
-
-SubsurfRuntimeData *BKE_subsurf_modifier_ensure_runtime(SubsurfModifierData *smd)
-{
-  SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)smd->modifier.runtime;
-  if (runtime_data == NULL) {
-    runtime_data = MEM_callocN(sizeof(*runtime_data), "subsurf runtime");
-    smd->modifier.runtime = runtime_data;
-  }
-  return runtime_data;
 }
 
 int BKE_subsurf_modifier_eval_required_mode(bool is_final_render, bool is_edit_mode)

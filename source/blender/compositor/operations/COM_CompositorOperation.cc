@@ -1,25 +1,11 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Copyright 2011, Blender Foundation.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2011 Blender Foundation. */
 
 #include "COM_CompositorOperation.h"
 
 #include "BKE_global.h"
 #include "BKE_image.h"
+#include "BKE_scene.h"
 
 #include "RE_pipeline.h"
 
@@ -129,7 +115,7 @@ void CompositorOperation::deinit_execution()
 
 void CompositorOperation::execute_region(rcti *rect, unsigned int /*tile_number*/)
 {
-  float color[8];  // 7 is enough
+  float color[8]; /* 7 is enough. */
   float *buffer = output_buffer_;
   float *zbuffer = depth_buffer_;
 
@@ -179,8 +165,8 @@ void CompositorOperation::execute_region(rcti *rect, unsigned int /*tile_number*
      *                      Full frame
      */
 
-    int full_width = rd->xsch * rd->size / 100;
-    int full_height = rd->ysch * rd->size / 100;
+    int full_width, full_height;
+    BKE_render_resolution(rd, false, &full_width, &full_height);
 
     dx = rd->border.xmin * full_width - (full_width - this->get_width()) / 2.0f;
     dy = rd->border.ymin * full_height - (full_height - this->get_height()) / 2.0f;
@@ -229,8 +215,8 @@ void CompositorOperation::update_memory_buffer_partial(MemoryBuffer *UNUSED(outp
 
 void CompositorOperation::determine_canvas(const rcti &UNUSED(preferred_area), rcti &r_area)
 {
-  int width = rd_->xsch * rd_->size / 100;
-  int height = rd_->ysch * rd_->size / 100;
+  int width, height;
+  BKE_render_resolution(rd_, false, &width, &height);
 
   /* Check actual render resolution with cropping it may differ with cropped border.rendering
    * Fix for T31777 Border Crop gives black (easy). */

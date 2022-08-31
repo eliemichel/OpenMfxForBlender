@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -101,7 +87,7 @@ class MFVariable : NonCopyable, NonMovable {
   MFDataType data_type_;
   Vector<MFInstruction *> users_;
   std::string name_;
-  int id_;
+  int index_in_graph_;
 
   friend MFProcedure;
   friend MFCallInstruction;
@@ -115,7 +101,7 @@ class MFVariable : NonCopyable, NonMovable {
   StringRefNull name() const;
   void set_name(std::string name);
 
-  int id() const;
+  int index_in_procedure() const;
 };
 
 /** Base class for all instruction types. */
@@ -390,9 +376,9 @@ inline StringRefNull MFVariable::name() const
   return name_;
 }
 
-inline int MFVariable::id() const
+inline int MFVariable::index_in_procedure() const
 {
-  return id_;
+  return index_in_graph_;
 }
 
 /** \} */

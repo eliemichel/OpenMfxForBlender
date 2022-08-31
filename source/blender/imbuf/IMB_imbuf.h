@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup imbuf
@@ -122,6 +106,14 @@ struct ImBuf *IMB_testiffname(const char *filepath, int flags);
  * \attention Defined in readimage.c
  */
 struct ImBuf *IMB_loadiffname(const char *filepath, int flags, char colorspace[IM_MAX_SPACE]);
+
+/**
+ *
+ * \attention Defined in readimage.c
+ */
+struct ImBuf *IMB_thumb_load_image(const char *filepath,
+                                   const size_t max_thumb_size,
+                                   char colorspace[IM_MAX_SPACE]);
 
 /**
  *
@@ -538,7 +530,6 @@ void IMB_scaleImBuf_threaded(struct ImBuf *ibuf, unsigned int newx, unsigned int
  * \attention Defined in writeimage.c
  */
 bool IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
-bool IMB_prepare_write_ImBuf(bool isfloat, struct ImBuf *ibuf);
 
 /**
  *
@@ -560,12 +551,6 @@ bool IMB_isanim(const char *filepath);
  * \attention Defined in util.c
  */
 int imb_get_anim_type(const char *filepath);
-
-/**
- *
- * \attention Defined in util.c
- */
-bool IMB_isfloat(const struct ImBuf *ibuf);
 
 /**
  * Test if color-space conversions of pixels in buffer need to take into account alpha.
@@ -916,16 +901,16 @@ typedef enum eIMBTransformMode {
 /**
  * \brief Transform source image buffer onto destination image buffer using a transform matrix.
  *
- * \param src Image buffer to read from.
- * \param dst Image buffer to write to. rect or rect_float must already be initialized.
+ * \param src: Image buffer to read from.
+ * \param dst: Image buffer to write to. rect or rect_float must already be initialized.
  * - dst buffer must be a 4 channel buffers.
  * - Only one data type buffer will be used (rect_float has priority over rect)
- * \param mode Cropping/Wrap repeat effect to apply during transformation.
- * \param filter Interpolation to use during sampling.
- * \param transform_matrix Transformation matrix to use.
+ * \param mode: Cropping/Wrap repeat effect to apply during transformation.
+ * \param filter: Interpolation to use during sampling.
+ * \param transform_matrix: Transformation matrix to use.
  * The given matrix should transform between dst pixel space to src pixel space.
  * One unit is one pixel.
- * \param src_crop cropping region how to crop the source buffer. Should only be passed when mode
+ * \param src_crop: Cropping region how to crop the source buffer. Should only be passed when mode
  * is set to #IMB_TRANSFORM_MODE_CROP_SRC. For any other mode this should be empty.
  *
  * During transformation no data/color conversion will happens.
@@ -951,8 +936,7 @@ const char *IMB_ffmpeg_last_error(void);
 struct GPUTexture *IMB_create_gpu_texture(const char *name,
                                           struct ImBuf *ibuf,
                                           bool use_high_bitdepth,
-                                          bool use_premult,
-                                          bool limit_gl_texture_size);
+                                          bool use_premult);
 /**
  * The `ibuf` is only here to detect the storage type. The produced texture will have undefined
  * content. It will need to be populated by using #IMB_update_gpu_texture_sub().
@@ -981,13 +965,13 @@ void IMB_stereo3d_write_dimensions(
     char mode, bool is_squeezed, size_t width, size_t height, size_t *r_width, size_t *r_height);
 void IMB_stereo3d_read_dimensions(
     char mode, bool is_squeezed, size_t width, size_t height, size_t *r_width, size_t *r_height);
-int *IMB_stereo3d_from_rect(struct ImageFormatData *im_format,
+int *IMB_stereo3d_from_rect(const struct ImageFormatData *im_format,
                             size_t x,
                             size_t y,
                             size_t channels,
                             int *rect_left,
                             int *rect_right);
-float *IMB_stereo3d_from_rectf(struct ImageFormatData *im_format,
+float *IMB_stereo3d_from_rectf(const struct ImageFormatData *im_format,
                                size_t x,
                                size_t y,
                                size_t channels,
@@ -996,13 +980,13 @@ float *IMB_stereo3d_from_rectf(struct ImageFormatData *im_format,
 /**
  * Left/right are always float.
  */
-struct ImBuf *IMB_stereo3d_ImBuf(struct ImageFormatData *im_format,
+struct ImBuf *IMB_stereo3d_ImBuf(const struct ImageFormatData *im_format,
                                  struct ImBuf *ibuf_left,
                                  struct ImBuf *ibuf_right);
 /**
  * Reading a stereo encoded ibuf (*left) and generating two ibufs from it (*left and *right).
  */
-void IMB_ImBufFromStereo3d(struct Stereo3dFormat *s3d,
+void IMB_ImBufFromStereo3d(const struct Stereo3dFormat *s3d,
                            struct ImBuf *ibuf_stereo,
                            struct ImBuf **r_ibuf_left,
                            struct ImBuf **r_ibuf_right);

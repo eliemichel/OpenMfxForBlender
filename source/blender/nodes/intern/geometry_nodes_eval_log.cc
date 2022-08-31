@@ -1,21 +1,8 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "NOD_geometry_nodes_eval_log.hh"
 
+#include "BKE_curves.hh"
 #include "BKE_geometry_set_instances.hh"
 
 #include "DNA_modifier_types.h"
@@ -29,7 +16,6 @@
 
 namespace blender::nodes::geometry_nodes_eval_log {
 
-using fn::CPPType;
 using fn::FieldCPPType;
 using fn::FieldInput;
 using fn::GField;
@@ -76,6 +62,13 @@ ModifierLog::ModifierLog(GeoLogger &logger)
     for (NodeWithDebugMessage &debug_message : local_logger.node_debug_messages_) {
       NodeLog &node_log = this->lookup_or_add_node_log(log_by_tree_context, debug_message.node);
       node_log.debug_messages_.append(debug_message.message);
+    }
+
+    for (NodeWithUsedNamedAttribute &node_with_attribute_name :
+         local_logger.used_named_attributes_) {
+      NodeLog &node_log = this->lookup_or_add_node_log(log_by_tree_context,
+                                                       node_with_attribute_name.node);
+      node_log.used_named_attributes_.append(std::move(node_with_attribute_name.attribute));
     }
   }
 }
@@ -236,7 +229,7 @@ GeometryValueLog::GeometryValueLog(const GeometrySet &geometry_set, bool log_ful
       all_component_types,
       true,
       [&](const bke::AttributeIDRef &attribute_id,
-          const AttributeMetaData &meta_data,
+          const bke::AttributeMetaData &meta_data,
           const GeometryComponent &UNUSED(component)) {
         if (attribute_id.is_named() && names.add(attribute_id.name())) {
           this->attributes_.append({attribute_id.name(), meta_data.domain, meta_data.data_type});
@@ -249,27 +242,38 @@ GeometryValueLog::GeometryValueLog(const GeometrySet &geometry_set, bool log_ful
       case GEO_COMPONENT_TYPE_MESH: {
         const MeshComponent &mesh_component = *(const MeshComponent *)component;
         MeshInfo &info = this->mesh_info.emplace();
-        info.tot_verts = mesh_component.attribute_domain_size(ATTR_DOMAIN_POINT);
-        info.tot_edges = mesh_component.attribute_domain_size(ATTR_DOMAIN_EDGE);
-        info.tot_faces = mesh_component.attribute_domain_size(ATTR_DOMAIN_FACE);
+        info.verts_num = mesh_component.attribute_domain_size(ATTR_DOMAIN_POINT);
+        info.edges_num = mesh_component.attribute_domain_size(ATTR_DOMAIN_EDGE);
+        info.faces_num = mesh_component.attribute_domain_size(ATTR_DOMAIN_FACE);
         break;
       }
       case GEO_COMPONENT_TYPE_CURVE: {
         const CurveComponent &curve_component = *(const CurveComponent *)component;
         CurveInfo &info = this->curve_info.emplace();
-        info.tot_splines = curve_component.attribute_domain_size(ATTR_DOMAIN_CURVE);
+        info.splines_num = curve_component.attribute_domain_size(ATTR_DOMAIN_CURVE);
         break;
       }
       case GEO_COMPONENT_TYPE_POINT_CLOUD: {
         const PointCloudComponent &pointcloud_component = *(const PointCloudComponent *)component;
         PointCloudInfo &info = this->pointcloud_info.emplace();
-        info.tot_points = pointcloud_component.attribute_domain_size(ATTR_DOMAIN_POINT);
+        info.points_num = pointcloud_component.attribute_domain_size(ATTR_DOMAIN_POINT);
         break;
       }
       case GEO_COMPONENT_TYPE_INSTANCES: {
         const InstancesComponent &instances_component = *(const InstancesComponent *)component;
         InstancesInfo &info = this->instances_info.emplace();
-        info.tot_instances = instances_component.instances_amount();
+        info.instances_num = instances_component.instances_num();
+        break;
+      }
+      case GEO_COMPONENT_TYPE_EDIT: {
+        const GeometryComponentEditData &edit_component = *(
+            const GeometryComponentEditData *)component;
+        if (const bke::CurvesEditHints *curve_edit_hints =
+                edit_component.curves_edit_hints_.get()) {
+          EditDataInfo &info = this->edit_data_info.emplace();
+          info.has_deform_matrices = curve_edit_hints->deform_mats.has_value();
+          info.has_deformed_positions = curve_edit_hints->positions.has_value();
+        }
         break;
       }
       case GEO_COMPONENT_TYPE_VOLUME: {
@@ -350,6 +354,16 @@ const NodeLog *ModifierLog::find_node_by_node_editor_context(const SpaceNode &sn
     return nullptr;
   }
   return tree_log->lookup_node_log(node);
+}
+
+const NodeLog *ModifierLog::find_node_by_node_editor_context(const SpaceNode &snode,
+                                                             const StringRef node_name)
+{
+  const TreeLog *tree_log = ModifierLog::find_tree_by_node_editor_context(snode);
+  if (tree_log == nullptr) {
+    return nullptr;
+  }
+  return tree_log->lookup_node_log(node_name);
 }
 
 const SocketLog *ModifierLog::find_socket_by_node_editor_context(const SpaceNode &snode,
@@ -489,6 +503,13 @@ void LocalGeoLogger::log_node_warning(DNode node, NodeWarningType type, std::str
 void LocalGeoLogger::log_execution_time(DNode node, std::chrono::microseconds exec_time)
 {
   node_exec_times_.append({node, exec_time});
+}
+
+void LocalGeoLogger::log_used_named_attribute(DNode node,
+                                              std::string attribute_name,
+                                              eNamedAttrUsage usage)
+{
+  used_named_attributes_.append({node, {std::move(attribute_name), usage}});
 }
 
 void LocalGeoLogger::log_debug_message(DNode node, std::string message)

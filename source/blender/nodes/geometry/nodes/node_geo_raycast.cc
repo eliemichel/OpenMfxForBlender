@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "DNA_mesh_types.h"
 
@@ -84,7 +70,7 @@ static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 static void node_update(bNodeTree *ntree, bNode *node)
 {
   const NodeGeometryRaycast &storage = node_storage(*node);
-  const CustomDataType data_type = static_cast<CustomDataType>(storage.data_type);
+  const eCustomDataType data_type = static_cast<eCustomDataType>(storage.data_type);
 
   bNodeSocket *socket_vector = (bNodeSocket *)BLI_findlink(&node->inputs, 1);
   bNodeSocket *socket_float = socket_vector->next;
@@ -118,7 +104,7 @@ static void node_gather_link_searches(GatherLinkSearchOpParams &params)
   search_link_ops_for_declarations(params, declaration.inputs().take_back(3));
   search_link_ops_for_declarations(params, declaration.outputs().take_front(4));
 
-  const std::optional<CustomDataType> type = node_data_type_to_custom_data_type(
+  const std::optional<eCustomDataType> type = node_data_type_to_custom_data_type(
       (eNodeSocketDatatype)params.other_socket().type);
   if (type && *type != CD_PROP_STRING) {
     /* The input and output sockets have the same name. */
@@ -155,10 +141,13 @@ static void raycast_to_mesh(IndexMask mask,
 {
   BVHTreeFromMesh tree_data;
   BKE_bvhtree_from_mesh_get(&tree_data, &mesh, BVHTREE_FROM_LOOPTRI, 4);
+  BLI_SCOPED_DEFER([&]() { free_bvhtree_from_mesh(&tree_data); });
+
   if (tree_data.tree == nullptr) {
-    free_bvhtree_from_mesh(&tree_data);
     return;
   }
+  /* We shouldn't be rebuilding the BVH tree when calling this function in parallel. */
+  BLI_assert(tree_data.cached);
 
   for (const int i : mask) {
     const float ray_length = ray_lengths[i];
@@ -211,10 +200,6 @@ static void raycast_to_mesh(IndexMask mask,
       }
     }
   }
-
-  /* We shouldn't be rebuilding the BVH tree when calling this function in parallel. */
-  BLI_assert(tree_data.cached);
-  free_bvhtree_from_mesh(&tree_data);
 }
 
 class RaycastFunction : public fn::MultiFunction {
@@ -230,7 +215,7 @@ class RaycastFunction : public fn::MultiFunction {
   /* Always evaluate the target domain data on the face corner domain because it contains the most
    * information. Eventually this could be exposed as an option or determined automatically from
    * the field inputs for better performance. */
-  const AttributeDomain domain_ = ATTR_DOMAIN_CORNER;
+  const eAttrDomain domain_ = ATTR_DOMAIN_CORNER;
 
   fn::MFSignature signature_;
 
@@ -313,7 +298,7 @@ class RaycastFunction : public fn::MultiFunction {
       GMutableSpan result = params.uninitialized_single_output_if_required(7, "Attribute");
       if (!result.is_empty()) {
         MeshAttributeInterpolator interp(&mesh, hit_mask, hit_positions, hit_indices);
-        result.type().fill_assign_indices(result.type().default_value(), result.data(), mask);
+        result.type().value_initialize_indices(result.data(), mask);
         interp.sample_data(*target_data_, domain_, get_map_mode(mapping_), result);
       }
     }
@@ -335,7 +320,7 @@ class RaycastFunction : public fn::MultiFunction {
   }
 };
 
-static GField get_input_attribute_field(GeoNodeExecParams &params, const CustomDataType data_type)
+static GField get_input_attribute_field(GeoNodeExecParams &params, const eCustomDataType data_type)
 {
   switch (data_type) {
     case CD_PROP_FLOAT:
@@ -402,7 +387,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   GeometrySet target = params.extract_input<GeometrySet>("Target Geometry");
   const NodeGeometryRaycast &storage = node_storage(params.node());
   const GeometryNodeRaycastMapMode mapping = (GeometryNodeRaycastMapMode)storage.mapping;
-  const CustomDataType data_type = static_cast<CustomDataType>(storage.data_type);
+  const eCustomDataType data_type = static_cast<eCustomDataType>(storage.data_type);
 
   if (target.is_empty()) {
     params.set_default_remaining_outputs();

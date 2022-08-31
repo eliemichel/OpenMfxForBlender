@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -253,33 +239,33 @@ static StructRNA *rna_LineStyle_geometry_modifier_refine(struct PointerRNA *ptr)
   }
 }
 
-static char *rna_LineStyle_color_modifier_path(PointerRNA *ptr)
+static char *rna_LineStyle_color_modifier_path(const PointerRNA *ptr)
 {
-  LineStyleModifier *m = (LineStyleModifier *)ptr->data;
+  const LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
   BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("color_modifiers[\"%s\"]", name_esc);
 }
 
-static char *rna_LineStyle_alpha_modifier_path(PointerRNA *ptr)
+static char *rna_LineStyle_alpha_modifier_path(const PointerRNA *ptr)
 {
-  LineStyleModifier *m = (LineStyleModifier *)ptr->data;
+  const LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
   BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("alpha_modifiers[\"%s\"]", name_esc);
 }
 
-static char *rna_LineStyle_thickness_modifier_path(PointerRNA *ptr)
+static char *rna_LineStyle_thickness_modifier_path(const PointerRNA *ptr)
 {
-  LineStyleModifier *m = (LineStyleModifier *)ptr->data;
+  const LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
   BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("thickness_modifiers[\"%s\"]", name_esc);
 }
 
-static char *rna_LineStyle_geometry_modifier_path(PointerRNA *ptr)
+static char *rna_LineStyle_geometry_modifier_path(const PointerRNA *ptr)
 {
-  LineStyleModifier *m = (LineStyleModifier *)ptr->data;
+  const LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
   BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("geometry_modifiers[\"%s\"]", name_esc);

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008, Blender Foundation
- * This is a new part of Blender (with some old code)
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. */
 
 /** \file
  * \ingroup editors
@@ -367,6 +351,19 @@ int ANIM_scene_get_keyingset_index(struct Scene *scene, struct KeyingSet *ks);
 struct KeyingSet *ANIM_get_keyingset_for_autokeying(const struct Scene *scene,
                                                     const char *transformKSName);
 
+void ANIM_keyingset_visit_for_search(const struct bContext *C,
+                                     struct PointerRNA *ptr,
+                                     struct PropertyRNA *prop,
+                                     const char *edit_text,
+                                     StringPropertySearchVisitFunc visit_fn,
+                                     void *visit_user_data);
+
+void ANIM_keyingset_visit_for_search_no_poll(const struct bContext *C,
+                                             struct PointerRNA *ptr,
+                                             struct PropertyRNA *prop,
+                                             const char *edit_text,
+                                             StringPropertySearchVisitFunc visit_fn,
+                                             void *visit_user_data);
 /**
  * Dynamically populate an enum of Keying Sets.
  */
@@ -661,15 +658,20 @@ bool ED_autokeyframe_pchan(struct bContext *C,
                            struct Object *ob,
                            struct bPoseChannel *pchan,
                            struct KeyingSet *ks);
+
 /**
- * Use for auto-key-framing from the UI.
+ * Use for auto-key-framing
+ * \param only_if_property_keyed: if true, auto-key-framing only creates keyframes on already keyed
+ * properties. This is by design when using buttons. For other callers such as gizmos or VSE
+ * preview transform, creating new animation/keyframes also on non-keyed properties is desired.
  */
 bool ED_autokeyframe_property(struct bContext *C,
                               struct Scene *scene,
                               PointerRNA *ptr,
                               PropertyRNA *prop,
                               int rnaindex,
-                              float cfra);
+                              float cfra,
+                              bool only_if_property_keyed);
 
 /* Names for builtin keying sets so we don't confuse these with labels/text,
  * defined in python script: `keyingsets_builtins.py`. */

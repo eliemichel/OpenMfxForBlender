@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -110,7 +96,7 @@ bool BKE_copybuffer_read(Main *bmain_dst,
                          ReportList *reports,
                          const uint64_t id_types_mask)
 {
-  /* Note: No recursive append here (no `BLO_LIBLINK_APPEND_RECURSIVE`), external linked data
+  /* NOTE: No recursive append here (no `BLO_LIBLINK_APPEND_RECURSIVE`), external linked data
    * should remain linked. */
   const int flag = 0;
   const int id_tag_extra = 0;
@@ -146,7 +132,7 @@ int BKE_copybuffer_paste(bContext *C,
   View3D *v3d = CTX_wm_view3d(C); /* may be NULL. */
   const int id_tag_extra = 0;
 
-  /* Note: No recursive append here, external linked data should remain linked. */
+  /* NOTE: No recursive append here, external linked data should remain linked. */
   BLI_assert((flag & BLO_LIBLINK_APPEND_RECURSIVE) == 0);
 
   struct LibraryLink_Params liblink_params;

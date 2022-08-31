@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2019 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2019 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup depsgraph
@@ -40,6 +24,7 @@
 #include "BKE_constraint.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "intern/builder/deg_builder.h"
 #include "intern/depsgraph.h"
@@ -54,7 +39,7 @@ namespace blender::deg {
 
 class RNANodeQueryIDData {
  public:
-  explicit RNANodeQueryIDData(const ID *id) : id_(id), constraint_to_pchan_map_(nullptr)
+  explicit RNANodeQueryIDData(const ID *id) : id_(id)
   {
   }
 
@@ -92,7 +77,7 @@ class RNANodeQueryIDData {
 
   /* indexed by bConstraint*, returns pose channel which contains that
    * constraint. */
-  Map<const bConstraint *, const bPoseChannel *> *constraint_to_pchan_map_;
+  Map<const bConstraint *, const bPoseChannel *> *constraint_to_pchan_map_ = nullptr;
 };
 
 /* ***************************** Node Identifier **************************** */
@@ -286,7 +271,8 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
            RNA_struct_is_a(ptr->type, &RNA_LatticePoint) ||
            RNA_struct_is_a(ptr->type, &RNA_MeshUVLoop) ||
            RNA_struct_is_a(ptr->type, &RNA_MeshLoopColor) ||
-           RNA_struct_is_a(ptr->type, &RNA_VertexGroupElement)) {
+           RNA_struct_is_a(ptr->type, &RNA_VertexGroupElement) ||
+           RNA_struct_is_a(ptr->type, &RNA_ShaderFx)) {
     /* When modifier is used as FROM operation this is likely referencing to
      * the property (for example, modifier's influence).
      * But when it's used as TO operation, this is geometry component. */

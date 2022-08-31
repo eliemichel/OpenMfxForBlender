@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup editors
@@ -47,6 +31,7 @@ struct Mesh;
 struct Object;
 struct ReportList;
 struct Scene;
+struct SelectPick_Params;
 struct UndoType;
 struct UvMapVert;
 struct UvVertMap;
@@ -152,7 +137,6 @@ void EDBM_update_extern(struct Mesh *me, bool do_tessellation, bool is_destructi
  */
 struct UvElementMap *BM_uv_element_map_create(struct BMesh *bm,
                                               const struct Scene *scene,
-                                              bool face_selected,
                                               bool uv_selected,
                                               bool use_winding,
                                               bool do_islands);
@@ -284,8 +268,9 @@ bool EDBM_unified_findnearest_from_raycast(struct ViewContext *vc,
                                            struct BMEdge **r_eed,
                                            struct BMFace **r_efa);
 
-bool EDBM_select_pick(
-    struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
+bool EDBM_select_pick(struct bContext *C,
+                      const int mval[2],
+                      const struct SelectPick_Params *params);
 
 /**
  * When switching select mode, makes sure selection is consistent for editing
@@ -349,6 +334,7 @@ bool EDBM_selectmode_disable_multi(struct bContext *C,
                                    short selectmode_fallback);
 
 /* editmesh_preselect_edgering.c */
+
 struct EditMesh_PreSelEdgeRing;
 struct EditMesh_PreSelEdgeRing *EDBM_preselect_edgering_create(void);
 void EDBM_preselect_edgering_destroy(struct EditMesh_PreSelEdgeRing *psel);
@@ -361,6 +347,7 @@ void EDBM_preselect_edgering_update_from_edge(struct EditMesh_PreSelEdgeRing *ps
                                               const float (*coords)[3]);
 
 /* editmesh_preselect_elem.c */
+
 struct EditMesh_PreSelElem;
 typedef enum eEditMesh_PreSelPreviewAction {
   PRESELECT_ACTION_TRANSFORM = 1,
@@ -396,19 +383,20 @@ void ED_operatormacros_mesh(void);
  */
 void ED_keymap_mesh(struct wmKeyConfig *keyconf);
 
-/* editface.c */
+/* editface.cc */
 
 /**
  * Copy the face flags, most importantly selection from the mesh to the final derived mesh,
  * use in object mode when selecting faces (while painting).
  */
 void paintface_flush_flags(struct bContext *C, struct Object *ob, short flag);
+/**
+ * \return True when pick finds an element or the selection changed.
+ */
 bool paintface_mouse_select(struct bContext *C,
-                            struct Object *ob,
                             const int mval[2],
-                            bool extend,
-                            bool deselect,
-                            bool toggle);
+                            const struct SelectPick_Params *params,
+                            struct Object *ob);
 bool paintface_deselect_all_visible(struct bContext *C,
                                     struct Object *ob,
                                     int action,
@@ -436,6 +424,9 @@ void paintvert_select_ungrouped(struct Object *ob, bool extend, bool flush_flags
 void paintvert_flush_flags(struct Object *ob);
 void paintvert_tag_select_update(struct bContext *C, struct Object *ob);
 
+void paintvert_hide(struct bContext *C, struct Object *ob, bool unselected);
+void paintvert_reveal(struct bContext *C, struct Object *ob, bool select);
+
 /* mirrtopo */
 typedef struct MirrTopoStore_t {
   intptr_t *index_lookup;
@@ -454,6 +445,7 @@ void ED_mesh_mirrtopo_init(struct BMEditMesh *em,
 void ED_mesh_mirrtopo_free(MirrTopoStore_t *mesh_topo_store);
 
 /* object_vgroup.c */
+
 #define WEIGHT_REPLACE 1
 #define WEIGHT_ADD 2
 #define WEIGHT_SUBTRACT 3
@@ -530,7 +522,7 @@ float ED_vgroup_vert_weight(struct Object *ob, struct bDeformGroup *dg, int vert
  */
 void ED_vgroup_vert_active_mirror(struct Object *ob, int def_nr);
 
-/* mesh_data.c */
+/* mesh_data.cc */
 
 void ED_mesh_verts_add(struct Mesh *mesh, struct ReportList *reports, int count);
 void ED_mesh_edges_add(struct Mesh *mesh, struct ReportList *reports, int count);
@@ -546,12 +538,12 @@ void ED_mesh_geometry_clear(struct Mesh *mesh);
 
 void ED_mesh_update(struct Mesh *mesh, struct bContext *C, bool calc_edges, bool calc_edges_loose);
 
-void ED_mesh_uv_texture_ensure(struct Mesh *me, const char *name);
-int ED_mesh_uv_texture_add(
+void ED_mesh_uv_ensure(struct Mesh *me, const char *name);
+int ED_mesh_uv_add(
     struct Mesh *me, const char *name, bool active_set, bool do_init, struct ReportList *reports);
-bool ED_mesh_uv_texture_remove_index(struct Mesh *me, int n);
-bool ED_mesh_uv_texture_remove_active(struct Mesh *me);
-bool ED_mesh_uv_texture_remove_named(struct Mesh *me, const char *name);
+bool ED_mesh_uv_remove_index(struct Mesh *me, int n);
+bool ED_mesh_uv_remove_active(struct Mesh *me);
+bool ED_mesh_uv_remove_named(struct Mesh *me, const char *name);
 void ED_mesh_uv_loop_reset(struct bContext *C, struct Mesh *me);
 /**
  * Without a #bContext, called when UV-editing.
@@ -601,7 +593,7 @@ void EDBM_redo_state_restore_and_free(struct BMBackup *backup,
                                       bool recalc_looptri) ATTR_NONNULL(1, 2);
 void EDBM_redo_state_free(struct BMBackup *backup) ATTR_NONNULL(1);
 
-/* *** meshtools.c *** */
+/* *** meshtools.cc *** */
 
 int ED_mesh_join_objects_exec(struct bContext *C, struct wmOperator *op);
 int ED_mesh_shapes_join_objects_exec(struct bContext *C, struct wmOperator *op);

@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup pythonintern
@@ -196,15 +182,25 @@ static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *k
   Main *bmain_base = CTX_data_main(BPY_context_get());
   Main *bmain = self->ptr.data; /* Typically #G_MAIN */
   BPy_Library *ret;
-  const char *filename = NULL;
+  const char *filepath = NULL;
   bool is_rel = false, is_link = false, use_assets_only = false;
 
   static const char *_keywords[] = {"filepath", "link", "relative", "assets_only", NULL};
-  static _PyArg_Parser _parser = {"s|$O&O&O&:load", _keywords, 0};
+  static _PyArg_Parser _parser = {
+      "s" /* `filepath` */
+      /* Optional keyword only arguments. */
+      "|$"
+      "O&" /* `link` */
+      "O&" /* `relative` */
+      "O&" /* `assets_only` */
+      ":load",
+      _keywords,
+      0,
+  };
   if (!_PyArg_ParseTupleAndKeywordsFast(args,
                                         kw,
                                         &_parser,
-                                        &filename,
+                                        &filepath,
                                         PyC_ParseBool,
                                         &is_link,
                                         PyC_ParseBool,
@@ -216,8 +212,8 @@ static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *k
 
   ret = PyObject_New(BPy_Library, &bpy_lib_Type);
 
-  BLI_strncpy(ret->relpath, filename, sizeof(ret->relpath));
-  BLI_strncpy(ret->abspath, filename, sizeof(ret->abspath));
+  BLI_strncpy(ret->relpath, filepath, sizeof(ret->relpath));
+  BLI_strncpy(ret->abspath, filepath, sizeof(ret->abspath));
   BLI_path_abs(ret->abspath, BKE_main_blendfile_path(bmain));
 
   ret->bmain = bmain;

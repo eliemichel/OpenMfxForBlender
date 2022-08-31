@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -80,8 +66,9 @@ const EnumPropertyItem rna_enum_keyframe_handle_type_items[] = {
  * Changes here will likely apply there too.
  */
 const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
-    /* interpolation */
-    {0, "", 0, N_("Interpolation"), "Standard transitions between keyframes"},
+    /* Interpolation. */
+    RNA_ENUM_ITEM_HEADING(CTX_N_(BLT_I18NCONTEXT_ID_ACTION, "Interpolation"),
+                          N_("Standard transitions between keyframes")),
     {BEZT_IPO_CONST,
      "CONSTANT",
      ICON_IPO_CONSTANT,
@@ -98,13 +85,10 @@ const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
      "Bezier",
      "Smooth interpolation between A and B, with some control over curve shape"},
 
-    /* easing */
-    {0,
-     "",
-     0,
-     N_("Easing (by strength)"),
-     "Predefined inertial transitions, useful for motion graphics (from least to most "
-     "''dramatic'')"},
+    /* Easing. */
+    RNA_ENUM_ITEM_HEADING(CTX_N_(BLT_I18NCONTEXT_ID_ACTION, "Easing (by strength)"),
+                          N_("Predefined inertial transitions, useful for motion graphics "
+                             "(from least to most \"dramatic\")")),
     {BEZT_IPO_SINE,
      "SINE",
      ICON_IPO_SINE,
@@ -121,7 +105,8 @@ const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
      "Circular",
      "Circular easing (strongest and most dynamic)"},
 
-    {0, "", 0, N_("Dynamic Effects"), "Simple physics-inspired easing effects"},
+    RNA_ENUM_ITEM_HEADING(CTX_N_(BLT_I18NCONTEXT_ID_ACTION, "Dynamic Effects"),
+                          N_("Simple physics-inspired easing effects")),
     {BEZT_IPO_BACK, "BACK", ICON_IPO_BACK, "Back", "Cubic easing with overshoot and settle"},
     {BEZT_IPO_BOUNCE,
      "BOUNCE",
@@ -455,7 +440,7 @@ static void rna_Curve_bevelObject_set(PointerRNA *ptr,
   if (ob) {
     /* If bevel object has got the save curve, as object, for which it's set as bevobj,
      * there could be infinity loop in #DispList calculation. */
-    if (ob->type == OB_CURVE && ob->data != cu) {
+    if (ob->type == OB_CURVES_LEGACY && ob->data != cu) {
       cu->bevobj = ob;
       id_lib_extern((ID *)ob);
     }
@@ -500,7 +485,7 @@ static bool rna_Curve_otherObject_poll(PointerRNA *ptr, PointerRNA value)
   Object *ob = (Object *)value.data;
 
   if (ob) {
-    if (ob->type == OB_CURVE && ob->data != cu) {
+    if (ob->type == OB_CURVES_LEGACY && ob->data != cu) {
       return 1;
     }
   }
@@ -530,7 +515,7 @@ static void rna_Curve_taperObject_set(PointerRNA *ptr,
   if (ob) {
     /* If taper object has got the save curve, as object, for which it's set as bevobj,
      * there could be infinity loop in #DispList calculation. */
-    if (ob->type == OB_CURVE && ob->data != cu) {
+    if (ob->type == OB_CURVES_LEGACY && ob->data != cu) {
       cu->taperobj = ob;
       id_lib_extern((ID *)ob);
     }
@@ -784,7 +769,7 @@ static void rna_Curve_active_spline_set(PointerRNA *ptr,
   }
 }
 
-static char *rna_Curve_spline_path(PointerRNA *ptr)
+static char *rna_Curve_spline_path(const PointerRNA *ptr)
 {
   Curve *cu = (Curve *)ptr->owner_id;
   ListBase *nubase = BKE_curve_nurbs_get(cu);
@@ -800,7 +785,7 @@ static char *rna_Curve_spline_path(PointerRNA *ptr)
 }
 
 /* use for both bezier and nurbs */
-static char *rna_Curve_spline_point_path(PointerRNA *ptr)
+static char *rna_Curve_spline_point_path(const PointerRNA *ptr)
 {
   Curve *cu = (Curve *)ptr->owner_id;
   Nurb *nu;
@@ -822,10 +807,10 @@ static char *rna_Curve_spline_point_path(PointerRNA *ptr)
   }
 }
 
-static char *rna_TextBox_path(PointerRNA *ptr)
+static char *rna_TextBox_path(const PointerRNA *ptr)
 {
-  Curve *cu = (Curve *)ptr->owner_id;
-  TextBox *tb = ptr->data;
+  const Curve *cu = (Curve *)ptr->owner_id;
+  const TextBox *tb = ptr->data;
   int index = (int)(tb - cu->tb);
 
   if (index >= 0 && index < cu->totbox) {
@@ -2009,24 +1994,20 @@ static void rna_def_curve_nurb(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Cyclic V", "Make this surface a closed loop in the V direction");
   RNA_def_property_update(prop, 0, "rna_Nurb_update_cyclic_v");
 
-  /* NOTE: endpoint and bezier flags should never be on at the same time! */
   prop = RNA_def_property(srna, "use_endpoint_u", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flagu", CU_NURB_ENDPOINT);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(
       prop,
       "Endpoint U",
-      "Make this nurbs curve or surface meet the endpoints in the U direction "
-      "(Cyclic U must be disabled)");
+      "Make this nurbs curve or surface meet the endpoints in the U direction");
   RNA_def_property_update(prop, 0, "rna_Nurb_update_knot_u");
 
   prop = RNA_def_property(srna, "use_endpoint_v", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flagv", CU_NURB_ENDPOINT);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_ui_text(prop,
-                           "Endpoint V",
-                           "Make this nurbs surface meet the endpoints in the V direction "
-                           "(Cyclic V must be disabled)");
+  RNA_def_property_ui_text(
+      prop, "Endpoint V", "Make this nurbs surface meet the endpoints in the V direction ");
   RNA_def_property_update(prop, 0, "rna_Nurb_update_knot_v");
 
   prop = RNA_def_property(srna, "use_bezier_u", PROP_BOOLEAN, PROP_NONE);
@@ -2035,17 +2016,14 @@ static void rna_def_curve_nurb(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Bezier U",
-      "Make this nurbs curve or surface act like a Bezier spline in the U direction "
-      "(Order U must be 3 or 4, Cyclic U must be disabled)");
+      "Make this nurbs curve or surface act like a Bezier spline in the U direction");
   RNA_def_property_update(prop, 0, "rna_Nurb_update_knot_u");
 
   prop = RNA_def_property(srna, "use_bezier_v", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flagv", CU_NURB_BEZIER);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_ui_text(prop,
-                           "Bezier V",
-                           "Make this nurbs surface act like a Bezier spline in the V direction "
-                           "(Order V must be 3 or 4, Cyclic V must be disabled)");
+  RNA_def_property_ui_text(
+      prop, "Bezier V", "Make this nurbs surface act like a Bezier spline in the V direction");
   RNA_def_property_update(prop, 0, "rna_Nurb_update_knot_v");
 
   prop = RNA_def_property(srna, "use_smooth", PROP_BOOLEAN, PROP_NONE);

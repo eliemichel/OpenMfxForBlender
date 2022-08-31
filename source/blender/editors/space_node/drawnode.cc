@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spnode
@@ -36,6 +20,7 @@
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
+#include "BKE_node_runtime.hh"
 #include "BKE_node_tree_update.h"
 #include "BKE_scene.h"
 #include "BKE_tracking.h"
@@ -59,6 +44,7 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_prototypes.h"
 
 #include "ED_node.h"
 #include "ED_space_api.h"
@@ -163,7 +149,7 @@ static void node_buts_curvefloat(uiLayout *layout, bContext *UNUSED(C), PointerR
 }  // namespace blender::ed::space_node
 
 #define SAMPLE_FLT_ISNONE FLT_MAX
-/* Bad bad, 2.5 will do better? ... no it won't! */
+/* Bad! 2.5 will do better? ... no it won't! */
 static float _sample_col[4] = {SAMPLE_FLT_ISNONE};
 void ED_node_sample_set(const float col[4])
 {
@@ -226,6 +212,11 @@ static void node_buts_math(uiLayout *layout, bContext *UNUSED(C), PointerRNA *pt
 {
   uiItemR(layout, ptr, "operation", DEFAULT_FLAGS, "", ICON_NONE);
   uiItemR(layout, ptr, "use_clamp", DEFAULT_FLAGS, nullptr, ICON_NONE);
+}
+
+static void node_buts_combsep_color(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, "", ICON_NONE);
 }
 
 NodeResizeDirection node_get_resize_direction(const bNode *node, const int x, const int y)
@@ -320,9 +311,11 @@ static void node_buts_image_user(uiLayout *layout,
                                  const bool show_layer_selection,
                                  const bool show_color_management)
 {
-  if (!imaptr->data) {
+  Image *image = (Image *)imaptr->data;
+  if (!image) {
     return;
   }
+  ImageUser *iuser = (ImageUser *)iuserptr->data;
 
   uiLayout *col = uiLayoutColumn(layout, false);
 
@@ -334,11 +327,9 @@ static void node_buts_image_user(uiLayout *layout,
     /* don't use iuser->framenr directly
      * because it may not be updated if auto-refresh is off */
     Scene *scene = CTX_data_scene(C);
-    ImageUser *iuser = (ImageUser *)iuserptr->data;
-    /* Image *ima = imaptr->data; */ /* UNUSED */
 
     char numstr[32];
-    const int framenr = BKE_image_user_frame_get(iuser, CFRA, nullptr);
+    const int framenr = BKE_image_user_frame_get(iuser, scene->r.cfra, nullptr);
     BLI_snprintf(numstr, sizeof(numstr), IFACE_("Frame: %d"), framenr);
     uiItemL(layout, numstr, ICON_NONE);
   }
@@ -359,10 +350,19 @@ static void node_buts_image_user(uiLayout *layout,
   }
 
   if (show_color_management) {
-    uiLayout *split = uiLayoutSplit(layout, 0.5f, true);
+    uiLayout *split = uiLayoutSplit(layout, 0.33f, true);
     PointerRNA colorspace_settings_ptr = RNA_pointer_get(imaptr, "colorspace_settings");
     uiItemL(split, IFACE_("Color Space"), ICON_NONE);
     uiItemR(split, &colorspace_settings_ptr, "name", DEFAULT_FLAGS, "", ICON_NONE);
+
+    if (image->source != IMA_SRC_GENERATED) {
+      split = uiLayoutSplit(layout, 0.33f, true);
+      uiItemL(split, IFACE_("Alpha"), ICON_NONE);
+      uiItemR(split, imaptr, "alpha_mode", DEFAULT_FLAGS, "", ICON_NONE);
+
+      bool is_data = IMB_colormanagement_space_name_is_data(image->colorspace_settings.name);
+      uiLayoutSetActive(split, !is_data);
+    }
 
     /* Avoid losing changes image is painted. */
     if (BKE_image_is_dirty((Image *)imaptr->data)) {
@@ -486,6 +486,10 @@ static void node_shader_set_butfunc(bNodeType *ntype)
     case SH_NODE_MATH:
       ntype->draw_buttons = node_buts_math;
       break;
+    case SH_NODE_COMBINE_COLOR:
+    case SH_NODE_SEPARATE_COLOR:
+      ntype->draw_buttons = node_buts_combsep_color;
+      break;
     case SH_NODE_TEX_IMAGE:
       ntype->draw_buttons = node_shader_buts_tex_image;
       ntype->draw_buttons_ex = node_shader_buts_tex_image_ex;
@@ -593,6 +597,19 @@ static void node_composit_buts_huecorrect(uiLayout *layout, bContext *UNUSED(C),
 static void node_composit_buts_ycc(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, "", ICON_NONE);
+}
+
+static void node_composit_buts_combsep_color(uiLayout *layout,
+                                             bContext *UNUSED(C),
+                                             PointerRNA *ptr)
+{
+  bNode *node = (bNode *)ptr->data;
+  NodeCMPCombSepColor *storage = (NodeCMPCombSepColor *)node->storage;
+
+  uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, "", ICON_NONE);
+  if (storage->mode == CMP_NODE_COMBSEP_COLOR_YCC) {
+    uiItemR(layout, ptr, "ycc_mode", DEFAULT_FLAGS, "", ICON_NONE);
+  }
 }
 
 static void node_composit_backdrop_viewer(
@@ -827,8 +844,12 @@ static void node_composit_set_butfunc(bNodeType *ntype)
     case CMP_NODE_HUECORRECT:
       ntype->draw_buttons = node_composit_buts_huecorrect;
       break;
-    case CMP_NODE_COMBYCCA:
-    case CMP_NODE_SEPYCCA:
+    case CMP_NODE_COMBINE_COLOR:
+    case CMP_NODE_SEPARATE_COLOR:
+      ntype->draw_buttons = node_composit_buts_combsep_color;
+      break;
+    case CMP_NODE_COMBYCCA_LEGACY:
+    case CMP_NODE_SEPYCCA_LEGACY:
       ntype->draw_buttons = node_composit_buts_ycc;
       break;
     case CMP_NODE_MASK_BOX:
@@ -981,6 +1002,11 @@ static void node_texture_buts_output(uiLayout *layout, bContext *UNUSED(C), Poin
   uiItemR(layout, ptr, "filepath", DEFAULT_FLAGS, "", ICON_NONE);
 }
 
+static void node_texture_buts_combsep_color(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, "", ICON_NONE);
+}
+
 /* only once called */
 static void node_texture_set_butfunc(bNodeType *ntype)
 {
@@ -1025,6 +1051,11 @@ static void node_texture_set_butfunc(bNodeType *ntype)
 
       case TEX_NODE_OUTPUT:
         ntype->draw_buttons = node_texture_buts_output;
+        break;
+
+      case TEX_NODE_COMBINE_COLOR:
+      case TEX_NODE_SEPARATE_COLOR:
+        ntype->draw_buttons = node_texture_buts_combsep_color;
         break;
     }
   }
@@ -1241,14 +1272,14 @@ static void node_file_output_socket_draw(bContext *C,
 
 static bool socket_needs_attribute_search(bNode &node, bNodeSocket &socket)
 {
-  if (node.declaration == nullptr) {
+  if (node.runtime->declaration == nullptr) {
     return false;
   }
   if (socket.in_out == SOCK_OUT) {
     return false;
   }
   const int socket_index = BLI_findindex(&node.inputs, &socket);
-  return node.declaration->inputs()[socket_index]->is_attribute_name();
+  return node.runtime->declaration->inputs()[socket_index]->is_attribute_name();
 }
 
 static void std_node_socket_draw(
@@ -1308,8 +1339,7 @@ static void std_node_socket_draw(
       uiItemL(row, text, 0);
 
       if (socket_needs_attribute_search(*node, *sock)) {
-        const bNodeTree *node_tree = (const bNodeTree *)node_ptr->owner_id;
-        node_geometry_add_attribute_search_button(*C, *node_tree, *node, *ptr, *row);
+        node_geometry_add_attribute_search_button(*C, *node, *ptr, *row);
       }
       else {
         uiItemR(row, ptr, "default_value", DEFAULT_FLAGS, "", 0);
@@ -1425,7 +1455,11 @@ static void std_node_socket_interface_draw(bContext *UNUSED(C), uiLayout *layout
     }
     case SOCK_BOOLEAN:
     case SOCK_RGBA:
-    case SOCK_STRING: {
+    case SOCK_STRING:
+    case SOCK_OBJECT:
+    case SOCK_COLLECTION:
+    case SOCK_TEXTURE:
+    case SOCK_MATERIAL: {
       uiItemR(col, ptr, "default_value", DEFAULT_FLAGS, IFACE_("Default"), 0);
       break;
     }
@@ -1565,7 +1599,6 @@ bool node_link_bezier_handles(const View2D *v2d,
   }
 
   /* in v0 and v3 we put begin/end points */
-  int toreroute, fromreroute;
   if (link.fromsock) {
     vec[0][0] = link.fromsock->locx;
     vec[0][1] = link.fromsock->locy;
@@ -1576,14 +1609,12 @@ bool node_link_bezier_handles(const View2D *v2d,
           link.fromsock->total_inputs);
       copy_v2_v2(vec[0], position);
     }
-    fromreroute = (link.fromnode && link.fromnode->type == NODE_REROUTE);
   }
   else {
     if (snode == nullptr) {
       return false;
     }
     copy_v2_v2(vec[0], cursor);
-    fromreroute = 0;
   }
   if (link.tosock) {
     vec[3][0] = link.tosock->locx;
@@ -1595,14 +1626,12 @@ bool node_link_bezier_handles(const View2D *v2d,
           link.tosock->total_inputs);
       copy_v2_v2(vec[3], position);
     }
-    toreroute = (link.tonode && link.tonode->type == NODE_REROUTE);
   }
   else {
     if (snode == nullptr) {
       return false;
     }
     copy_v2_v2(vec[3], cursor);
-    toreroute = 0;
   }
 
   /* may be called outside of drawing (so pass spacetype) */
@@ -1616,37 +1645,12 @@ bool node_link_bezier_handles(const View2D *v2d,
   }
 
   const float dist = curving * 0.10f * fabsf(vec[0][0] - vec[3][0]);
-  const float deltax = vec[3][0] - vec[0][0];
-  const float deltay = vec[3][1] - vec[0][1];
-  /* check direction later, for top sockets */
-  if (fromreroute) {
-    if (fabsf(deltax) > fabsf(deltay)) {
-      vec[1][1] = vec[0][1];
-      vec[1][0] = vec[0][0] + (deltax > 0 ? dist : -dist);
-    }
-    else {
-      vec[1][0] = vec[0][0];
-      vec[1][1] = vec[0][1] + (deltay > 0 ? dist : -dist);
-    }
-  }
-  else {
-    vec[1][0] = vec[0][0] + dist;
-    vec[1][1] = vec[0][1];
-  }
-  if (toreroute) {
-    if (fabsf(deltax) > fabsf(deltay)) {
-      vec[2][1] = vec[3][1];
-      vec[2][0] = vec[3][0] + (deltax > 0 ? -dist : dist);
-    }
-    else {
-      vec[2][0] = vec[3][0];
-      vec[2][1] = vec[3][1] + (deltay > 0 ? -dist : dist);
-    }
-  }
-  else {
-    vec[2][0] = vec[3][0] - dist;
-    vec[2][1] = vec[3][1];
-  }
+
+  vec[1][0] = vec[0][0] + dist;
+  vec[1][1] = vec[0][1];
+
+  vec[2][0] = vec[3][0] - dist;
+  vec[2][1] = vec[3][1];
 
   if (v2d && min_ffff(vec[0][0], vec[1][0], vec[2][0], vec[3][0]) > v2d->cur.xmax) {
     return false; /* clipped */
@@ -1986,9 +1990,10 @@ void node_draw_link_bezier(const bContext &C,
                            const bNodeLink &link,
                            const int th_col1,
                            const int th_col2,
-                           const int th_col3)
+                           const int th_col3,
+                           const bool selected)
 {
-  const float dim_factor = node_link_dim_factor(v2d, link);
+  const float dim_factor = selected ? 1.0f : node_link_dim_factor(v2d, link);
   float thickness = 1.5f;
   float dash_factor = 1.0f;
 
@@ -2044,19 +2049,17 @@ void node_draw_link_bezier(const bContext &C,
     }
 
     /* Highlight links connected to selected nodes. */
-    const bool is_fromnode_selected = link.fromnode && link.fromnode->flag & SELECT;
-    const bool is_tonode_selected = link.tonode && link.tonode->flag & SELECT;
-    if (is_fromnode_selected || is_tonode_selected) {
+    if (selected) {
       float color_selected[4];
       UI_GetThemeColor4fv(TH_EDGE_SELECT, color_selected);
       const float alpha = color_selected[3];
 
       /* Interpolate color if highlight color is not fully transparent. */
       if (alpha != 0.0) {
-        if (is_fromnode_selected) {
+        if (link.fromsock) {
           interp_v3_v3v3(colors[1], colors[1], color_selected, alpha);
         }
-        if (is_tonode_selected) {
+        if (link.tosock) {
           interp_v3_v3v3(colors[2], colors[2], color_selected, alpha);
         }
       }
@@ -2121,7 +2124,8 @@ void node_draw_link_bezier(const bContext &C,
 void node_draw_link(const bContext &C,
                     const View2D &v2d,
                     const SpaceNode &snode,
-                    const bNodeLink &link)
+                    const bNodeLink &link,
+                    const bool selected)
 {
   int th_col1 = TH_WIRE_INNER, th_col2 = TH_WIRE_INNER, th_col3 = TH_WIRE;
 
@@ -2165,7 +2169,7 @@ void node_draw_link(const bContext &C,
     }
   }
 
-  node_draw_link_bezier(C, v2d, snode, link, th_col1, th_col2, th_col3);
+  node_draw_link_bezier(C, v2d, snode, link, th_col1, th_col2, th_col3, selected);
 }
 
 }  // namespace blender::ed::space_node

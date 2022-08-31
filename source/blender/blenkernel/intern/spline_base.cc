@@ -1,43 +1,28 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BLI_array.hh"
+#include "BLI_generic_virtual_array.hh"
 #include "BLI_span.hh"
 #include "BLI_task.hh"
 #include "BLI_timeit.hh"
 
-#include "BKE_attribute_access.hh"
 #include "BKE_attribute_math.hh"
 #include "BKE_spline.hh"
 
-#include "FN_generic_virtual_array.hh"
-
 using blender::Array;
 using blender::float3;
+using blender::GMutableSpan;
+using blender::GSpan;
+using blender::GVArray;
 using blender::IndexRange;
 using blender::MutableSpan;
 using blender::Span;
 using blender::VArray;
 using blender::attribute_math::convert_to_static_type;
 using blender::bke::AttributeIDRef;
-using blender::fn::GMutableSpan;
-using blender::fn::GSpan;
-using blender::fn::GVArray;
+using blender::bke::AttributeMetaData;
 
-Spline::Type Spline::type() const
+CurveType Spline::type() const
 {
   return type_;
 }
@@ -48,15 +33,18 @@ void Spline::copy_base_settings(const Spline &src, Spline &dst)
   dst.is_cyclic_ = src.is_cyclic_;
 }
 
-static SplinePtr create_spline(const Spline::Type type)
+static SplinePtr create_spline(const CurveType type)
 {
   switch (type) {
-    case Spline::Type::Poly:
+    case CURVE_TYPE_POLY:
       return std::make_unique<PolySpline>();
-    case Spline::Type::Bezier:
+    case CURVE_TYPE_BEZIER:
       return std::make_unique<BezierSpline>();
-    case Spline::Type::NURBS:
+    case CURVE_TYPE_NURBS:
       return std::make_unique<NURBSpline>();
+    case CURVE_TYPE_CATMULL_ROM:
+      BLI_assert_unreachable();
+      return {};
   }
   BLI_assert_unreachable();
   return {};
@@ -111,7 +99,7 @@ void Spline::reverse()
 
   this->attributes.foreach_attribute(
       [&](const AttributeIDRef &id, const AttributeMetaData &meta_data) {
-        std::optional<blender::fn::GMutableSpan> attribute = this->attributes.get_for_write(id);
+        std::optional<blender::GMutableSpan> attribute = this->attributes.get_for_write(id);
         if (!attribute) {
           BLI_assert_unreachable();
           return false;
@@ -128,15 +116,15 @@ void Spline::reverse()
   this->mark_cache_invalid();
 }
 
-int Spline::evaluated_edges_size() const
+int Spline::evaluated_edges_num() const
 {
-  const int eval_size = this->evaluated_points_size();
-  if (eval_size < 2) {
+  const int eval_num = this->evaluated_points_num();
+  if (eval_num < 2) {
     /* Two points are required for an edge. */
     return 0;
   }
 
-  return this->is_cyclic_ ? eval_size : eval_size - 1;
+  return this->is_cyclic_ ? eval_num : eval_num - 1;
 }
 
 float Spline::length() const
@@ -145,11 +133,11 @@ float Spline::length() const
   return lengths.is_empty() ? 0.0f : this->evaluated_lengths().last();
 }
 
-int Spline::segments_size() const
+int Spline::segments_num() const
 {
-  const int size = this->size();
+  const int num = this->size();
 
-  return is_cyclic_ ? size : size - 1;
+  return is_cyclic_ ? num : num - 1;
 }
 
 bool Spline::is_cyclic() const
@@ -189,7 +177,7 @@ Span<float> Spline::evaluated_lengths() const
     return evaluated_lengths_cache_;
   }
 
-  const int total = evaluated_edges_size();
+  const int total = evaluated_edges_num();
   evaluated_lengths_cache_.resize(total);
   if (total != 0) {
     Span<float3> positions = this->evaluated_positions();
@@ -254,8 +242,8 @@ Span<float3> Spline::evaluated_tangents() const
     return evaluated_tangents_cache_;
   }
 
-  const int eval_size = this->evaluated_points_size();
-  evaluated_tangents_cache_.resize(eval_size);
+  const int eval_num = this->evaluated_points_num();
+  evaluated_tangents_cache_.resize(eval_num);
 
   Span<float3> positions = this->evaluated_positions();
 
@@ -381,25 +369,20 @@ Span<float3> Spline::evaluated_normals() const
     return evaluated_normals_cache_;
   }
 
-  const int eval_size = this->evaluated_points_size();
-  evaluated_normals_cache_.resize(eval_size);
+  const int eval_num = this->evaluated_points_num();
+  evaluated_normals_cache_.resize(eval_num);
 
   Span<float3> tangents = this->evaluated_tangents();
   MutableSpan<float3> normals = evaluated_normals_cache_;
 
   /* Only Z up normals are supported at the moment. */
   switch (this->normal_mode) {
-    case ZUp: {
+    case NORMAL_MODE_Z_UP: {
       calculate_normals_z_up(tangents, normals);
       break;
     }
-    case Minimum: {
+    case NORMAL_MODE_MINIMUM_TWIST: {
       calculate_normals_minimum(tangents, is_cyclic_, normals);
-      break;
-    }
-    case Tangent: {
-      /* Tangent mode is not yet supported. */
-      calculate_normals_z_up(tangents, normals);
       break;
     }
   }
@@ -427,7 +410,7 @@ Spline::LookupResult Spline::lookup_evaluated_length(const float length) const
 
   const float *offset = std::lower_bound(lengths.begin(), lengths.end(), length);
   const int index = offset - lengths.begin();
-  const int next_index = (index == this->evaluated_points_size() - 1) ? 0 : index + 1;
+  const int next_index = (index == this->evaluated_points_num() - 1) ? 0 : index + 1;
 
   const float previous_length = (index == 0) ? 0.0f : lengths[index - 1];
   const float length_in_segment = length - previous_length;
@@ -437,30 +420,30 @@ Spline::LookupResult Spline::lookup_evaluated_length(const float length) const
   return LookupResult{index, next_index, factor};
 }
 
-Array<float> Spline::sample_uniform_index_factors(const int samples_size) const
+Array<float> Spline::sample_uniform_index_factors(const int samples_num) const
 {
   const Span<float> lengths = this->evaluated_lengths();
 
-  BLI_assert(samples_size > 0);
-  Array<float> samples(samples_size);
+  BLI_assert(samples_num > 0);
+  Array<float> samples(samples_num);
 
   samples[0] = 0.0f;
-  if (samples_size == 1) {
+  if (samples_num == 1) {
     return samples;
   }
 
   const float total_length = this->length();
-  const float sample_length = total_length / (samples_size - (is_cyclic_ ? 0 : 1));
+  const float sample_length = total_length / (samples_num - (is_cyclic_ ? 0 : 1));
 
   /* Store the length at the previous evaluated point in a variable so it can
    * start out at zero (the lengths array doesn't contain 0 for the first point). */
   float prev_length = 0.0f;
   int i_sample = 1;
-  for (const int i_evaluated : IndexRange(this->evaluated_edges_size())) {
+  for (const int i_evaluated : IndexRange(this->evaluated_edges_num())) {
     const float length = lengths[i_evaluated];
 
     /* Add every sample that fits in this evaluated edge. */
-    while ((sample_length * i_sample) < length && i_sample < samples_size) {
+    while ((sample_length * i_sample) < length && i_sample < samples_num) {
       const float factor = (sample_length * i_sample - prev_length) / (length - prev_length);
       samples[i_sample] = i_evaluated + factor;
       i_sample++;
@@ -471,8 +454,8 @@ Array<float> Spline::sample_uniform_index_factors(const int samples_size) const
 
   /* Zero lengths or float inaccuracies can cause invalid values, or simply
    * skip some, so set the values that weren't completed in the main loop. */
-  for (const int i : IndexRange(i_sample, samples_size - i_sample)) {
-    samples[i] = float(samples_size);
+  for (const int i : IndexRange(i_sample, samples_num - i_sample)) {
+    samples[i] = float(samples_num);
   }
 
   if (!is_cyclic_) {
@@ -485,23 +468,23 @@ Array<float> Spline::sample_uniform_index_factors(const int samples_size) const
 
 Spline::LookupResult Spline::lookup_data_from_index_factor(const float index_factor) const
 {
-  const int eval_size = this->evaluated_points_size();
+  const int eval_num = this->evaluated_points_num();
 
   if (is_cyclic_) {
-    if (index_factor < eval_size) {
+    if (index_factor < eval_num) {
       const int index = std::floor(index_factor);
-      const int next_index = (index < eval_size - 1) ? index + 1 : 0;
+      const int next_index = (index < eval_num - 1) ? index + 1 : 0;
       return LookupResult{index, next_index, index_factor - index};
     }
-    return LookupResult{eval_size - 1, 0, 1.0f};
+    return LookupResult{eval_num - 1, 0, 1.0f};
   }
 
-  if (index_factor < eval_size - 1) {
+  if (index_factor < eval_num - 1) {
     const int index = std::floor(index_factor);
     const int next_index = index + 1;
     return LookupResult{index, next_index, index_factor - index};
   }
-  return LookupResult{eval_size - 2, eval_size - 1, 1.0f};
+  return LookupResult{eval_num - 2, eval_num - 1, 1.0f};
 }
 
 void Spline::bounds_min_max(float3 &min, float3 &max, const bool use_evaluated) const
@@ -521,7 +504,7 @@ void Spline::sample_with_index_factors(const GVArray &src,
                                        Span<float> index_factors,
                                        GMutableSpan dst) const
 {
-  BLI_assert(src.size() == this->evaluated_points_size());
+  BLI_assert(src.size() == this->evaluated_points_num());
 
   blender::attribute_math::convert_to_static_type(src.type(), [&](auto dummy) {
     using T = decltype(dummy);

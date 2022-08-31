@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2013 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2013 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup depsgraph
@@ -48,6 +32,8 @@ const char *operationCodeAsString(OperationCode opcode)
       return "PARAMETERS_EVAL";
     case OperationCode::PARAMETERS_EXIT:
       return "PARAMETERS_EXIT";
+    case OperationCode::VISIBILITY:
+      return "VISIBILITY";
     /* Animation, Drivers, etc. */
     case OperationCode::ANIMATION_ENTRY:
       return "ANIMATION_ENTRY";
@@ -232,9 +218,13 @@ string OperationNode::full_identifier() const
 
 void OperationNode::tag_update(Depsgraph *graph, eUpdateSource source)
 {
-  if ((flag & DEPSOP_FLAG_NEEDS_UPDATE) == 0) {
-    graph->add_entry_tag(this);
-  }
+  /* Ensure that there is an entry tag for this update.
+   *
+   * Note that the node might already be tagged for an update due invisible state of the node
+   * during previous dependency evaluation. Here the node gets re-tagged, so we need to give
+   * the evaluated clues that evaluation needs to happen again. */
+  graph->add_entry_tag(this);
+
   /* Tag for update, but also note that this was the source of an update. */
   flag |= (DEPSOP_FLAG_NEEDS_UPDATE | DEPSOP_FLAG_DIRECTLY_MODIFIED);
   switch (source) {

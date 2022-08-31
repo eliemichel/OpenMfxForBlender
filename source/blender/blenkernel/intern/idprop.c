@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -184,7 +168,7 @@ void IDP_ResizeIDPArray(IDProperty *prop, int newlen)
 
   /* NOTE: This code comes from python, here's the corresponding comment. */
   /* This over-allocates proportional to the list size, making room
-   * for additional growth.  The over-allocation is mild, but is
+   * for additional growth. The over-allocation is mild, but is
    * enough to give linear-time amortized behavior over a long
    * sequence of appends() in the presence of a poorly-performing
    * system realloc().
@@ -888,7 +872,7 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
     case IDP_ID:
       return (IDP_Id(prop1) == IDP_Id(prop2));
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 
@@ -919,8 +903,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
       break;
     case IDP_ARRAY: {
       /* for now, we only support float and int and double arrays */
-      if ((val->array.type == IDP_FLOAT) || (val->array.type == IDP_INT) ||
-          (val->array.type == IDP_DOUBLE) || (val->array.type == IDP_GROUP)) {
+      if (ELEM(val->array.type, IDP_FLOAT, IDP_INT, IDP_DOUBLE, IDP_GROUP)) {
         prop = MEM_callocN(sizeof(IDProperty), "IDProperty array");
         prop->subtype = val->array.type;
         if (val->array.len) {
@@ -1445,7 +1428,7 @@ void IDP_BlendReadData_impl(BlendDataReader *reader, IDProperty **prop, const ch
   }
 }
 
-void IDP_BlendReadLib(BlendLibReader *reader, IDProperty *prop)
+void IDP_BlendReadLib(BlendLibReader *reader, Library *lib, IDProperty *prop)
 {
   if (!prop) {
     return;
@@ -1454,7 +1437,7 @@ void IDP_BlendReadLib(BlendLibReader *reader, IDProperty *prop)
   switch (prop->type) {
     case IDP_ID: /* PointerProperty */
     {
-      void *newaddr = BLO_read_get_new_id_address(reader, NULL, IDP_Id(prop));
+      void *newaddr = BLO_read_get_new_id_address(reader, lib, IDP_Id(prop));
       if (IDP_Id(prop) && !newaddr && G.debug) {
         printf("Error while loading \"%s\". Data not found in file!\n", prop->name);
       }
@@ -1465,14 +1448,14 @@ void IDP_BlendReadLib(BlendLibReader *reader, IDProperty *prop)
     {
       IDProperty *idp_array = IDP_IDPArray(prop);
       for (int i = 0; i < prop->len; i++) {
-        IDP_BlendReadLib(reader, &(idp_array[i]));
+        IDP_BlendReadLib(reader, lib, &(idp_array[i]));
       }
       break;
     }
     case IDP_GROUP: /* PointerProperty */
     {
       LISTBASE_FOREACH (IDProperty *, loop, &prop->data.group) {
-        IDP_BlendReadLib(reader, loop);
+        IDP_BlendReadLib(reader, lib, loop);
       }
       break;
     }

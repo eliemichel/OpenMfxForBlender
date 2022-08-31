@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -64,7 +51,7 @@ ccl_device_forceinline int integrate_shadow_max_transparent_hits(KernelGlobals k
 }
 
 #ifdef __TRANSPARENT_SHADOWS__
-#  if defined(__KERNEL_CPU__)
+#  ifndef __KERNEL_GPU__
 ccl_device int shadow_intersections_compare(const void *a, const void *b)
 {
   const Intersection *isect_a = (const Intersection *)a;
@@ -175,7 +162,7 @@ ccl_device void integrator_intersect_shadow(KernelGlobals kg, IntegratorShadowSt
 
   if (opaque_hit) {
     /* Hit an opaque surface, shadow path ends here. */
-    INTEGRATOR_SHADOW_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
+    integrator_shadow_path_terminate(kg, state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
     return;
   }
   else {
@@ -184,7 +171,9 @@ ccl_device void integrator_intersect_shadow(KernelGlobals kg, IntegratorShadowSt
      *
      * TODO: could also write to render buffer directly if no transparent shadows?
      * Could save a kernel execution for the common case. */
-    INTEGRATOR_SHADOW_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW,
+    integrator_shadow_path_next(kg,
+                                state,
+                                DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW,
                                 DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
     return;
   }

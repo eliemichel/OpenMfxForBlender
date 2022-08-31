@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -28,7 +12,7 @@
 #include "BKE_paint.h"
 
 #include "draw_subdivision.h"
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 namespace blender::draw {
 
@@ -47,7 +31,7 @@ static GPUVertFormat *get_sculpt_data_format()
 }
 
 static void extract_sculpt_data_init(const MeshRenderData *mr,
-                                     struct MeshBatchCache *UNUSED(cache),
+                                     MeshBatchCache *UNUSED(cache),
                                      void *buf,
                                      void *UNUSED(tls_data))
 {
@@ -58,8 +42,8 @@ static void extract_sculpt_data_init(const MeshRenderData *mr,
   CustomData *cd_vdata = (mr->extract_type == MR_EXTRACT_BMESH) ? &mr->bm->vdata : &mr->me->vdata;
   CustomData *cd_pdata = (mr->extract_type == MR_EXTRACT_BMESH) ? &mr->bm->pdata : &mr->me->pdata;
 
-  float *cd_mask = (float *)CustomData_get_layer(cd_vdata, CD_PAINT_MASK);
-  int *cd_face_set = (int *)CustomData_get_layer(cd_pdata, CD_SCULPT_FACE_SETS);
+  const float *cd_mask = (const float *)CustomData_get_layer(cd_vdata, CD_PAINT_MASK);
+  const int *cd_face_set = (const int *)CustomData_get_layer(cd_pdata, CD_SCULPT_FACE_SETS);
 
   GPU_vertbuf_init_with_format(vbo, format);
   GPU_vertbuf_data_alloc(vbo, mr->loop_len);
@@ -70,7 +54,7 @@ static void extract_sculpt_data_init(const MeshRenderData *mr,
   };
 
   gpuSculptData *vbo_data = (gpuSculptData *)GPU_vertbuf_get_data(vbo);
-  MLoop *loops = (MLoop *)CustomData_get_layer(cd_ldata, CD_MLOOP);
+  const MLoop *loops = (const MLoop *)CustomData_get_layer(cd_ldata, CD_MLOOP);
 
   if (mr->extract_type == MR_EXTRACT_BMESH) {
     int cd_mask_ofs = CustomData_get_offset(cd_vdata, CD_PAINT_MASK);
@@ -129,7 +113,7 @@ static void extract_sculpt_data_init(const MeshRenderData *mr,
 
 static void extract_sculpt_data_init_subdiv(const DRWSubdivCache *subdiv_cache,
                                             const MeshRenderData *mr,
-                                            struct MeshBatchCache *UNUSED(cache),
+                                            MeshBatchCache *UNUSED(cache),
                                             void *buffer,
                                             void *UNUSED(data))
 {
@@ -142,7 +126,7 @@ static void extract_sculpt_data_init_subdiv(const DRWSubdivCache *subdiv_cache,
   /* First, interpolate mask if available. */
   GPUVertBuf *mask_vbo = nullptr;
   GPUVertBuf *subdiv_mask_vbo = nullptr;
-  float *cd_mask = (float *)CustomData_get_layer(cd_vdata, CD_PAINT_MASK);
+  const float *cd_mask = (const float *)CustomData_get_layer(cd_vdata, CD_PAINT_MASK);
 
   if (cd_mask) {
     GPUVertFormat mask_format = {0};
@@ -183,7 +167,7 @@ static void extract_sculpt_data_init_subdiv(const DRWSubdivCache *subdiv_cache,
   };
 
   gpuFaceSet *face_sets = (gpuFaceSet *)GPU_vertbuf_get_data(face_set_vbo);
-  int *cd_face_set = (int *)CustomData_get_layer(cd_pdata, CD_SCULPT_FACE_SETS);
+  const int *cd_face_set = (const int *)CustomData_get_layer(cd_pdata, CD_SCULPT_FACE_SETS);
 
   GPUVertFormat *format = get_sculpt_data_format();
   GPU_vertbuf_init_build_on_device(vbo, format, subdiv_cache->num_subdiv_loops);
@@ -231,6 +215,4 @@ constexpr MeshExtract create_extractor_sculpt_data()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_sculpt_data = blender::draw::create_extractor_sculpt_data();
-}

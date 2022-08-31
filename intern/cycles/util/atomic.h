@@ -1,18 +1,5 @@
-/*
- * Copyright 2014 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2014-2022 Blender Foundation */
 
 #ifndef __UTIL_ATOMIC_H__
 #define __UTIL_ATOMIC_H__
@@ -118,6 +105,116 @@ ccl_device_inline float atomic_compare_and_swap_float(volatile ccl_global float 
 #    define ccl_barrier(flags) threadgroup_barrier(flags)
 
 #  endif /* __KERNEL_METAL__ */
+
+#  ifdef __KERNEL_ONEAPI__
+
+ccl_device_inline float atomic_add_and_fetch_float(ccl_global float *p, float x)
+{
+  sycl::atomic_ref<float,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_add(x);
+}
+
+ccl_device_inline float atomic_compare_and_swap_float(ccl_global float *source,
+                                                      float old_val,
+                                                      float new_val)
+{
+  sycl::atomic_ref<float,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*source);
+  atomic.compare_exchange_weak(old_val, new_val);
+  return old_val;
+}
+
+ccl_device_inline unsigned int atomic_fetch_and_add_uint32(ccl_global unsigned int *p,
+                                                           unsigned int x)
+{
+  sycl::atomic_ref<unsigned int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_add(x);
+}
+
+ccl_device_inline int atomic_fetch_and_add_uint32(ccl_global int *p, int x)
+{
+  sycl::atomic_ref<int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_add(x);
+}
+
+ccl_device_inline unsigned int atomic_fetch_and_sub_uint32(ccl_global unsigned int *p,
+                                                           unsigned int x)
+{
+  sycl::atomic_ref<unsigned int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_sub(x);
+}
+
+ccl_device_inline int atomic_fetch_and_sub_uint32(ccl_global int *p, int x)
+{
+  sycl::atomic_ref<int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_sub(x);
+}
+
+ccl_device_inline unsigned int atomic_fetch_and_inc_uint32(ccl_global unsigned int *p)
+{
+  return atomic_fetch_and_add_uint32(p, 1);
+}
+
+ccl_device_inline int atomic_fetch_and_inc_uint32(ccl_global int *p)
+{
+  return atomic_fetch_and_add_uint32(p, 1);
+}
+
+ccl_device_inline unsigned int atomic_fetch_and_dec_uint32(ccl_global unsigned int *p)
+{
+  return atomic_fetch_and_sub_uint32(p, 1);
+}
+
+ccl_device_inline int atomic_fetch_and_dec_uint32(ccl_global int *p)
+{
+  return atomic_fetch_and_sub_uint32(p, 1);
+}
+
+ccl_device_inline unsigned int atomic_fetch_and_or_uint32(ccl_global unsigned int *p,
+                                                          unsigned int x)
+{
+  sycl::atomic_ref<unsigned int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_or(x);
+}
+
+ccl_device_inline int atomic_fetch_and_or_uint32(ccl_global int *p, int x)
+{
+  sycl::atomic_ref<int,
+                   sycl::memory_order::relaxed,
+                   sycl::memory_scope::device,
+                   sycl::access::address_space::ext_intel_global_device_space>
+      atomic(*p);
+  return atomic.fetch_or(x);
+}
+
+#  endif /* __KERNEL_ONEAPI__ */
 
 #endif /* __KERNEL_GPU__ */
 

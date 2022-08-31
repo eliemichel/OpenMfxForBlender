@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #ifdef WITH_OPENVDB
 #  include <openvdb/openvdb.h>
@@ -24,9 +10,9 @@
 #include "DNA_pointcloud_types.h"
 #include "DNA_volume_types.h"
 
+#include "BKE_curves.hh"
 #include "BKE_mesh.h"
 #include "BKE_pointcloud.h"
-#include "BKE_spline.hh"
 #include "BKE_volume.h"
 
 #include "DEG_depsgraph_query.h"
@@ -57,26 +43,28 @@ static void translate_mesh(Mesh &mesh, const float3 translation)
 static void transform_mesh(Mesh &mesh, const float4x4 &transform)
 {
   BKE_mesh_transform(&mesh, transform.values, false);
-  BKE_mesh_normals_tag_dirty(&mesh);
 }
 
 static void translate_pointcloud(PointCloud &pointcloud, const float3 translation)
 {
-  CustomData_duplicate_referenced_layer(&pointcloud.pdata, CD_PROP_FLOAT3, pointcloud.totpoint);
-  BKE_pointcloud_update_customdata_pointers(&pointcloud);
-  for (const int i : IndexRange(pointcloud.totpoint)) {
-    add_v3_v3(pointcloud.co[i], translation);
+  MutableAttributeAccessor attributes = bke::pointcloud_attributes_for_write(pointcloud);
+  SpanAttributeWriter position = attributes.lookup_or_add_for_write_span<float3>(
+      "position", ATTR_DOMAIN_POINT);
+  for (const int i : position.span.index_range()) {
+    position.span[i] += translation;
   }
+  position.finish();
 }
 
 static void transform_pointcloud(PointCloud &pointcloud, const float4x4 &transform)
 {
-  CustomData_duplicate_referenced_layer(&pointcloud.pdata, CD_PROP_FLOAT3, pointcloud.totpoint);
-  BKE_pointcloud_update_customdata_pointers(&pointcloud);
-  for (const int i : IndexRange(pointcloud.totpoint)) {
-    float3 &co = *(float3 *)pointcloud.co[i];
-    co = transform * co;
+  MutableAttributeAccessor attributes = bke::pointcloud_attributes_for_write(pointcloud);
+  SpanAttributeWriter position = attributes.lookup_or_add_for_write_span<float3>(
+      "position", ATTR_DOMAIN_POINT);
+  for (const int i : position.span.index_range()) {
+    position.span[i] = transform * position.span[i];
   }
+  position.finish();
 }
 
 static void translate_instances(InstancesComponent &instances, const float3 translation)
@@ -95,52 +83,98 @@ static void transform_instances(InstancesComponent &instances, const float4x4 &t
   }
 }
 
-static void transform_volume(Volume &volume, const float4x4 &transform, const Depsgraph &depsgraph)
+static void transform_volume(GeoNodeExecParams &params,
+                             Volume &volume,
+                             const float4x4 &transform,
+                             const Depsgraph &depsgraph)
 {
 #ifdef WITH_OPENVDB
-  /* Scaling an axis to zero is not supported for volumes. */
-  const float3 translation = transform.translation();
-  const float3 rotation = transform.to_euler();
-  const float3 scale = transform.scale();
-  const float3 limited_scale = {
-      (scale.x == 0.0f) ? FLT_EPSILON : scale.x,
-      (scale.y == 0.0f) ? FLT_EPSILON : scale.y,
-      (scale.z == 0.0f) ? FLT_EPSILON : scale.z,
-  };
-  const float4x4 scale_limited_transform = float4x4::from_loc_eul_scale(
-      translation, rotation, limited_scale);
-
   const Main *bmain = DEG_get_bmain(&depsgraph);
   BKE_volume_load(&volume, bmain);
 
   openvdb::Mat4s vdb_matrix;
-  memcpy(vdb_matrix.asPointer(), &scale_limited_transform, sizeof(float[4][4]));
+  memcpy(vdb_matrix.asPointer(), &transform, sizeof(float[4][4]));
   openvdb::Mat4d vdb_matrix_d{vdb_matrix};
 
-  const int num_grids = BKE_volume_num_grids(&volume);
-  for (const int i : IndexRange(num_grids)) {
+  bool found_too_small_scale = false;
+  const int grids_num = BKE_volume_num_grids(&volume);
+  for (const int i : IndexRange(grids_num)) {
     VolumeGrid *volume_grid = BKE_volume_grid_get_for_write(&volume, i);
-
-    openvdb::GridBase::Ptr grid = BKE_volume_grid_openvdb_for_write(&volume, volume_grid, false);
-    openvdb::math::Transform &grid_transform = grid->transform();
-    grid_transform.postMult(vdb_matrix_d);
+    float4x4 grid_matrix;
+    BKE_volume_grid_transform_matrix(volume_grid, grid_matrix.values);
+    mul_m4_m4_pre(grid_matrix.values, transform.values);
+    const float determinant = determinant_m4(grid_matrix.values);
+    if (!BKE_volume_grid_determinant_valid(determinant)) {
+      found_too_small_scale = true;
+      /* Clear the tree because it is too small. */
+      BKE_volume_grid_clear_tree(volume, *volume_grid);
+      if (determinant == 0) {
+        /* Reset rotation and scale. */
+        copy_v3_fl3(grid_matrix.values[0], 1, 0, 0);
+        copy_v3_fl3(grid_matrix.values[1], 0, 1, 0);
+        copy_v3_fl3(grid_matrix.values[2], 0, 0, 1);
+      }
+      else {
+        /* Keep rotation but reset scale. */
+        normalize_v3(grid_matrix.values[0]);
+        normalize_v3(grid_matrix.values[1]);
+        normalize_v3(grid_matrix.values[2]);
+      }
+    }
+    BKE_volume_grid_transform_matrix_set(volume_grid, grid_matrix.values);
+  }
+  if (found_too_small_scale) {
+    params.error_message_add(NodeWarningType::Warning,
+                             TIP_("Volume scale is lower than permitted by OpenVDB"));
   }
 #else
-  UNUSED_VARS(volume, transform, depsgraph);
+  UNUSED_VARS(params, volume, transform, depsgraph);
 #endif
 }
 
-static void translate_volume(Volume &volume, const float3 translation, const Depsgraph &depsgraph)
+static void translate_volume(GeoNodeExecParams &params,
+                             Volume &volume,
+                             const float3 translation,
+                             const Depsgraph &depsgraph)
 {
-  transform_volume(volume, float4x4::from_location(translation), depsgraph);
+  transform_volume(params, volume, float4x4::from_location(translation), depsgraph);
 }
 
-static void translate_geometry_set(GeometrySet &geometry,
+static void transform_curve_edit_hints(bke::CurvesEditHints &edit_hints, const float4x4 &transform)
+{
+  if (edit_hints.positions.has_value()) {
+    for (float3 &pos : *edit_hints.positions) {
+      pos = transform * pos;
+    }
+  }
+  float3x3 deform_mat;
+  copy_m3_m4(deform_mat.values, transform.values);
+  if (edit_hints.deform_mats.has_value()) {
+    for (float3x3 &mat : *edit_hints.deform_mats) {
+      mat = deform_mat * mat;
+    }
+  }
+  else {
+    edit_hints.deform_mats.emplace(edit_hints.curves_id_orig.geometry.point_num, deform_mat);
+  }
+}
+
+static void translate_curve_edit_hints(bke::CurvesEditHints &edit_hints, const float3 &translation)
+{
+  if (edit_hints.positions.has_value()) {
+    for (float3 &pos : *edit_hints.positions) {
+      pos += translation;
+    }
+  }
+}
+
+static void translate_geometry_set(GeoNodeExecParams &params,
+                                   GeometrySet &geometry,
                                    const float3 translation,
                                    const Depsgraph &depsgraph)
 {
-  if (CurveEval *curve = geometry.get_curve_for_write()) {
-    curve->translate(translation);
+  if (Curves *curves = geometry.get_curves_for_write()) {
+    bke::CurvesGeometry::wrap(curves->geometry).translate(translation);
   }
   if (Mesh *mesh = geometry.get_mesh_for_write()) {
     translate_mesh(*mesh, translation);
@@ -149,19 +183,23 @@ static void translate_geometry_set(GeometrySet &geometry,
     translate_pointcloud(*pointcloud, translation);
   }
   if (Volume *volume = geometry.get_volume_for_write()) {
-    translate_volume(*volume, translation, depsgraph);
+    translate_volume(params, *volume, translation, depsgraph);
   }
   if (geometry.has_instances()) {
     translate_instances(geometry.get_component_for_write<InstancesComponent>(), translation);
   }
+  if (bke::CurvesEditHints *curve_edit_hints = geometry.get_curve_edit_hints_for_write()) {
+    translate_curve_edit_hints(*curve_edit_hints, translation);
+  }
 }
 
-void transform_geometry_set(GeometrySet &geometry,
+void transform_geometry_set(GeoNodeExecParams &params,
+                            GeometrySet &geometry,
                             const float4x4 &transform,
                             const Depsgraph &depsgraph)
 {
-  if (CurveEval *curve = geometry.get_curve_for_write()) {
-    curve->transform(transform);
+  if (Curves *curves = geometry.get_curves_for_write()) {
+    bke::CurvesGeometry::wrap(curves->geometry).transform(transform);
   }
   if (Mesh *mesh = geometry.get_mesh_for_write()) {
     transform_mesh(*mesh, transform);
@@ -170,10 +208,13 @@ void transform_geometry_set(GeometrySet &geometry,
     transform_pointcloud(*pointcloud, transform);
   }
   if (Volume *volume = geometry.get_volume_for_write()) {
-    transform_volume(*volume, transform, depsgraph);
+    transform_volume(params, *volume, transform, depsgraph);
   }
   if (geometry.has_instances()) {
     transform_instances(geometry.get_component_for_write<InstancesComponent>(), transform);
+  }
+  if (bke::CurvesEditHints *curve_edit_hints = geometry.get_curve_edit_hints_for_write()) {
+    transform_curve_edit_hints(*curve_edit_hints, transform);
   }
 }
 
@@ -208,10 +249,11 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   /* Use only translation if rotation and scale don't apply. */
   if (use_translate(rotation, scale)) {
-    translate_geometry_set(geometry_set, translation, *params.depsgraph());
+    translate_geometry_set(params, geometry_set, translation, *params.depsgraph());
   }
   else {
-    transform_geometry_set(geometry_set,
+    transform_geometry_set(params,
+                           geometry_set,
                            float4x4::from_loc_eul_scale(translation, rotation, scale),
                            *params.depsgraph());
   }

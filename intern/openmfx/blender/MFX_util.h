@@ -24,11 +24,11 @@
 #ifndef __MFX_UTILS_H__
 #define __MFX_UTILS_H__
 
+#include "DNA_node_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_node_types.h"
 
 #include "mfxPluginRegistry.h"
 

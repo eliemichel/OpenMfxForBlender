@@ -35,6 +35,7 @@
 #include "UI_resources.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -96,7 +97,6 @@ static void requiredDataMask(Object *UNUSED(ob),
      ask for input attributes, so that we can avoid feeding all of them to addons
      that are not using it. */
   r_cddata_masks->lmask |= CD_MLOOPUV;
-  r_cddata_masks->lmask |= CD_MLOOPCOL;
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -131,7 +131,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static bool dependsOnTime(struct ModifierData *md)
+static bool dependsOnTime(struct Scene *scene, struct ModifierData *md)
 {
   // TODO: May depend on the OFX file
   return true;
@@ -259,7 +259,9 @@ static void panelRegister(ARegionType *region_type)
   PanelType *panel_type = modifier_panel_register(region_type, eModifierType_OpenMfx, panel_draw);
 }
 
-static void blendWrite(BlendWriter *writer, const ModifierData *md)
+static void blendWrite(BlendWriter *writer,
+                       const ID *id_owner,
+                       const ModifierData *md)
 {
   const OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
 
@@ -322,7 +324,6 @@ ModifierTypeInfo modifierType_OpenMfx = {
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
-    /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
     
     /* initData */ initData,

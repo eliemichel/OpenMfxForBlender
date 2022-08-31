@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup edcurve
@@ -55,6 +41,7 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_prototypes.h"
 
 #include "RNA_enum_types.h"
 
@@ -118,7 +105,7 @@ struct CurveDrawData {
   } radius;
 
   struct {
-    float mouse[2];
+    float mval[2];
     /* Used in case we can't calculate the depth. */
     float location_world[3];
 
@@ -476,8 +463,8 @@ static void curve_draw_event_add(wmOperator *op, const wmEvent *event)
   }
   copy_v3_v3(cdd->prev.location_world, selem->location_world);
 
-  float len_sq = len_squared_v2v2(cdd->prev.mouse, selem->mval);
-  copy_v2_v2(cdd->prev.mouse, selem->mval);
+  float len_sq = len_squared_v2v2(cdd->prev.mval, selem->mval);
+  copy_v2_v2(cdd->prev.mval, selem->mval);
 
   if (cdd->sample.use_substeps && cdd->prev.selem) {
     const struct StrokeElem selem_target = *selem;
@@ -591,7 +578,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 
     /* Using an empty stroke complicates logic later,
      * it's simplest to disallow early on (see: T94085). */
-    if (RNA_collection_length(op->ptr, "stroke") == 0) {
+    if (RNA_collection_is_empty(op->ptr, "stroke")) {
       MEM_freeN(cdd);
       BKE_report(op->reports, RPT_ERROR, "The \"stroke\" cannot be empty");
       return false;
@@ -1175,10 +1162,10 @@ static int curve_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       curve_draw_event_add_first(op, event);
     }
   }
-  else if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
+  else if (ISMOUSE_MOTION(event->type)) {
     if (cdd->state == CURVE_DRAW_PAINTING) {
       const float mval_fl[2] = {UNPACK2(event->mval)};
-      if (len_squared_v2v2(mval_fl, cdd->prev.mouse) > square_f(STROKE_SAMPLE_DIST_MIN_PX)) {
+      if (len_squared_v2v2(mval_fl, cdd->prev.mval) > square_f(STROKE_SAMPLE_DIST_MIN_PX)) {
         curve_draw_event_add(op, event);
       }
     }

@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -43,7 +29,7 @@ enum VertexNumber { VERTEX_ONE, VERTEX_TWO };
 
 static VArray<int> construct_edge_vertices_gvarray(const MeshComponent &component,
                                                    const VertexNumber vertex,
-                                                   const AttributeDomain domain)
+                                                   const eAttrDomain domain)
 {
   const Mesh *mesh = component.get_for_read();
   if (mesh == nullptr) {
@@ -72,7 +58,7 @@ class EdgeVerticesFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask UNUSED(mask)) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_MESH) {
@@ -99,7 +85,7 @@ class EdgeVerticesFieldInput final : public GeometryFieldInput {
 
 static VArray<float3> construct_edge_positions_gvarray(const MeshComponent &component,
                                                        const VertexNumber vertex,
-                                                       const AttributeDomain domain)
+                                                       const eAttrDomain domain)
 {
   const Mesh *mesh = component.get_for_read();
   if (mesh == nullptr) {
@@ -107,14 +93,14 @@ static VArray<float3> construct_edge_positions_gvarray(const MeshComponent &comp
   }
 
   if (vertex == VERTEX_ONE) {
-    return component.attribute_try_adapt_domain<float3>(
+    return component.attributes()->adapt_domain<float3>(
         VArray<float3>::ForFunc(
             mesh->totedge,
             [mesh](const int i) { return float3(mesh->mvert[mesh->medge[i].v1].co); }),
         ATTR_DOMAIN_EDGE,
         domain);
   }
-  return component.attribute_try_adapt_domain<float3>(
+  return component.attributes()->adapt_domain<float3>(
       VArray<float3>::ForFunc(
           mesh->totedge,
           [mesh](const int i) { return float3(mesh->mvert[mesh->medge[i].v2].co); }),
@@ -134,7 +120,7 @@ class EdgePositionFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask UNUSED(mask)) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_MESH) {

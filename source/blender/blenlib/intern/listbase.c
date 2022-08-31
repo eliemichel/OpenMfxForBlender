@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bli
@@ -209,8 +193,18 @@ void BLI_listbases_swaplinks(ListBase *listbasea, ListBase *listbaseb, void *vli
     return;
   }
 
+  /* The reference to `linkc` assigns NULL, not a dangling pointer so it can be ignored. */
+#if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) >= 1201 /* gcc12.1+ only */
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
+
   /* Temporary link to use as placeholder of the links positions */
   BLI_insertlinkafter(listbasea, linka, &linkc);
+
+#if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) >= 1201 /* gcc12.1+ only */
+#  pragma GCC diagnostic pop
+#endif
 
   /* Bring linka into linkb position */
   BLI_remlink(listbasea, linka);
@@ -531,6 +525,21 @@ void *BLI_rfindlink(const ListBase *listbase, int number)
     while (link != NULL && number != 0) {
       number--;
       link = link->prev;
+    }
+  }
+
+  return link;
+}
+
+void *BLI_findlinkfrom(Link *start, int number)
+{
+  Link *link = NULL;
+
+  if (number >= 0) {
+    link = start;
+    while (link != NULL && number != 0) {
+      number--;
+      link = link->next;
     }
   }
 

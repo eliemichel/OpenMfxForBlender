@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2011 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2011 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spclip
@@ -118,6 +102,16 @@ bool ED_space_clip_maskedit_poll(bContext *C)
   return false;
 }
 
+bool ED_space_clip_maskedit_visible_splines_poll(bContext *C)
+{
+  if (!ED_space_clip_maskedit_poll(C)) {
+    return false;
+  }
+
+  const SpaceClip *space_clip = CTX_wm_space_clip(C);
+  return space_clip->mask_info.draw_flag & MASK_DRAWFLAG_SPLINE;
+}
+
 bool ED_space_clip_maskedit_mask_poll(bContext *C)
 {
   if (ED_space_clip_maskedit_poll(C)) {
@@ -131,6 +125,16 @@ bool ED_space_clip_maskedit_mask_poll(bContext *C)
   }
 
   return false;
+}
+
+bool ED_space_clip_maskedit_mask_visible_splines_poll(bContext *C)
+{
+  if (!ED_space_clip_maskedit_mask_poll(C)) {
+    return false;
+  }
+
+  const SpaceClip *space_clip = CTX_wm_space_clip(C);
+  return space_clip->mask_info.draw_flag & MASK_DRAWFLAG_SPLINE;
 }
 
 /** \} */
@@ -288,7 +292,7 @@ bool ED_space_clip_get_position(struct SpaceClip *sc,
   return true;
 }
 
-bool ED_space_clip_color_sample(SpaceClip *sc, ARegion *region, int mval[2], float r_col[3])
+bool ED_space_clip_color_sample(SpaceClip *sc, ARegion *region, const int mval[2], float r_col[3])
 {
   ImBuf *ibuf;
   float fx, fy, co[2];
@@ -1042,7 +1046,7 @@ static int prefetch_get_start_frame(const bContext *C)
 {
   Scene *scene = CTX_data_scene(C);
 
-  return SFRA;
+  return scene->r.sfra;
 }
 
 static int prefetch_get_final_frame(const bContext *C)
@@ -1053,10 +1057,10 @@ static int prefetch_get_final_frame(const bContext *C)
   int end_frame;
 
   /* check whether all the frames from prefetch range are cached */
-  end_frame = EFRA;
+  end_frame = scene->r.efra;
 
   if (clip->len) {
-    end_frame = min_ii(end_frame, SFRA + clip->len - 1);
+    end_frame = min_ii(end_frame, scene->r.sfra + clip->len - 1);
   }
 
   return end_frame;

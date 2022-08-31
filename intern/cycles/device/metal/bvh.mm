@@ -1,18 +1,5 @@
-/*
- * Copyright 2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2021-2022 Blender Foundation */
 
 #ifdef WITH_METAL
 
@@ -24,6 +11,7 @@
 #  include "util/progress.h"
 
 #  include "device/metal/bvh.h"
+#  include "device/metal/util.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -31,6 +19,7 @@ CCL_NAMESPACE_BEGIN
     { \
       string str = string_printf(__VA_ARGS__); \
       progress.set_substatus(str); \
+      metal_printf("%s\n", str.c_str()); \
     }
 
 BVHMetal::BVHMetal(const BVHParams &params_,

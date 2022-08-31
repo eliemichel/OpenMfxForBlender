@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -42,10 +29,27 @@ using namespace metal::raytracing;
 
 /* Qualifiers */
 
-#define ccl_device
-#define ccl_device_inline ccl_device
-#define ccl_device_forceinline ccl_device
-#define ccl_device_noinline ccl_device __attribute__((noinline))
+/* Inline everything for Apple GPUs. This gives ~1.1x speedup and 10% spill
+ * reduction for integator_shade_surface. However it comes at the cost of
+ * longer compile times (~4.5 minutes on M1 Max) and is disabled for that
+ * reason, until there is a user option to manually enable it. */
+
+#if 0  // defined(__KERNEL_METAL_APPLE__)
+
+#  define ccl_device __attribute__((always_inline))
+#  define ccl_device_inline __attribute__((always_inline))
+#  define ccl_device_forceinline __attribute__((always_inline))
+#  define ccl_device_noinline __attribute__((always_inline))
+
+#else
+
+#  define ccl_device
+#  define ccl_device_inline ccl_device
+#  define ccl_device_forceinline ccl_device
+#  define ccl_device_noinline ccl_device __attribute__((noinline))
+
+#endif
+
 #define ccl_device_noinline_cpu ccl_device
 #define ccl_device_inline_method ccl_device
 #define ccl_global device
@@ -145,6 +149,7 @@ void kernel_gpu_##name::run(thread MetalKernelContext& context, \
                   uint simd_group_index, \
                   uint num_simd_groups) ccl_global const
 
+#define ccl_gpu_kernel_postfix
 #define ccl_gpu_kernel_call(x) context.x
 
 /* define a function object where "func" is the lambda body, and additional parameters are used to specify captured state  */
@@ -255,8 +260,6 @@ void kernel_gpu_##name::run(thread MetalKernelContext& context, \
 #define __device__
 
 #ifdef __METALRT__
-
-#  define __KERNEL_GPU_RAYTRACING__
 
 #  if defined(__METALRT_MOTION__)
 #    define METALRT_TAGS instancing, instance_motion, primitive_motion

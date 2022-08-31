@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -275,7 +259,10 @@ static void get_face_uv_map_vert(
   }
 }
 
-static int ss_sync_from_uv(CCGSubSurf *ss, CCGSubSurf *origss, DerivedMesh *dm, MLoopUV *mloopuv)
+static int ss_sync_from_uv(CCGSubSurf *ss,
+                           CCGSubSurf *origss,
+                           DerivedMesh *dm,
+                           const MLoopUV *mloopuv)
 {
   MPoly *mpoly = dm->getPolyArray(dm);
   MLoop *mloop = dm->getLoopArray(dm);
@@ -397,13 +384,9 @@ static int ss_sync_from_uv(CCGSubSurf *ss, CCGSubSurf *origss, DerivedMesh *dm, 
 
 static void set_subsurf_legacy_uv(CCGSubSurf *ss, DerivedMesh *dm, DerivedMesh *result, int n)
 {
-  CCGSubSurf *uvss;
-  CCGFace **faceMap;
-  MTFace *tf;
-  MLoopUV *mluv;
   CCGFaceIterator fi;
   int index, gridSize, gridFaces, /*edgeSize,*/ totface, x, y, S;
-  MLoopUV *dmloopuv = CustomData_get_layer_n(&dm->loopData, CD_MLOOPUV, n);
+  const MLoopUV *dmloopuv = CustomData_get_layer_n(&dm->loopData, CD_MLOOPUV, n);
   /* need to update both CD_MTFACE & CD_MLOOPUV, hrmf, we could get away with
    * just tface except applying the modifier then looses subsurf UV */
   MTFace *tface = CustomData_get_layer_n(&result->faceData, CD_MTFACE, n);
@@ -414,7 +397,7 @@ static void set_subsurf_legacy_uv(CCGSubSurf *ss, DerivedMesh *dm, DerivedMesh *
   }
 
   /* create a CCGSubSurf from uv's */
-  uvss = _getSubSurf(NULL, ccgSubSurf_getSubdivisionLevels(ss), 2, CCG_USE_ARENA);
+  CCGSubSurf *uvss = _getSubSurf(NULL, ccgSubSurf_getSubdivisionLevels(ss), 2, CCG_USE_ARENA);
 
   if (!ss_sync_from_uv(uvss, ss, dm, dmloopuv)) {
     ccgSubSurf_free(uvss);
@@ -428,7 +411,7 @@ static void set_subsurf_legacy_uv(CCGSubSurf *ss, DerivedMesh *dm, DerivedMesh *
   gridFaces = gridSize - 1;
 
   /* make a map from original faces to CCGFaces */
-  faceMap = MEM_mallocN(totface * sizeof(*faceMap), "facemapuv");
+  CCGFace **faceMap = MEM_mallocN(totface * sizeof(*faceMap), "facemapuv");
   for (ccgSubSurf_initFaceIterator(uvss, &fi); !ccgFaceIterator_isStopped(&fi);
        ccgFaceIterator_next(&fi)) {
     CCGFace *f = ccgFaceIterator_getCurrent(&fi);
@@ -436,8 +419,8 @@ static void set_subsurf_legacy_uv(CCGSubSurf *ss, DerivedMesh *dm, DerivedMesh *
   }
 
   /* load coordinates from uvss into tface */
-  tf = tface;
-  mluv = mloopuv;
+  MTFace *tf = tface;
+  MLoopUV *mluv = mloopuv;
 
   for (index = 0; index < totface; index++) {
     CCGFace *f = faceMap[index];
@@ -580,16 +563,12 @@ static void ss_sync_ccg_from_derivedmesh(CCGSubSurf *ss,
 #endif
   MVert *mvert = dm->getVertArray(dm);
   MEdge *medge = dm->getEdgeArray(dm);
-  // MFace *mface = dm->getTessFaceArray(dm); /* UNUSED */
   MVert *mv;
   MEdge *me;
   MLoop *mloop = dm->getLoopArray(dm), *ml;
   MPoly *mpoly = dm->getPolyArray(dm), *mp;
-  // MFace *mf; /* UNUSED */
   int totvert = dm->getNumVerts(dm);
   int totedge = dm->getNumEdges(dm);
-  // int totface = dm->getNumTessFaces(dm); /* UNUSED */
-  // int totpoly = dm->getNumFaces(dm);     /* UNUSED */
   int i, j;
   int *index;
 
@@ -790,11 +769,6 @@ static int ccgDM_getNumPolys(DerivedMesh *dm)
   return ccgSubSurf_getNumFinalFaces(ccgdm->ss);
 }
 
-static int ccgDM_getNumTessFaces(DerivedMesh *dm)
-{
-  return dm->numTessFaceData;
-}
-
 static int ccgDM_getNumLoops(DerivedMesh *dm)
 {
   CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
@@ -900,86 +874,6 @@ static void ccgDM_getFinalVertNo(DerivedMesh *dm, int vertNum, float r_no[3])
   copy_v3_v3(r_no, CCG_elem_no(&key, vd));
 }
 
-void subsurf_copy_grid_hidden(DerivedMesh *dm,
-                              const MPoly *mpoly,
-                              MVert *mvert,
-                              const MDisps *mdisps)
-{
-  CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
-  CCGSubSurf *ss = ccgdm->ss;
-  int level = ccgSubSurf_getSubdivisionLevels(ss);
-  int gridSize = ccgSubSurf_getGridSize(ss);
-  int edgeSize = ccgSubSurf_getEdgeSize(ss);
-  int totface = ccgSubSurf_getNumFaces(ss);
-  int i, j, x, y;
-
-  for (i = 0; i < totface; i++) {
-    CCGFace *f = ccgdm->faceMap[i].face;
-
-    for (j = 0; j < mpoly[i].totloop; j++) {
-      const MDisps *md = &mdisps[mpoly[i].loopstart + j];
-      int hidden_gridsize = BKE_ccg_gridsize(md->level);
-      int factor = BKE_ccg_factor(level, md->level);
-      BLI_bitmap *hidden = md->hidden;
-
-      if (!hidden) {
-        continue;
-      }
-
-      for (y = 0; y < gridSize; y++) {
-        for (x = 0; x < gridSize; x++) {
-          int vndx, offset;
-
-          vndx = getFaceIndex(ss, f, j, x, y, edgeSize, gridSize);
-          offset = (y * factor) * hidden_gridsize + (x * factor);
-          if (BLI_BITMAP_TEST(hidden, offset)) {
-            mvert[vndx].flag |= ME_HIDE;
-          }
-        }
-      }
-    }
-  }
-}
-
-void subsurf_copy_grid_paint_mask(DerivedMesh *dm,
-                                  const MPoly *mpoly,
-                                  float *paint_mask,
-                                  const GridPaintMask *grid_paint_mask)
-{
-  CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
-  CCGSubSurf *ss = ccgdm->ss;
-  int level = ccgSubSurf_getSubdivisionLevels(ss);
-  int gridSize = ccgSubSurf_getGridSize(ss);
-  int edgeSize = ccgSubSurf_getEdgeSize(ss);
-  int totface = ccgSubSurf_getNumFaces(ss);
-  int i, j, x, y, factor, gpm_gridsize;
-
-  for (i = 0; i < totface; i++) {
-    CCGFace *f = ccgdm->faceMap[i].face;
-    const MPoly *p = &mpoly[i];
-
-    for (j = 0; j < p->totloop; j++) {
-      const GridPaintMask *gpm = &grid_paint_mask[p->loopstart + j];
-      if (!gpm->data) {
-        continue;
-      }
-
-      factor = BKE_ccg_factor(level, gpm->level);
-      gpm_gridsize = BKE_ccg_gridsize(gpm->level);
-
-      for (y = 0; y < gridSize; y++) {
-        for (x = 0; x < gridSize; x++) {
-          int vndx, offset;
-
-          vndx = getFaceIndex(ss, f, j, x, y, edgeSize, gridSize);
-          offset = y * factor * gpm_gridsize + x * factor;
-          paint_mask[vndx] = gpm->data[offset];
-        }
-      }
-    }
-  }
-}
-
 /* utility function */
 BLI_INLINE void ccgDM_to_MVert(MVert *mv, const CCGKey *key, CCGElem *elem)
 {
@@ -1032,11 +926,9 @@ static void ccgDM_copyFinalVertArray(DerivedMesh *dm, MVert *mvert)
     int x;
 
     for (x = 1; x < edgeSize - 1; x++) {
-      /* This gives errors with -debug-fpe
-       * the normals don't seem to be unit length.
-       * this is most likely caused by edges with no
-       * faces which are now zerod out, see comment in:
-       * ccgSubSurf__calcVertNormals(), - campbell */
+      /* NOTE(@campbellbarton): This gives errors with `--debug-fpe` the normals don't seem to be
+       * unit length. This is most likely caused by edges with no faces which are now zeroed out,
+       * see comment in: `ccgSubSurf__calcVertNormals()`. */
       vd = ccgSubSurf_getEdgeData(ss, e, x);
       ccgDM_to_MVert(&mvert[i++], &key, vd);
     }
@@ -1125,44 +1017,6 @@ static void ccgDM_copyFinalEdgeArray(DerivedMesh *dm, MEdge *medge)
                      getEdgeIndex(ss, e, x, edgeSize),
                      getEdgeIndex(ss, e, x + 1, edgeSize),
                      ed_flag);
-    }
-  }
-}
-
-static void ccgDM_copyFinalFaceArray(DerivedMesh *dm, MFace *mface)
-{
-  CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
-  CCGSubSurf *ss = ccgdm->ss;
-  int index;
-  int totface;
-  int gridSize = ccgSubSurf_getGridSize(ss);
-  int edgeSize = ccgSubSurf_getEdgeSize(ss);
-  int i = 0;
-  DMFlagMat *faceFlags = ccgdm->faceFlags;
-
-  totface = dm->getNumTessFaces(dm);
-  for (index = 0; index < totface; index++) {
-    CCGFace *f = ccgdm->faceMap[index].face;
-    int x, y, S, numVerts = ccgSubSurf_getFaceNumVerts(f);
-    /* keep types in sync with MFace, avoid many conversions */
-    char flag = (faceFlags) ? faceFlags[index].flag : ME_SMOOTH;
-    short mat_nr = (faceFlags) ? faceFlags[index].mat_nr : 0;
-
-    for (S = 0; S < numVerts; S++) {
-      for (y = 0; y < gridSize - 1; y++) {
-        for (x = 0; x < gridSize - 1; x++) {
-          MFace *mf = &mface[i];
-          mf->v1 = getFaceIndex(ss, f, S, x + 0, y + 0, edgeSize, gridSize);
-          mf->v2 = getFaceIndex(ss, f, S, x + 0, y + 1, edgeSize, gridSize);
-          mf->v3 = getFaceIndex(ss, f, S, x + 1, y + 1, edgeSize, gridSize);
-          mf->v4 = getFaceIndex(ss, f, S, x + 1, y + 0, edgeSize, gridSize);
-          mf->mat_nr = mat_nr;
-          mf->flag = flag;
-          mf->edcode = 0;
-
-          i++;
-        }
-      }
     }
   }
 }
@@ -1391,8 +1245,9 @@ static void *ccgDM_get_vert_data_layer(DerivedMesh *dm, int type)
     }
 
     BLI_rw_mutex_lock(&ccgdm->origindex_cache_rwlock, THREAD_LOCK_WRITE);
-    DM_add_vert_layer(dm, CD_ORIGINDEX, CD_CALLOC, NULL);
-    origindex = DM_get_vert_data_layer(dm, CD_ORIGINDEX);
+
+    origindex = CustomData_add_layer(
+        &dm->vertData, CD_ORIGINDEX, CD_CALLOC, NULL, dm->numVertData);
 
     totorig = ccgSubSurf_getNumVerts(ss);
     totnone = dm->numVertData - totorig;
@@ -1430,8 +1285,8 @@ static void *ccgDM_get_edge_data_layer(DerivedMesh *dm, int type)
       return origindex;
     }
 
-    DM_add_edge_layer(dm, CD_ORIGINDEX, CD_CALLOC, NULL);
-    origindex = DM_get_edge_data_layer(dm, CD_ORIGINDEX);
+    origindex = CustomData_add_layer(
+        &dm->edgeData, CD_ORIGINDEX, CD_CALLOC, NULL, dm->numEdgeData);
 
     totedge = ccgSubSurf_getNumEdges(ss);
     totorig = totedge * (edgeSize - 1);
@@ -1457,63 +1312,6 @@ static void *ccgDM_get_edge_data_layer(DerivedMesh *dm, int type)
   return DM_get_edge_data_layer(dm, type);
 }
 
-static void *ccgDM_get_tessface_data_layer(DerivedMesh *dm, int type)
-{
-  if (type == CD_ORIGINDEX) {
-    /* create origindex on demand to save memory */
-    int *origindex;
-
-    /* Avoid re-creation if the layer exists already */
-    origindex = DM_get_tessface_data_layer(dm, CD_ORIGINDEX);
-    if (origindex) {
-      return origindex;
-    }
-
-    DM_add_tessface_layer(dm, CD_ORIGINDEX, CD_CALLOC, NULL);
-    origindex = DM_get_tessface_data_layer(dm, CD_ORIGINDEX);
-
-    /* silly loop counting up */
-    range_vn_i(origindex, dm->getNumTessFaces(dm), 0);
-
-    return origindex;
-  }
-
-  if (type == CD_TESSLOOPNORMAL) {
-    /* Create tessloopnormal on demand to save memory. */
-    /* Note that since tessellated face corners are the same a loops in CCGDM,
-     * and since all faces have four loops/corners, we can simplify the code
-     * here by converting tessloopnormals from 'short (*)[4][3]' to 'short (*)[3]'. */
-    short(*tlnors)[3];
-
-    /* Avoid re-creation if the layer exists already */
-    tlnors = DM_get_tessface_data_layer(dm, CD_TESSLOOPNORMAL);
-    if (!tlnors) {
-      float(*lnors)[3];
-      short(*tlnors_it)[3];
-      const int numLoops = ccgDM_getNumLoops(dm);
-      int i;
-
-      lnors = dm->getLoopDataArray(dm, CD_NORMAL);
-      if (!lnors) {
-        return NULL;
-      }
-
-      DM_add_tessface_layer(dm, CD_TESSLOOPNORMAL, CD_CALLOC, NULL);
-      tlnors = tlnors_it = (short(*)[3])DM_get_tessface_data_layer(dm, CD_TESSLOOPNORMAL);
-
-      /* With ccgdm, we have a simple one to one mapping between loops
-       * and tessellated face corners. */
-      for (i = 0; i < numLoops; i++, tlnors_it++, lnors++) {
-        normal_float_to_short_v3(*tlnors_it, *lnors);
-      }
-    }
-
-    return tlnors;
-  }
-
-  return DM_get_tessface_data_layer(dm, type);
-}
-
 static void *ccgDM_get_poly_data_layer(DerivedMesh *dm, int type)
 {
   if (type == CD_ORIGINDEX) {
@@ -1530,8 +1328,8 @@ static void *ccgDM_get_poly_data_layer(DerivedMesh *dm, int type)
       return origindex;
     }
 
-    DM_add_poly_layer(dm, CD_ORIGINDEX, CD_CALLOC, NULL);
-    origindex = DM_get_poly_data_layer(dm, CD_ORIGINDEX);
+    origindex = CustomData_add_layer(
+        &dm->polyData, CD_ORIGINDEX, CD_CALLOC, NULL, dm->numPolyData);
 
     totface = ccgSubSurf_getNumFaces(ss);
 
@@ -1549,46 +1347,6 @@ static void *ccgDM_get_poly_data_layer(DerivedMesh *dm, int type)
   }
 
   return DM_get_poly_data_layer(dm, type);
-}
-
-static void *ccgDM_get_vert_data(DerivedMesh *dm, int index, int type)
-{
-  if (type == CD_ORIGINDEX) {
-    /* ensure creation of CD_ORIGINDEX layer */
-    ccgDM_get_vert_data_layer(dm, type);
-  }
-
-  return DM_get_vert_data(dm, index, type);
-}
-
-static void *ccgDM_get_edge_data(DerivedMesh *dm, int index, int type)
-{
-  if (type == CD_ORIGINDEX) {
-    /* ensure creation of CD_ORIGINDEX layer */
-    ccgDM_get_edge_data_layer(dm, type);
-  }
-
-  return DM_get_edge_data(dm, index, type);
-}
-
-static void *ccgDM_get_tessface_data(DerivedMesh *dm, int index, int type)
-{
-  if (ELEM(type, CD_ORIGINDEX, CD_TESSLOOPNORMAL)) {
-    /* ensure creation of CD_ORIGINDEX/CD_TESSLOOPNORMAL layers */
-    ccgDM_get_tessface_data_layer(dm, type);
-  }
-
-  return DM_get_tessface_data(dm, index, type);
-}
-
-static void *ccgDM_get_poly_data(DerivedMesh *dm, int index, int type)
-{
-  if (type == CD_ORIGINDEX) {
-    /* ensure creation of CD_ORIGINDEX layer */
-    ccgDM_get_tessface_data_layer(dm, type);
-  }
-
-  return DM_get_poly_data(dm, index, type);
 }
 
 static int ccgDM_getNumGrids(DerivedMesh *dm)
@@ -1621,7 +1379,7 @@ static void ccgdm_create_grids(DerivedMesh *dm)
   DMFlagMat *gridFlagMats;
   CCGFace **gridFaces;
   int *gridOffset;
-  int index, numFaces, numGrids, S, gIndex /*, gridSize*/;
+  int index, numFaces, numGrids, S, gIndex /*, gridSize */;
 
   if (ccgdm->gridData) {
     return;
@@ -1705,25 +1463,6 @@ static BLI_bitmap **ccgDM_getGridHidden(DerivedMesh *dm)
   return ccgdm->gridHidden;
 }
 
-static const MeshElemMap *ccgDM_getPolyMap(Object *ob, DerivedMesh *dm)
-{
-  CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
-
-  if (!ccgdm->multires.mmd && !ccgdm->pmap && ob->type == OB_MESH) {
-    Mesh *me = ob->data;
-
-    BKE_mesh_vert_poly_map_create(&ccgdm->pmap,
-                                  &ccgdm->pmap_mem,
-                                  me->mpoly,
-                                  me->mloop,
-                                  me->totvert,
-                                  me->totpoly,
-                                  me->totloop);
-  }
-
-  return ccgdm->pmap;
-}
-
 /* WARNING! *MUST* be called in an 'loops_cache_rwlock' protected thread context! */
 static void ccgDM_recalcLoopTri(DerivedMesh *dm)
 {
@@ -1763,27 +1502,18 @@ static void set_default_ccgdm_callbacks(CCGDerivedMesh *ccgdm)
   ccgdm->dm.getNumVerts = ccgDM_getNumVerts;
   ccgdm->dm.getNumEdges = ccgDM_getNumEdges;
   ccgdm->dm.getNumLoops = ccgDM_getNumLoops;
-  /* reuse of ccgDM_getNumTessFaces is intentional here:
-   * subsurf polys are just created from tessfaces */
   ccgdm->dm.getNumPolys = ccgDM_getNumPolys;
-  ccgdm->dm.getNumTessFaces = ccgDM_getNumTessFaces;
 
   ccgdm->dm.getVertCo = ccgDM_getFinalVertCo;
   ccgdm->dm.getVertNo = ccgDM_getFinalVertNo;
 
   ccgdm->dm.copyVertArray = ccgDM_copyFinalVertArray;
   ccgdm->dm.copyEdgeArray = ccgDM_copyFinalEdgeArray;
-  ccgdm->dm.copyTessFaceArray = ccgDM_copyFinalFaceArray;
   ccgdm->dm.copyLoopArray = ccgDM_copyFinalLoopArray;
   ccgdm->dm.copyPolyArray = ccgDM_copyFinalPolyArray;
 
-  ccgdm->dm.getVertData = ccgDM_get_vert_data;
-  ccgdm->dm.getEdgeData = ccgDM_get_edge_data;
-  ccgdm->dm.getTessFaceData = ccgDM_get_tessface_data;
-  ccgdm->dm.getPolyData = ccgDM_get_poly_data;
   ccgdm->dm.getVertDataArray = ccgDM_get_vert_data_layer;
   ccgdm->dm.getEdgeDataArray = ccgDM_get_edge_data_layer;
-  ccgdm->dm.getTessFaceDataArray = ccgDM_get_tessface_data_layer;
   ccgdm->dm.getPolyDataArray = ccgDM_get_poly_data_layer;
   ccgdm->dm.getNumGrids = ccgDM_getNumGrids;
   ccgdm->dm.getGridSize = ccgDM_getGridSize;
@@ -1792,7 +1522,6 @@ static void set_default_ccgdm_callbacks(CCGDerivedMesh *ccgdm)
   ccgdm->dm.getGridKey = ccgDM_getGridKey;
   ccgdm->dm.getGridFlagMats = ccgDM_getGridFlagMats;
   ccgdm->dm.getGridHidden = ccgDM_getGridHidden;
-  ccgdm->dm.getPolyMap = ccgDM_getPolyMap;
 
   ccgdm->dm.recalcLoopTri = ccgDM_recalcLoopTri;
 
@@ -1848,7 +1577,6 @@ static void set_ccgdm_all_geometry(CCGDerivedMesh *ccgdm,
   int index;
   int i;
   int vertNum = 0, edgeNum = 0, faceNum = 0;
-  int *vertOrigIndex, *faceOrigIndex, *polyOrigIndex, *base_polyOrigIndex, *edgeOrigIndex;
   short *edgeFlags = ccgdm->edgeFlags;
   DMFlagMat *faceFlags = ccgdm->faceFlags;
   int *polyidx = NULL;
@@ -1865,7 +1593,6 @@ static void set_ccgdm_all_geometry(CCGDerivedMesh *ccgdm,
   int gridInternalEdges;
   WeightTable wtable = {NULL};
   MEdge *medge = NULL;
-  MPoly *mpoly = NULL;
   bool has_edge_cd;
 
   edgeSize = ccgSubSurf_getEdgeSize(ss);
@@ -1878,14 +1605,13 @@ static void set_ccgdm_all_geometry(CCGDerivedMesh *ccgdm,
 
   medge = dm->getEdgeArray(dm);
 
-  mpoly = CustomData_get_layer(&dm->polyData, CD_MPOLY);
-  base_polyOrigIndex = CustomData_get_layer(&dm->polyData, CD_ORIGINDEX);
+  const MPoly *mpoly = CustomData_get_layer(&dm->polyData, CD_MPOLY);
+  const int *base_polyOrigIndex = CustomData_get_layer(&dm->polyData, CD_ORIGINDEX);
 
-  vertOrigIndex = DM_get_vert_data_layer(&ccgdm->dm, CD_ORIGINDEX);
-  edgeOrigIndex = DM_get_edge_data_layer(&ccgdm->dm, CD_ORIGINDEX);
+  int *vertOrigIndex = DM_get_vert_data_layer(&ccgdm->dm, CD_ORIGINDEX);
+  int *edgeOrigIndex = DM_get_edge_data_layer(&ccgdm->dm, CD_ORIGINDEX);
 
-  faceOrigIndex = DM_get_tessface_data_layer(&ccgdm->dm, CD_ORIGINDEX);
-  polyOrigIndex = DM_get_poly_data_layer(&ccgdm->dm, CD_ORIGINDEX);
+  int *polyOrigIndex = DM_get_poly_data_layer(&ccgdm->dm, CD_ORIGINDEX);
 
   has_edge_cd = ((ccgdm->dm.edgeData.totlayer - (edgeOrigIndex ? 1 : 0)) != 0);
 
@@ -2006,12 +1732,6 @@ static void set_ccgdm_all_geometry(CCGDerivedMesh *ccgdm,
           /* Copy over poly data, e.g. #CD_FACEMAP. */
           CustomData_copy_data(&dm->polyData, &ccgdm->dm.polyData, origIndex, faceNum, 1);
 
-          /* Set original index data. */
-          if (faceOrigIndex) {
-            /* reference the index in 'polyOrigIndex' */
-            *faceOrigIndex = faceNum;
-            faceOrigIndex++;
-          }
           if (polyOrigIndex) {
             *polyOrigIndex = base_polyOrigIndex ? base_polyOrigIndex[origIndex] : origIndex;
             polyOrigIndex++;
@@ -2147,8 +1867,6 @@ static CCGDerivedMesh *getCCGDerivedMesh(CCGSubSurf *ss,
                    0,
                    ccgSubSurf_getNumFinalFaces(ss) * 4,
                    ccgSubSurf_getNumFinalFaces(ss));
-
-  CustomData_free_layer_active(&ccgdm->dm.polyData, CD_NORMAL, ccgdm->dm.numPolyData);
 
   ccgdm->reverseFaceMap = MEM_callocN(sizeof(int) * ccgSubSurf_getNumFinalFaces(ss),
                                       "reverseFaceMap");
@@ -2346,14 +2064,4 @@ void subsurf_calculate_limit_positions(Mesh *me, float (*r_positions)[3])
   ccgSubSurf_free(ss);
 
   dm->release(dm);
-}
-
-bool subsurf_has_edges(DerivedMesh *dm)
-{
-  return dm->getNumEdges(dm) != 0;
-}
-
-bool subsurf_has_faces(DerivedMesh *dm)
-{
-  return dm->getNumPolys(dm) != 0;
 }

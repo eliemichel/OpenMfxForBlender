@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BLI_task.hh"
 
@@ -37,7 +23,7 @@ static void scale_instances(GeoNodeExecParams &params, InstancesComponent &insta
 {
   GeometryComponentFieldContext field_context{instances_component, ATTR_DOMAIN_INSTANCE};
 
-  fn::FieldEvaluator evaluator{field_context, instances_component.instances_amount()};
+  fn::FieldEvaluator evaluator{field_context, instances_component.instances_num()};
   evaluator.set_selection(params.extract_input<Field<bool>>("Selection"));
   evaluator.add(params.extract_input<Field<float3>>("Scale"));
   evaluator.add(params.extract_input<Field<float3>>("Center"));
@@ -45,9 +31,9 @@ static void scale_instances(GeoNodeExecParams &params, InstancesComponent &insta
   evaluator.evaluate();
 
   const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
-  const VArray<float3> &scales = evaluator.get_evaluated<float3>(0);
-  const VArray<float3> &pivots = evaluator.get_evaluated<float3>(1);
-  const VArray<bool> &local_spaces = evaluator.get_evaluated<bool>(2);
+  const VArray<float3> scales = evaluator.get_evaluated<float3>(0);
+  const VArray<float3> pivots = evaluator.get_evaluated<float3>(1);
+  const VArray<bool> local_spaces = evaluator.get_evaluated<bool>(2);
 
   MutableSpan<float4x4> instance_transforms = instances_component.instance_transforms();
 

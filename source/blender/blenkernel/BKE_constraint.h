@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -83,7 +67,7 @@ typedef void (*ConstraintIDFunc)(struct bConstraint *con,
  * Callers of these functions must check that they actually point to something useful,
  * as some constraints don't define some of these.
  *
- * Warning:
+ * WARNING:
  * it is not too advisable to reorder order of members of this struct,
  * as you'll have to edit quite a few #NUM_CONSTRAINT_TYPES of these
  * structs.
@@ -278,21 +262,11 @@ bool BKE_constraint_apply_and_remove_for_pose(struct Depsgraph *depsgraph,
 
 void BKE_constraint_panel_expand(struct bConstraint *con);
 
-/* Constraints + Proxies function prototypes */
-
-/**
- * Rescue all constraints tagged as being #CONSTRAINT_PROXY_LOCAL
- * (i.e. added to bone that's proxy-synced in this file).
- */
-void BKE_constraints_proxylocal_extract(struct ListBase *dst, struct ListBase *src);
-/**
- * Returns if the owner of the constraint is proxy-protected.
- */
-bool BKE_constraints_proxylocked_owner(struct Object *ob, struct bPoseChannel *pchan);
-
 /* Constraint Evaluation function prototypes */
 
 /**
+ * Package an object/bone for use in constraint evaluation.
+ *
  * This function MEM_calloc's a #bConstraintOb struct,
  * that will need to be freed after evaluation.
  */
@@ -335,6 +309,25 @@ void BKE_constraint_target_matrix_get(struct Depsgraph *depsgraph,
                                       void *ownerdata,
                                       float mat[4][4],
                                       float ctime);
+
+/**
+ * Retrieves the list of all constraint targets, including the custom space target.
+ * Must be followed by a call to BKE_constraint_targets_flush to free memory.
+ *
+ * \param r_targets: Pointer to the list to be initialized with target data.
+ * \returns the number of targets stored in the list.
+ */
+int BKE_constraint_targets_get(struct bConstraint *con, struct ListBase *r_targets);
+
+/**
+ * Copies changed data from the list produced by #BKE_constraint_targets_get back to the constraint
+ * data structures and frees memory.
+ *
+ * \param targets: List of targets filled by BKE_constraint_targets_get.
+ * \param no_copy: Only free memory without copying changes (read-only mode).
+ */
+void BKE_constraint_targets_flush(struct bConstraint *con, struct ListBase *targets, bool no_copy);
+
 /**
  * Get the list of targets required for solving a constraint.
  */
@@ -343,7 +336,15 @@ void BKE_constraint_targets_for_solving_get(struct Depsgraph *depsgraph,
                                             struct bConstraintOb *ob,
                                             struct ListBase *targets,
                                             float ctime);
-void BKE_constraint_custom_object_space_get(float r_mat[4][4], struct bConstraint *con);
+
+/**
+ * Initialize the Custom Space matrix inside `cob` (if required by the constraint).
+ *
+ * \param cob: Constraint evaluation context (contains the matrix to be initialized).
+ * \param con: Constraint that is about to be evaluated.
+ */
+void BKE_constraint_custom_object_space_init(struct bConstraintOb *cob, struct bConstraint *con);
+
 /**
  * This function is called whenever constraints need to be evaluated. Currently, all
  * constraints that can be evaluated are every time this gets run.

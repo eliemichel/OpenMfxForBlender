@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edanimation
@@ -72,7 +56,9 @@
 
 #include "DEG_depsgraph.h"
 
-/* ************* Marker API **************** */
+/* -------------------------------------------------------------------- */
+/** \name Marker API
+ * \{ */
 
 /* helper function for getting the list of markers to work on */
 static ListBase *context_get_markers(Scene *scene, ScrArea *area)
@@ -118,7 +104,7 @@ int ED_markers_post_apply_transform(
     ListBase *markers, Scene *scene, int mode, float value, char side)
 {
   TimeMarker *marker;
-  float cfra = (float)CFRA;
+  float cfra = (float)scene->r.cfra;
   int changed_tot = 0;
 
   /* sanity check - no markers, or locked markers */
@@ -394,7 +380,11 @@ void debug_markers_print_list(ListBase *markers)
   printf("End of list ------------------\n");
 }
 
-/* ************* Marker Drawing ************ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Marker Drawing
+ * \{ */
 
 static void marker_color_get(const TimeMarker *marker, uchar *r_text_color, uchar *r_line_color)
 {
@@ -553,6 +543,8 @@ void ED_markers_draw(const bContext *C, int flag)
   View2D *v2d = UI_view2d_fromcontext(C);
   int cfra = CTX_data_scene(C)->r.cfra;
 
+  GPU_line_width(1.0f);
+
   rctf markers_region_rect;
   get_marker_region_rect(v2d, &markers_region_rect);
 
@@ -588,11 +580,15 @@ void ED_markers_draw(const bContext *C, int flag)
   GPU_matrix_pop();
 }
 
-/* ************************ Marker Wrappers API ********************* */
-/* These wrappers allow marker operators to function within the confines
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Marker Wrappers API
+ *
+ * These wrappers allow marker operators to function within the confines
  * of standard animation editors, such that they can coexist with the
  * primary operations of those editors.
- */
+ * \{ */
 
 /* ------------------------ */
 
@@ -636,7 +632,11 @@ static bool ed_markers_poll_markers_exist(bContext *C)
   return (markers && markers->first);
 }
 
-/* ************************** add markers *************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Add Markers
+ * \{ */
 
 /* add TimeMarker at current frame */
 static int ed_marker_add_exec(bContext *C, wmOperator *UNUSED(op))
@@ -689,7 +689,11 @@ static void MARKER_OT_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ************************** transform markers *************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Transform Markers
+ * \{ */
 
 /* operator state vars used:
  *     frs: delta movement
@@ -716,7 +720,7 @@ static void MARKER_OT_add(wmOperatorType *ot)
 typedef struct MarkerMove {
   SpaceLink *slink;
   ListBase *markers;
-  int event_type; /* store invoke-event, to verify */
+  short event_type, event_val; /* store invoke-event, to verify */
   int *oldframe, evtx, firstx;
   NumInput num;
 } MarkerMove;
@@ -860,6 +864,7 @@ static int ed_marker_move_invoke(bContext *C, wmOperator *op, const wmEvent *eve
     mm->evtx = event->xy[0];
     mm->firstx = event->xy[0];
     mm->event_type = event->type;
+    mm->event_val = event->val;
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);
@@ -957,7 +962,7 @@ static int ed_marker_move_modal(bContext *C, wmOperator *op, const wmEvent *even
       case EVT_PADENTER:
       case LEFTMOUSE:
       case MIDDLEMOUSE:
-        if (WM_event_is_modal_tweak_exit(event, mm->event_type)) {
+        if (WM_event_is_modal_drag_exit(event, mm->event_type, mm->event_val)) {
           ed_marker_move_exit(C, op);
           WM_event_add_notifier(C, NC_SCENE | ND_MARKERS, NULL);
           WM_event_add_notifier(C, NC_ANIMATION | ND_MARKERS, NULL);
@@ -976,7 +981,13 @@ static int ed_marker_move_modal(bContext *C, wmOperator *op, const wmEvent *even
             mm->evtx = event->xy[0];
             fac = ((float)(event->xy[0] - mm->firstx) * dx);
 
-            apply_keyb_grid(event->shift, event->ctrl, &fac, 0.0, FPS, 0.1 * FPS, 0);
+            apply_keyb_grid((event->modifier & KM_SHIFT) != 0,
+                            (event->modifier & KM_CTRL) != 0,
+                            &fac,
+                            0.0,
+                            FPS,
+                            0.1 * FPS,
+                            0);
 
             RNA_int_set(op->ptr, "frames", (int)fac);
             ed_marker_move_apply(C, op);
@@ -1028,16 +1039,20 @@ static void MARKER_OT_move(wmOperatorType *ot)
   ot->cancel = ed_marker_move_cancel;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_X;
 
   /* rna storage */
   RNA_def_int(ot->srna, "frames", 0, INT_MIN, INT_MAX, "Frames", "", INT_MIN, INT_MAX);
   PropertyRNA *prop = RNA_def_boolean(
-      ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a tweak event");
+      ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a click-drag event");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ************************** duplicate markers *************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Duplicate Markers
+ * \{ */
 
 /* operator state vars used:
  *     frs: delta movement
@@ -1129,7 +1144,13 @@ static void MARKER_OT_duplicate(wmOperatorType *ot)
   RNA_def_int(ot->srna, "frames", 0, INT_MIN, INT_MAX, "Frames", "", INT_MIN, INT_MAX);
 }
 
-/* ************************** selection ************************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pick Select Markers
+ *
+ * Select/de-select time-marker at the current frame.
+ * \{ */
 
 static void deselect_markers(ListBase *markers)
 {
@@ -1138,13 +1159,12 @@ static void deselect_markers(ListBase *markers)
   }
 }
 
-/* select/deselect TimeMarker at current frame */
 static int select_timeline_marker_frame(ListBase *markers,
                                         int frame,
                                         bool extend,
                                         bool wait_to_deselect_others)
 {
-  TimeMarker *marker, *marker_selected = NULL;
+  TimeMarker *marker, *marker_cycle_selected = NULL;
   int ret_val = OPERATOR_FINISHED;
 
   if (extend) {
@@ -1155,13 +1175,13 @@ static int select_timeline_marker_frame(ListBase *markers,
   for (marker = markers->first; marker; marker = marker->next) {
     if (marker->frame == frame) {
       if (marker->flag & SELECT) {
-        marker_selected = marker->next;
+        marker_cycle_selected = marker->next ? marker->next : markers->first;
         break;
       }
     }
   }
 
-  if (wait_to_deselect_others && marker_selected) {
+  if (wait_to_deselect_others && marker_cycle_selected) {
     ret_val = OPERATOR_RUNNING_MODAL;
   }
   /* if extend is not set, then deselect markers */
@@ -1170,14 +1190,14 @@ static int select_timeline_marker_frame(ListBase *markers,
       deselect_markers(markers);
     }
 
-    LISTBASE_CIRCULAR_FORWARD_BEGIN (markers, marker, marker_selected) {
+    LISTBASE_CIRCULAR_FORWARD_BEGIN (markers, marker, marker_cycle_selected) {
       /* this way a not-extend select will always give 1 selected marker */
       if (marker->frame == frame) {
         marker->flag ^= SELECT;
         break;
       }
     }
-    LISTBASE_CIRCULAR_FORWARD_END(markers, marker, marker_selected);
+    LISTBASE_CIRCULAR_FORWARD_END(markers, marker, marker_cycle_selected);
   }
 
   return ret_val;
@@ -1304,7 +1324,11 @@ static void MARKER_OT_select(wmOperatorType *ot)
 #endif
 }
 
-/* *************************** box select markers **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Box Select Markers
+ * \{ */
 
 /* operator state vars used: (added by default WM callbacks)
  * xmin, ymin
@@ -1396,11 +1420,15 @@ static void MARKER_OT_select_box(wmOperatorType *ot)
   WM_operator_properties_select_operation_simple(ot);
 
   PropertyRNA *prop = RNA_def_boolean(
-      ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a tweak event");
+      ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a click-drag event");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* *********************** (de)select all ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name (de)select all
+ * \{ */
 
 static int ed_marker_select_all_exec(bContext *C, wmOperator *op)
 {
@@ -1436,10 +1464,93 @@ static void MARKER_OT_select_all(wmOperatorType *ot)
   WM_operator_properties_select_all(ot);
 }
 
-/* ***************** remove marker *********************** */
+/** \} */
 
-/* remove selected TimeMarkers */
+/* -------------------------------------------------------------------- */
+/** \name Select Left/Right of Frame
+ * \{ */
+
+typedef enum eMarkers_LeftRightSelect_Mode {
+  MARKERS_LRSEL_LEFT = 0,
+  MARKERS_LRSEL_RIGHT,
+} eMarkers_LeftRightSelect_Mode;
+
+static const EnumPropertyItem prop_markers_select_leftright_modes[] = {
+    {MARKERS_LRSEL_LEFT, "LEFT", 0, "Before Current Frame", ""},
+    {MARKERS_LRSEL_RIGHT, "RIGHT", 0, "After Current Frame", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
+static void ED_markers_select_leftright(bAnimContext *ac,
+                                        const eMarkers_LeftRightSelect_Mode mode,
+                                        const bool extend)
+{
+  ListBase *markers = ac->markers;
+  Scene *scene = ac->scene;
+
+  if (markers == NULL) {
+    return;
+  }
+
+  if (!extend) {
+    deselect_markers(markers);
+  }
+
+  LISTBASE_FOREACH (TimeMarker *, marker, markers) {
+    if ((mode == MARKERS_LRSEL_LEFT && marker->frame <= scene->r.cfra) ||
+        (mode == MARKERS_LRSEL_RIGHT && marker->frame >= scene->r.cfra)) {
+      marker->flag |= SELECT;
+    }
+  }
+}
+
+static int ed_marker_select_leftright_exec(bContext *C, wmOperator *op)
+{
+  const eMarkers_LeftRightSelect_Mode mode = RNA_enum_get(op->ptr, "mode");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+
+  bAnimContext ac;
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  ED_markers_select_leftright(&ac, mode, extend);
+
+  WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+static void MARKER_OT_select_leftright(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Select Markers Before/After Current Frame";
+  ot->description = "Select markers on and left/right of the current frame";
+  ot->idname = "MARKER_OT_select_leftright";
+
+  /* api callbacks */
+  ot->exec = ed_marker_select_leftright_exec;
+  ot->poll = ed_markers_poll_markers_exist;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* rna storage */
+  RNA_def_enum(
+      ot->srna, "mode", prop_markers_select_leftright_modes, MARKERS_LRSEL_LEFT, "mode", "Mode");
+  RNA_def_boolean(ot->srna, "extend", false, "extend", "Extend");
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Remove Marker
+ *
+ * Remove selected time-markers.
+ * \{ */
+
 static int ed_marker_delete_exec(bContext *C, wmOperator *UNUSED(op))
+
 {
   ListBase *markers = ED_context_get_markers(C);
   TimeMarker *marker, *nmarker;
@@ -1477,17 +1588,23 @@ static void MARKER_OT_delete(wmOperatorType *ot)
   ot->idname = "MARKER_OT_delete";
 
   /* api callbacks */
-  ot->invoke = WM_operator_confirm;
+  ot->invoke = WM_operator_confirm_or_exec;
   ot->exec = ed_marker_delete_exec;
   ot->poll = ed_markers_poll_selected_no_locked_markers;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  WM_operator_properties_confirm_or_exec(ot);
 }
 
-/* **************** rename marker ***************** */
+/** \} */
 
-/* rename first selected TimeMarker */
+/* -------------------------------------------------------------------- */
+/** \name Rename Marker
+ *
+ * Rename first selected time-marker.
+ * \{ */
+
 static int ed_marker_rename_exec(bContext *C, wmOperator *op)
 {
   TimeMarker *marker = ED_markers_get_first_selected(ED_context_get_markers(C));
@@ -1546,7 +1663,11 @@ static void MARKER_OT_rename(wmOperatorType *ot)
 #endif
 }
 
-/* **************** make links to scene ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Links to Scene
+ * \{ */
 
 static int ed_marker_make_links_scene_exec(bContext *C, wmOperator *op)
 {
@@ -1607,8 +1728,13 @@ static void MARKER_OT_make_links_scene(wmOperatorType *ot)
   ot->prop = prop;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Camera Bind Marker
+ * \{ */
+
 #ifdef DURIAN_CAMERA_SWITCH
-/* ******************************* camera bind marker ***************** */
 
 static int ed_marker_camera_bind_exec(bContext *C, wmOperator *op)
 {
@@ -1629,11 +1755,11 @@ static int ed_marker_camera_bind_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  marker = ED_markers_find_nearest_marker(markers, CFRA);
-  if ((marker == NULL) || (marker->frame != CFRA)) {
+  marker = ED_markers_find_nearest_marker(markers, scene->r.cfra);
+  if ((marker == NULL) || (marker->frame != scene->r.cfra)) {
     marker = MEM_callocN(sizeof(TimeMarker), "Camera TimeMarker");
     marker->flag = SELECT;
-    marker->frame = CFRA;
+    marker->frame = scene->r.cfra;
     BLI_addtail(markers, marker);
 
     /* deselect all others, so that the user can then move it without problems */
@@ -1672,9 +1798,14 @@ static void MARKER_OT_camera_bind(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
 #endif
 
-/* ************************** registration **********************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Registration
+ * \{ */
 
 void ED_operatortypes_marker(void)
 {
@@ -1684,6 +1815,7 @@ void ED_operatortypes_marker(void)
   WM_operatortype_append(MARKER_OT_select);
   WM_operatortype_append(MARKER_OT_select_box);
   WM_operatortype_append(MARKER_OT_select_all);
+  WM_operatortype_append(MARKER_OT_select_leftright);
   WM_operatortype_append(MARKER_OT_delete);
   WM_operatortype_append(MARKER_OT_rename);
   WM_operatortype_append(MARKER_OT_make_links_scene);
@@ -1696,3 +1828,5 @@ void ED_keymap_marker(wmKeyConfig *keyconf)
 {
   WM_keymap_ensure(keyconf, "Markers", 0, 0);
 }
+
+/** \} */

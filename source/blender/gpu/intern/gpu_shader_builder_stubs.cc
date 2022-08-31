@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -28,6 +12,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
+#include "BKE_attribute.h"
 #include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_material.h"
@@ -117,6 +102,38 @@ void UI_GetThemeColorShadeAlpha4ubv(int UNUSED(colorid),
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Stubs of BKE_attribute.h
+ * \{ */
+
+void BKE_id_attribute_copy_domains_temp(short UNUSED(id_type),
+                                        const struct CustomData *UNUSED(vdata),
+                                        const struct CustomData *UNUSED(edata),
+                                        const struct CustomData *UNUSED(ldata),
+                                        const struct CustomData *UNUSED(pdata),
+                                        const struct CustomData *UNUSED(cdata),
+                                        struct ID *UNUSED(i_id))
+{
+}
+
+struct CustomDataLayer *BKE_id_attributes_active_color_get(const struct ID *UNUSED(id))
+{
+  return nullptr;
+}
+
+struct CustomDataLayer *BKE_id_attributes_render_color_get(const struct ID *UNUSED(id))
+{
+  return nullptr;
+}
+
+eAttrDomain BKE_id_attribute_domain(const struct ID *UNUSED(id),
+                                    const struct CustomDataLayer *UNUSED(layer))
+{
+  return ATTR_DOMAIN_AUTO;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Stubs of BKE_paint.h
  * \{ */
 bool paint_is_face_hidden(const struct MLoopTri *UNUSED(lt),
@@ -186,6 +203,28 @@ int CustomData_get_offset(const struct CustomData *UNUSED(data), int UNUSED(type
   return 0;
 }
 
+int CustomData_get_named_layer_index(const struct CustomData *UNUSED(data),
+                                     int UNUSED(type),
+                                     const char *UNUSED(name))
+{
+  return -1;
+}
+
+int CustomData_get_active_layer_index(const struct CustomData *UNUSED(data), int UNUSED(type))
+{
+  return -1;
+}
+
+int CustomData_get_render_layer_index(const struct CustomData *UNUSED(data), int UNUSED(type))
+{
+  return -1;
+}
+
+bool CustomData_has_layer(const struct CustomData *UNUSED(data), int UNUSED(type))
+{
+  return false;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -218,10 +257,7 @@ int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *UNUSED(subdiv_ccg),
 /* -------------------------------------------------------------------- */
 /** \name Stubs of BKE_node.h
  * \{ */
-void ntreeGPUMaterialNodes(struct bNodeTree *UNUSED(localtree),
-                           struct GPUMaterial *UNUSED(mat),
-                           bool *UNUSED(has_surface_output),
-                           bool *UNUSED(has_volume_output))
+void ntreeGPUMaterialNodes(struct bNodeTree *UNUSED(localtree), struct GPUMaterial *UNUSED(mat))
 {
   BLI_assert_unreachable();
 }
@@ -254,6 +290,15 @@ void BM_face_as_array_vert_tri(BMFace *UNUSED(f), BMVert *UNUSED(r_verts[3]))
 void DRW_deferred_shader_remove(struct GPUMaterial *UNUSED(mat))
 {
   BLI_assert_unreachable();
+}
+
+void DRW_cdlayer_attr_aliases_add(struct GPUVertFormat *UNUSED(format),
+                                  const char *UNUSED(base_name),
+                                  const struct CustomData *UNUSED(data),
+                                  const struct CustomDataLayer *UNUSED(cl),
+                                  bool UNUSED(is_active_render),
+                                  bool UNUSED(is_active_layer))
+{
 }
 
 /** \} */

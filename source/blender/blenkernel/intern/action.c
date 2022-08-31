@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -69,6 +53,8 @@
 #include "BIK_api.h"
 
 #include "RNA_access.h"
+#include "RNA_path.h"
+#include "RNA_prototypes.h"
 
 #include "BLO_read_write.h"
 
@@ -995,13 +981,10 @@ void BKE_pose_channels_remove(Object *ob,
       else {
         /* Maybe something the bone references is being removed instead? */
         for (con = pchan->constraints.first; con; con = con->next) {
-          const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
           ListBase targets = {NULL, NULL};
           bConstraintTarget *ct;
 
-          if (cti && cti->get_constraint_targets) {
-            cti->get_constraint_targets(con, &targets);
-
+          if (BKE_constraint_targets_get(con, &targets)) {
             for (ct = targets.first; ct; ct = ct->next) {
               if (ct->tar == ob) {
                 if (ct->subtarget[0]) {
@@ -1013,9 +996,7 @@ void BKE_pose_channels_remove(Object *ob,
               }
             }
 
-            if (cti->flush_constraint_targets) {
-              cti->flush_constraint_targets(con, &targets, 0);
-            }
+            BKE_constraint_targets_flush(con, &targets, 0);
           }
         }
 
@@ -1260,7 +1241,7 @@ void BKE_pose_update_constraint_flags(bPose *pose)
         /* if we have a valid target, make sure that this will get updated on frame-change
          * (needed for when there is no anim-data for this pose)
          */
-        if ((data->tar) && (data->tar->type == OB_CURVE)) {
+        if ((data->tar) && (data->tar->type == OB_CURVES_LEGACY)) {
           pose->flag |= POSE_CONSTRAINTS_TIMEDEPEND;
         }
       }
@@ -1956,27 +1937,12 @@ void BKE_pose_blend_read_lib(BlendLibReader *reader, Object *ob, bPose *pose)
     return;
   }
 
-  /* always rebuild to match proxy or lib changes, but on Undo */
+  /* Always rebuild to match library changes, except on Undo. */
   bool rebuild = false;
 
   if (!BLO_read_lib_is_undo(reader)) {
-    if (ob->proxy || ob->id.lib != arm->id.lib) {
+    if (ob->id.lib != arm->id.lib) {
       rebuild = true;
-    }
-  }
-
-  if (ob->proxy) {
-    /* sync proxy layer */
-    if (pose->proxy_layer) {
-      arm->layer = pose->proxy_layer;
-    }
-
-    /* sync proxy active bone */
-    if (pose->proxy_act_bone[0]) {
-      Bone *bone = BKE_armature_find_bone_name(arm, pose->proxy_act_bone);
-      if (bone) {
-        arm->act_bone = bone;
-      }
     }
   }
 
@@ -1985,7 +1951,7 @@ void BKE_pose_blend_read_lib(BlendLibReader *reader, Object *ob, bPose *pose)
 
     pchan->bone = BKE_armature_find_bone_name(arm, pchan->name);
 
-    IDP_BlendReadLib(reader, pchan->prop);
+    IDP_BlendReadLib(reader, ob->id.lib, pchan->prop);
 
     BLO_read_id_address(reader, ob->id.lib, &pchan->custom);
     if (UNLIKELY(pchan->bone == NULL)) {
@@ -2017,4 +1983,17 @@ void BKE_pose_blend_read_expand(BlendExpander *expander, bPose *pose)
     IDP_BlendReadExpand(expander, chan->prop);
     BLO_expand(expander, chan->custom);
   }
+}
+
+void BKE_action_fcurves_clear(bAction *act)
+{
+  if (!act) {
+    return;
+  }
+  while (act->curves.first) {
+    FCurve *fcu = act->curves.first;
+    action_groups_remove_channel(act, fcu);
+    BKE_fcurve_free(fcu);
+  }
+  DEG_id_tag_update(&act->id, ID_RECALC_ANIMATION_NO_FLUSH);
 }

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -57,13 +41,12 @@ typedef struct DDSData {
 
 /**
  * \ingroup imbuf
- * This is the abstraction of an image.  ImBuf is the basic type used for all
- * imbuf operations.
+ * This is the abstraction of an image. ImBuf is the basic type used for all imbuf operations.
  *
  * Also; add new variables to the end to save pain!
  */
 
-/* Warning: Keep explicit value assignments here,
+/* WARNING: Keep explicit value assignments here,
  * this file is included in areas where not all format defines are set
  * (e.g. intern/dds only get WITH_DDS, even if TIFF, HDR etc are also defined).
  * See T46524. */
@@ -95,6 +78,9 @@ enum eImbFileType {
 
 #ifdef WITH_DDS
   IMB_FTYPE_DDS = 13,
+#endif
+#ifdef WITH_WEBP
+  IMB_FTYPE_WEBP = 14,
 #endif
 };
 
@@ -189,7 +175,7 @@ typedef struct ImBuf {
    * avoid problems and use int. - campbell */
   int x, y;
 
-  /** Active amount of bits/bitplanes */
+  /** Active amount of bits/bit-planes. */
   unsigned char planes;
   /** Number of channels in `rect_float` (0 = 4 channel default) */
   int channels;
@@ -265,7 +251,7 @@ typedef struct ImBuf {
   int refcounter;
 
   /* some parameters to pass along for packing images */
-  /** Compressed image only used with png and exr currently */
+  /** Compressed image only used with PNG and EXR currently. */
   unsigned char *encodedbuffer;
   /** Size of data written to encodedbuffer */
   unsigned int encodedsize;
@@ -289,7 +275,7 @@ typedef struct ImBuf {
 } ImBuf;
 
 /**
- * \brief userflags: Flags used internally by blender for imagebuffers
+ * \brief userflags: Flags used internally by blender for image-buffers.
  */
 
 enum {

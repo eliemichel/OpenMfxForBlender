@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 #pragma once
 
 /** \file
@@ -52,6 +36,7 @@ struct IDNameLib_Map;
 struct ImBuf;
 struct Library;
 struct MainLock;
+struct UniqueName_Map;
 
 /* Blender thumbnail, as written on file (width, height, and data as char RGBA). */
 /* We pack pixel data after that struct. */
@@ -89,12 +74,20 @@ typedef struct MainIDRelationsEntry {
   uint tags;
 } MainIDRelationsEntry;
 
-/* MainIDRelationsEntry.tags */
+/** #MainIDRelationsEntry.tags */
 typedef enum eMainIDRelationsEntryTags {
   /* Generic tag marking the entry as to be processed. */
   MAINIDRELATIONS_ENTRY_TAGS_DOIT = 1 << 0,
+
+  /* Generic tag marking the entry as processed in the `to` direction (i.e. we processed the IDs
+   * used by this item). */
+  MAINIDRELATIONS_ENTRY_TAGS_PROCESSED_TO = 1 << 1,
+  /* Generic tag marking the entry as processed in the `from` direction (i.e. we processed the IDs
+   * using by this item). */
+  MAINIDRELATIONS_ENTRY_TAGS_PROCESSED_FROM = 1 << 2,
   /* Generic tag marking the entry as processed. */
-  MAINIDRELATIONS_ENTRY_TAGS_PROCESSED = 1 << 1,
+  MAINIDRELATIONS_ENTRY_TAGS_PROCESSED = MAINIDRELATIONS_ENTRY_TAGS_PROCESSED_TO |
+                                         MAINIDRELATIONS_ENTRY_TAGS_PROCESSED_FROM,
 } eMainIDRelationsEntryTags;
 
 typedef struct MainIDRelations {
@@ -182,7 +175,11 @@ typedef struct Main {
   ListBase linestyles;
   ListBase cachefiles;
   ListBase workspaces;
-  ListBase hairs;
+  /**
+   * \note The name `hair_curves` is chosen to be different than `curves`,
+   * but they are generic curve data-blocks, not just for hair.
+   */
+  ListBase hair_curves;
   ListBase pointclouds;
   ListBase volumes;
   ListBase simulations;
@@ -196,6 +193,9 @@ typedef struct Main {
 
   /* IDMap of IDs. Currently used when reading (expanding) libraries. */
   struct IDNameLib_Map *id_map;
+
+  /* Used for efficient calculations of unique names. */
+  struct UniqueName_Map *name_map;
 
   struct MainLock *lock;
 } Main;

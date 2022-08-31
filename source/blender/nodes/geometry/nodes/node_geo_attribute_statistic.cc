@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <algorithm>
 #include <numeric>
@@ -91,7 +77,7 @@ static void node_update(bNodeTree *ntree, bNode *node)
   bNodeSocket *socket_vector_std = socket_vector_range->next;
   bNodeSocket *socket_vector_variance = socket_vector_std->next;
 
-  const CustomDataType data_type = static_cast<CustomDataType>(node->custom1);
+  const eCustomDataType data_type = static_cast<eCustomDataType>(node->custom1);
 
   nodeSetSocketAvailability(ntree, socket_float_attr, data_type == CD_PROP_FLOAT);
   nodeSetSocketAvailability(ntree, socket_float_mean, data_type == CD_PROP_FLOAT);
@@ -114,7 +100,7 @@ static void node_update(bNodeTree *ntree, bNode *node)
   nodeSetSocketAvailability(ntree, socket_vector_variance, data_type == CD_PROP_FLOAT3);
 }
 
-static std::optional<CustomDataType> node_type_from_other_socket(const bNodeSocket &socket)
+static std::optional<eCustomDataType> node_type_from_other_socket(const bNodeSocket &socket)
 {
   switch (socket.type) {
     case SOCK_FLOAT:
@@ -135,7 +121,7 @@ static void node_gather_link_searches(GatherLinkSearchOpParams &params)
   const NodeDeclaration &declaration = *params.node_type().fixed_declaration;
   search_link_ops_for_declarations(params, declaration.inputs().take_front(2));
 
-  const std::optional<CustomDataType> type = node_type_from_other_socket(params.other_socket());
+  const std::optional<eCustomDataType> type = node_type_from_other_socket(params.other_socket());
   if (!type) {
     return;
   }
@@ -198,8 +184,8 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.get_input<GeometrySet>("Geometry");
   const bNode &node = params.node();
-  const CustomDataType data_type = static_cast<CustomDataType>(node.custom1);
-  const AttributeDomain domain = static_cast<AttributeDomain>(node.custom2);
+  const eCustomDataType data_type = static_cast<eCustomDataType>(node.custom1);
+  const eAttrDomain domain = static_cast<eAttrDomain>(node.custom2);
   Vector<const GeometryComponent *> components = geometry_set.get_components_for_read();
 
   const Field<bool> selection_field = params.get_input<Field<bool>>("Selection");
@@ -209,15 +195,19 @@ static void node_geo_exec(GeoNodeExecParams params)
       const Field<float> input_field = params.get_input<Field<float>>("Attribute");
       Vector<float> data;
       for (const GeometryComponent *component : components) {
-        if (component->attribute_domain_supported(domain)) {
+        const std::optional<AttributeAccessor> attributes = component->attributes();
+        if (!attributes.has_value()) {
+          continue;
+        }
+        if (attributes->domain_supported(domain)) {
           GeometryComponentFieldContext field_context{*component, domain};
-          const int domain_size = component->attribute_domain_size(domain);
+          const int domain_num = attributes->domain_size(domain);
 
-          fn::FieldEvaluator data_evaluator{field_context, domain_size};
+          fn::FieldEvaluator data_evaluator{field_context, domain_num};
           data_evaluator.add(input_field);
           data_evaluator.set_selection(selection_field);
           data_evaluator.evaluate();
-          const VArray<float> &component_data = data_evaluator.get_evaluated<float>(0);
+          const VArray<float> component_data = data_evaluator.get_evaluated<float>(0);
           const IndexMask selection = data_evaluator.get_evaluated_selection_as_mask();
 
           const int next_data_index = data.size();
@@ -287,15 +277,19 @@ static void node_geo_exec(GeoNodeExecParams params)
       const Field<float3> input_field = params.get_input<Field<float3>>("Attribute_001");
       Vector<float3> data;
       for (const GeometryComponent *component : components) {
-        if (component->attribute_domain_supported(domain)) {
+        const std::optional<AttributeAccessor> attributes = component->attributes();
+        if (!attributes.has_value()) {
+          continue;
+        }
+        if (attributes->domain_supported(domain)) {
           GeometryComponentFieldContext field_context{*component, domain};
-          const int domain_size = component->attribute_domain_size(domain);
+          const int domain_num = attributes->domain_size(domain);
 
-          fn::FieldEvaluator data_evaluator{field_context, domain_size};
+          fn::FieldEvaluator data_evaluator{field_context, domain_num};
           data_evaluator.add(input_field);
           data_evaluator.set_selection(selection_field);
           data_evaluator.evaluate();
-          const VArray<float3> &component_data = data_evaluator.get_evaluated<float3>(0);
+          const VArray<float3> component_data = data_evaluator.get_evaluated<float3>(0);
           const IndexMask selection = data_evaluator.get_evaluated_selection_as_mask();
 
           const int next_data_index = data.size();

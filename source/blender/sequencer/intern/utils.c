@@ -1,24 +1,7 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * - Blender Foundation, 2003-2009
- * - Peter Schlaile <peter [at] schlaile [dot] de> 2005/2006
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved.
+ *           2003-2009 Blender Foundation.
+ *           2005-2006 Peter Schlaile <peter [at] schlaile [dot] de> */
 
 /** \file
  * \ingroup bke
@@ -41,6 +24,7 @@
 #include "BKE_scene.h"
 
 #include "SEQ_animation.h"
+#include "SEQ_channels.h"
 #include "SEQ_edit.h"
 #include "SEQ_iterator.h"
 #include "SEQ_relations.h"
@@ -55,54 +39,8 @@
 
 #include "multiview.h"
 #include "proxy.h"
+#include "sequencer.h"
 #include "utils.h"
-
-void SEQ_sort(ListBase *seqbase)
-{
-  if (seqbase == NULL) {
-    return;
-  }
-
-  /* all strips together per kind, and in order of y location ("machine") */
-  ListBase inputbase, effbase;
-  Sequence *seq, *seqt;
-
-  BLI_listbase_clear(&inputbase);
-  BLI_listbase_clear(&effbase);
-
-  while ((seq = BLI_pophead(seqbase))) {
-
-    if (seq->type & SEQ_TYPE_EFFECT) {
-      seqt = effbase.first;
-      while (seqt) {
-        if (seqt->machine >= seq->machine) {
-          BLI_insertlinkbefore(&effbase, seqt, seq);
-          break;
-        }
-        seqt = seqt->next;
-      }
-      if (seqt == NULL) {
-        BLI_addtail(&effbase, seq);
-      }
-    }
-    else {
-      seqt = inputbase.first;
-      while (seqt) {
-        if (seqt->machine >= seq->machine) {
-          BLI_insertlinkbefore(&inputbase, seqt, seq);
-          break;
-        }
-        seqt = seqt->next;
-      }
-      if (seqt == NULL) {
-        BLI_addtail(&inputbase, seq);
-      }
-    }
-  }
-
-  BLI_movelisttolist(seqbase, &inputbase);
-  BLI_movelisttolist(seqbase, &effbase);
-}
 
 typedef struct SeqUniqueInfo {
   Sequence *seq;
@@ -241,14 +179,15 @@ const char *SEQ_sequence_give_name(Sequence *seq)
   return name;
 }
 
-ListBase *SEQ_get_seqbase_from_sequence(Sequence *seq, int *r_offset)
+ListBase *SEQ_get_seqbase_from_sequence(Sequence *seq, ListBase **r_channels, int *r_offset)
 {
   ListBase *seqbase = NULL;
 
   switch (seq->type) {
     case SEQ_TYPE_META: {
       seqbase = &seq->seqbase;
-      *r_offset = seq->start;
+      *r_channels = &seq->channels;
+      *r_offset = SEQ_time_start_frame_get(seq);
       break;
     }
     case SEQ_TYPE_SCENE: {
@@ -256,6 +195,7 @@ ListBase *SEQ_get_seqbase_from_sequence(Sequence *seq, int *r_offset)
         Editing *ed = SEQ_editing_get(seq->scene);
         if (ed) {
           seqbase = &ed->seqbase;
+          *r_channels = &ed->channels;
           *r_offset = seq->scene->r.sfra;
         }
       }
@@ -277,7 +217,7 @@ void seq_open_anim_file(Scene *scene, Sequence *seq, bool openfile)
   const bool is_multiview = (seq->flag & SEQ_USE_VIEWS) != 0 &&
                             (scene->r.scemode & R_MULTIVIEW) != 0;
 
-  if ((seq->anims.first != NULL) && (((StripAnim *)seq->anims.first)->anim != NULL)) {
+  if ((seq->anims.first != NULL) && (((StripAnim *)seq->anims.first)->anim != NULL) && !openfile) {
     return;
   }
 
@@ -397,16 +337,19 @@ void seq_open_anim_file(Scene *scene, Sequence *seq, bool openfile)
 
 const Sequence *SEQ_get_topmost_sequence(const Scene *scene, int frame)
 {
-  const Editing *ed = scene->ed;
-  const Sequence *seq, *best_seq = NULL;
-  int best_machine = -1;
+  Editing *ed = scene->ed;
 
   if (!ed) {
     return NULL;
   }
 
+  ListBase *channels = SEQ_channels_displayed_get(ed);
+  const Sequence *seq, *best_seq = NULL;
+  int best_machine = -1;
+
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
-    if (seq->flag & SEQ_MUTE || !SEQ_time_strip_intersects_frame(seq, frame)) {
+    if (SEQ_render_is_muted(channels, seq) ||
+        !SEQ_time_strip_intersects_frame(scene, seq, frame)) {
       continue;
     }
     /* Only use strips that generate an image, not ones that combine
@@ -427,20 +370,18 @@ const Sequence *SEQ_get_topmost_sequence(const Scene *scene, int frame)
   return best_seq;
 }
 
-ListBase *SEQ_get_seqbase_by_seq(ListBase *seqbase, Sequence *seq)
+ListBase *SEQ_get_seqbase_by_seq(const Scene *scene, Sequence *seq)
 {
-  Sequence *iseq;
-  ListBase *lb = NULL;
+  Editing *ed = SEQ_editing_get(scene);
+  ListBase *main_seqbase = &ed->seqbase;
+  Sequence *seq_meta = seq_sequence_lookup_meta_by_seq(scene, seq);
 
-  for (iseq = seqbase->first; iseq; iseq = iseq->next) {
-    if (seq == iseq) {
-      return seqbase;
-    }
-    if (iseq->seqbase.first && (lb = SEQ_get_seqbase_by_seq(&iseq->seqbase, seq))) {
-      return lb;
-    }
+  if (seq_meta != NULL) {
+    return &seq_meta->seqbase;
   }
-
+  if (BLI_findindex(main_seqbase, seq) >= 0) {
+    return main_seqbase;
+  }
   return NULL;
 }
 

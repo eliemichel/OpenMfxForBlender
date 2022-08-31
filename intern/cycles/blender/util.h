@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #ifndef __BLENDER_UTIL_H__
 #define __BLENDER_UTIL_H__
@@ -34,7 +21,8 @@
 
 extern "C" {
 void BKE_image_user_frame_calc(void *ima, void *iuser, int cfra);
-void BKE_image_user_file_path_ex(void *iuser, void *ima, char *path, bool resolve_udim);
+void BKE_image_user_file_path_ex(
+    void *bmain, void *iuser, void *ima, char *path, bool resolve_udim, bool resolve_multiview);
 unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame, int tile);
 float *BKE_image_get_float_pixels_for_frame(void *image, int frame, int tile);
 }
@@ -275,8 +263,11 @@ static inline bool BKE_object_is_modified(BL::Object &self, BL::Scene &scene, bo
 static inline bool BKE_object_is_deform_modified(BObjectInfo &self, BL::Scene &scene, bool preview)
 {
   if (!self.is_real_object_data()) {
-    return false;
+    /* Comes from geometry nodes, can't use heuristic to guess if it's animated. */
+    return true;
   }
+
+  /* Use heuristic to quickly check if object is potentially animated. */
   return self.real_object.is_deform_modified(scene, (preview) ? (1 << 0) : (1 << 1)) ? true :
                                                                                        false;
 }
@@ -291,12 +282,15 @@ static inline int render_resolution_y(BL::RenderSettings &b_render)
   return b_render.resolution_y() * b_render.resolution_percentage() / 100;
 }
 
-static inline string image_user_file_path(BL::ImageUser &iuser, BL::Image &ima, int cfra)
+static inline string image_user_file_path(BL::BlendData &data,
+                                          BL::ImageUser &iuser,
+                                          BL::Image &ima,
+                                          int cfra)
 {
   char filepath[1024];
   iuser.tile(0);
   BKE_image_user_frame_calc(ima.ptr.data, iuser.ptr.data, cfra);
-  BKE_image_user_file_path_ex(iuser.ptr.data, ima.ptr.data, filepath, false);
+  BKE_image_user_file_path_ex(data.ptr.data, iuser.ptr.data, ima.ptr.data, filepath, false, true);
 
   return string(filepath);
 }

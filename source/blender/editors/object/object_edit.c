@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edobj
@@ -33,6 +17,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
+#include "BLI_math_rotation.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -67,6 +52,7 @@
 #include "BKE_image.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
@@ -89,6 +75,7 @@
 #include "ED_curve.h"
 #include "ED_gpencil.h"
 #include "ED_image.h"
+#include "ED_keyframes_keylist.h"
 #include "ED_lattice.h"
 #include "ED_mball.h"
 #include "ED_mesh.h"
@@ -100,12 +87,13 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_types.h"
 
 #include "UI_interface_icons.h"
 
 #include "CLG_log.h"
 
-/* For menu/popup icons etc etc. */
+/* For menu/popup icons etc. */
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -352,16 +340,11 @@ void OBJECT_OT_hide_view_set(wmOperatorType *ot)
 
 static int object_hide_collection_exec(bContext *C, wmOperator *op)
 {
-  wmWindow *win = CTX_wm_window(C);
   View3D *v3d = CTX_wm_view3d(C);
 
   int index = RNA_int_get(op->ptr, "collection_index");
-  const bool extend = (win->eventstate->shift != 0);
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
   const bool toggle = RNA_boolean_get(op->ptr, "toggle");
-
-  if (win->eventstate->alt != 0) {
-    index += 10;
-  }
 
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -481,6 +464,8 @@ void OBJECT_OT_hide_collection(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
   prop = RNA_def_boolean(ot->srna, "toggle", 0, "Toggle", "Toggle visibility");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend visibility");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }
 
 /** \} */
@@ -584,7 +569,7 @@ static bool ED_object_editmode_load_free_ex(Main *bmain,
      */
     DEG_relations_tag_update(bmain);
   }
-  else if (ELEM(obedit->type, OB_CURVE, OB_SURF)) {
+  else if (ELEM(obedit->type, OB_CURVES_LEGACY, OB_SURF)) {
     const Curve *cu = obedit->data;
     if (cu->editnurb == NULL) {
       return false;
@@ -815,11 +800,15 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
 
     WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_LATTICE, scene);
   }
-  else if (ELEM(ob->type, OB_SURF, OB_CURVE)) {
+  else if (ELEM(ob->type, OB_SURF, OB_CURVES_LEGACY)) {
     ok = true;
     ED_curve_editnurb_make(ob);
 
     WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_CURVE, scene);
+  }
+  else if (ob->type == OB_CURVES) {
+    ok = true;
+    WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_CURVES, scene);
   }
 
   if (ok) {
@@ -988,7 +977,7 @@ static int posemode_exec(bContext *C, wmOperator *op)
       const View3D *v3d = CTX_wm_view3d(C);
       FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob) {
         if ((ob != obact) && (ob->type == OB_ARMATURE) && (ob->mode == OB_MODE_OBJECT) &&
-            (!ID_IS_LINKED(ob))) {
+            BKE_id_is_editable(bmain, &ob->id)) {
           ED_object_posemode_enter_ex(bmain, ob);
         }
       }
@@ -1035,7 +1024,7 @@ void ED_object_check_force_modifiers(Main *bmain, Scene *scene, Object *object)
   if (!md) {
     if (pd && (pd->shape == PFIELD_SHAPE_SURFACE) &&
         !ELEM(pd->forcefield, 0, PFIELD_GUIDE, PFIELD_TEXTURE)) {
-      if (ELEM(object->type, OB_MESH, OB_SURF, OB_FONT, OB_CURVE)) {
+      if (ELEM(object->type, OB_MESH, OB_SURF, OB_FONT, OB_CURVES_LEGACY)) {
         ED_object_modifier_add(NULL, bmain, scene, object, NULL, eModifierType_Surface);
       }
     }
@@ -1221,30 +1210,29 @@ static int object_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEv
   /* set default settings from existing/stored settings */
   {
     bAnimVizSettings *avs = &ob->avs;
-
-    RNA_int_set(op->ptr, "start_frame", avs->path_sf);
-    RNA_int_set(op->ptr, "end_frame", avs->path_ef);
+    RNA_enum_set(op->ptr, "display_type", avs->path_type);
+    RNA_enum_set(op->ptr, "range", avs->path_range);
   }
 
   /* show popup dialog to allow editing of range... */
   /* FIXME: hard-coded dimensions here are just arbitrary. */
-  return WM_operator_props_dialog_popup(C, op, 200);
+  return WM_operator_props_dialog_popup(C, op, 270);
 }
 
 /* Calculate/recalculate whole paths (avs.path_sf to avs.path_ef) */
 static int object_calculate_paths_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  int start = RNA_int_get(op->ptr, "start_frame");
-  int end = RNA_int_get(op->ptr, "end_frame");
+  short path_type = RNA_enum_get(op->ptr, "display_type");
+  short path_range = RNA_enum_get(op->ptr, "range");
 
-  /* set up path data for bones being calculated */
+  /* set up path data for objects being calculated */
   CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
     bAnimVizSettings *avs = &ob->avs;
-
     /* grab baking settings from operator settings */
-    avs->path_sf = start;
-    avs->path_ef = end;
+    avs->path_type = path_type;
+    avs->path_range = path_range;
+    animviz_motionpath_compute_range(ob, scene);
 
     /* verify that the selected object has the appropriate settings */
     animviz_verify_motionpaths(op->reports, scene, ob, NULL);
@@ -1255,6 +1243,9 @@ static int object_calculate_paths_exec(bContext *C, wmOperator *op)
   ED_objects_recalculate_paths_selected(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
 
   /* notifiers for updates */
+  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW_ANIMVIZ, NULL);
+  /* NOTE: the notifier below isn't actually correct, but kept around just to be on the safe side.
+   * If further testing shows it's not necessary (for both bones and objects) removal is fine. */
   WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM | ND_POSE, NULL);
 
   return OPERATOR_FINISHED;
@@ -1263,9 +1254,9 @@ static int object_calculate_paths_exec(bContext *C, wmOperator *op)
 void OBJECT_OT_paths_calculate(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Calculate Object Paths";
+  ot->name = "Calculate Object Motion Paths";
   ot->idname = "OBJECT_OT_paths_calculate";
-  ot->description = "Calculate motion paths for the selected objects";
+  ot->description = "Generate motion paths for the selected objects";
 
   /* api callbacks */
   ot->invoke = object_calculate_paths_invoke;
@@ -1276,24 +1267,18 @@ void OBJECT_OT_paths_calculate(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_int(ot->srna,
-              "start_frame",
-              1,
-              MINAFRAME,
-              MAXFRAME,
-              "Start",
-              "First frame to calculate object paths on",
-              MINFRAME,
-              MAXFRAME / 2.0);
-  RNA_def_int(ot->srna,
-              "end_frame",
-              250,
-              MINAFRAME,
-              MAXFRAME,
-              "End",
-              "Last frame to calculate object paths on",
-              MINFRAME,
-              MAXFRAME / 2.0);
+  RNA_def_enum(ot->srna,
+               "display_type",
+               rna_enum_motionpath_display_type_items,
+               MOTIONPATH_TYPE_RANGE,
+               "Display type",
+               "");
+  RNA_def_enum(ot->srna,
+               "range",
+               rna_enum_motionpath_range_items,
+               MOTIONPATH_RANGE_SCENE,
+               "Computation Range",
+               "");
 }
 
 /** \} */
@@ -1312,18 +1297,27 @@ static bool object_update_paths_poll(bContext *C)
   return false;
 }
 
-static int object_update_paths_exec(bContext *C, wmOperator *UNUSED(op))
+static int object_update_paths_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
 
   if (scene == NULL) {
     return OPERATOR_CANCELLED;
   }
+  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+    animviz_motionpath_compute_range(ob, scene);
+    /* verify that the selected object has the appropriate settings */
+    animviz_verify_motionpaths(op->reports, scene, ob, NULL);
+  }
+  CTX_DATA_END;
 
   /* calculate the paths for objects that have them (and are tagged to get refreshed) */
   ED_objects_recalculate_paths_selected(C, scene, OBJECT_PATH_CALC_RANGE_FULL);
 
   /* notifiers for updates */
+  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW_ANIMVIZ, NULL);
+  /* NOTE: the notifier below isn't actually correct, but kept around just to be on the safe side.
+   * If further testing shows it's not necessary (for both bones and objects) removal is fine. */
   WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM | ND_POSE, NULL);
 
   return OPERATOR_FINISHED;
@@ -1439,7 +1433,7 @@ static int object_clear_paths_exec(bContext *C, wmOperator *op)
 /* operator callback/wrapper */
 static int object_clear_paths_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if ((event->shift) && !RNA_struct_property_is_set(op->ptr, "only_selected")) {
+  if ((event->modifier & KM_SHIFT) && !RNA_struct_property_is_set(op->ptr, "only_selected")) {
     RNA_boolean_set(op->ptr, "only_selected", true);
   }
   return object_clear_paths_exec(C, op);
@@ -1464,46 +1458,6 @@ void OBJECT_OT_paths_clear(wmOperatorType *ot)
   ot->prop = RNA_def_boolean(
       ot->srna, "only_selected", false, "Only Selected", "Only clear paths from selected objects");
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Update Motion Paths Range from Scene Operator
- * \{ */
-
-static int object_update_paths_range_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  Scene *scene = CTX_data_scene(C);
-
-  /* Loop over all editable objects in scene. */
-  CTX_DATA_BEGIN (C, Object *, ob, editable_objects) {
-    /* use Preview Range or Full Frame Range - whichever is in use */
-    ob->avs.path_sf = PSFRA;
-    ob->avs.path_ef = PEFRA;
-
-    /* tag for updates */
-    DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
-    WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
-  }
-  CTX_DATA_END;
-
-  return OPERATOR_FINISHED;
-}
-
-void OBJECT_OT_paths_range_update(wmOperatorType *ot)
-{
-  /* identifiers */
-  ot->name = "Update Range from Scene";
-  ot->idname = "OBJECT_OT_paths_range_update";
-  ot->description = "Update frame range for motion paths from the Scene's current frame range";
-
-  /* callbacks */
-  ot->exec = object_update_paths_range_exec;
-  ot->poll = ED_operator_object_active_editable;
-
-  /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /** \} */
@@ -1543,6 +1497,7 @@ static int shade_smooth_exec(bContext *C, wmOperator *op)
     }
   }
 
+  Main *bmain = CTX_data_main(C);
   LISTBASE_FOREACH (CollectionPointerLink *, ctx_ob, &ctx_objects) {
     /* Always un-tag all object data-blocks irrespective of our ability to operate on them. */
     Object *ob = ctx_ob->ptr.data;
@@ -1553,7 +1508,7 @@ static int shade_smooth_exec(bContext *C, wmOperator *op)
     data->tag &= ~LIB_TAG_DOIT;
     /* Finished un-tagging, continue with regular logic. */
 
-    if (data && ID_IS_LINKED(data)) {
+    if (data && !BKE_id_is_editable(bmain, data)) {
       has_linked_data = true;
       continue;
     }
@@ -1561,10 +1516,15 @@ static int shade_smooth_exec(bContext *C, wmOperator *op)
     bool changed = false;
     if (ob->type == OB_MESH) {
       BKE_mesh_smooth_flag_set(ob->data, use_smooth);
+      if (use_smooth) {
+        const bool use_auto_smooth = RNA_boolean_get(op->ptr, "use_auto_smooth");
+        const float auto_smooth_angle = RNA_float_get(op->ptr, "auto_smooth_angle");
+        BKE_mesh_auto_smooth_flag_set(ob->data, use_auto_smooth, auto_smooth_angle);
+      }
       BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
       changed = true;
     }
-    else if (ELEM(ob->type, OB_SURF, OB_CURVE)) {
+    else if (ELEM(ob->type, OB_SURF, OB_CURVES_LEGACY)) {
       BKE_curve_smooth_flag_set(ob->data, use_smooth);
       changed = true;
     }
@@ -1630,6 +1590,25 @@ void OBJECT_OT_shade_smooth(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* properties */
+  PropertyRNA *prop;
+
+  prop = RNA_def_boolean(
+      ot->srna,
+      "use_auto_smooth",
+      false,
+      "Auto Smooth",
+      "Enable automatic smooth based on smooth/sharp faces/edges and angle between faces");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_property(ot->srna, "auto_smooth_angle", PROP_FLOAT, PROP_ANGLE);
+  RNA_def_property_range(prop, 0.0f, DEG2RADF(180.0f));
+  RNA_def_property_float_default(prop, DEG2RADF(30.0f));
+  RNA_def_property_ui_text(prop,
+                           "Angle",
+                           "Maximum angle between face normals that will be considered as smooth"
+                           "(unused if custom split normals data are available)");
 }
 
 /** \} */
@@ -1841,13 +1820,6 @@ static bool move_to_collection_poll(bContext *C)
   if (CTX_wm_space_outliner(C) != NULL) {
     return ED_outliner_collections_editor_poll(C);
   }
-
-  View3D *v3d = CTX_wm_view3d(C);
-
-  if (v3d && v3d->localvd) {
-    return false;
-  }
-
   return ED_operator_objectmode(C);
 }
 
@@ -1868,6 +1840,11 @@ static int move_to_collection_exec(bContext *C, wmOperator *op)
   Collection *collection = BKE_collection_from_index(scene, collection_index);
   if (collection == NULL) {
     BKE_report(op->reports, RPT_ERROR, "Unexpected error, collection not found");
+    return OPERATOR_CANCELLED;
+  }
+
+  if (ID_IS_OVERRIDE_LIBRARY(collection)) {
+    BKE_report(op->reports, RPT_ERROR, "Cannot add objects to a library override collection");
     return OPERATOR_CANCELLED;
   }
 

@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -27,6 +13,7 @@
  */
 
 #include <algorithm>
+#include <cstring>
 #include <utility>
 
 #include "BLI_memory_utils.hh"
@@ -40,60 +27,48 @@ namespace detail {
  * Additional type specific #ExtraInfo can be embedded here as well.
  */
 template<typename ExtraInfo> struct AnyTypeInfo {
+  /* The pointers are allowed to be null, which means that the implementation is trivial. */
   void (*copy_construct)(void *dst, const void *src);
   void (*move_construct)(void *dst, void *src);
   void (*destruct)(void *src);
   const void *(*get)(const void *src);
   ExtraInfo extra_info;
-
-  /**
-   * Used when #T is stored directly in the inline buffer of the #Any.
-   */
-  template<typename T> static const AnyTypeInfo &get_for_inline()
-  {
-    static AnyTypeInfo funcs = {[](void *dst, const void *src) { new (dst) T(*(const T *)src); },
-                                [](void *dst, void *src) { new (dst) T(std::move(*(T *)src)); },
-                                [](void *src) { ((T *)src)->~T(); },
-                                [](const void *src) { return src; },
-                                ExtraInfo::template get<T>()};
-    return funcs;
-  }
-
-  /**
-   * Used when #T can't be stored directly in the inline buffer and is stored in a #std::unique_ptr
-   * instead. In this scenario, the #std::unique_ptr is stored in the inline buffer.
-   */
-  template<typename T> static const AnyTypeInfo &get_for_unique_ptr()
-  {
-    using Ptr = std::unique_ptr<T>;
-    static AnyTypeInfo funcs = {
-        [](void *dst, const void *src) { new (dst) Ptr(new T(**(const Ptr *)src)); },
-        [](void *dst, void *src) { new (dst) Ptr(new T(std::move(**(Ptr *)src))); },
-        [](void *src) { ((Ptr *)src)->~Ptr(); },
-        [](const void *src) -> const void * { return &**(const Ptr *)src; },
-        ExtraInfo::template get<T>()};
-    return funcs;
-  }
-
-  /**
-   * Used when the #Any does not contain any type currently.
-   */
-  static const AnyTypeInfo &get_for_empty()
-  {
-    static AnyTypeInfo funcs = {[](void *UNUSED(dst), const void *UNUSED(src)) {},
-                                [](void *UNUSED(dst), void *UNUSED(src)) {},
-                                [](void *UNUSED(src)) {},
-                                [](const void *UNUSED(src)) -> const void * { return nullptr; },
-                                ExtraInfo{}};
-    return funcs;
-  }
 };
+
+/**
+ * Used when #T is stored directly in the inline buffer of the #Any.
+ */
+template<typename ExtraInfo, typename T>
+static constexpr AnyTypeInfo<ExtraInfo> info_for_inline = {
+    is_trivially_copy_constructible_extended_v<T> ?
+        nullptr :
+        +[](void *dst, const void *src) { new (dst) T(*(const T *)src); },
+    is_trivially_move_constructible_extended_v<T> ?
+        nullptr :
+        +[](void *dst, void *src) { new (dst) T(std::move(*(T *)src)); },
+    is_trivially_destructible_extended_v<T> ? nullptr :
+                                              +[](void *src) { std::destroy_at(((T *)src)); },
+    nullptr,
+    ExtraInfo::template get<T>()};
+
+/**
+ * Used when #T can't be stored directly in the inline buffer and is stored in a #std::unique_ptr
+ * instead. In this scenario, the #std::unique_ptr is stored in the inline buffer.
+ */
+template<typename T> using Ptr = std::unique_ptr<T>;
+template<typename ExtraInfo, typename T>
+static constexpr AnyTypeInfo<ExtraInfo> info_for_unique_ptr = {
+    [](void *dst, const void *src) { new (dst) Ptr<T>(new T(**(const Ptr<T> *)src)); },
+    [](void *dst, void *src) { new (dst) Ptr<T>(new T(std::move(**(Ptr<T> *)src))); },
+    [](void *src) { std::destroy_at((Ptr<T> *)src); },
+    [](const void *src) -> const void * { return &**(const Ptr<T> *)src; },
+    ExtraInfo::template get<T>()};
 
 /**
  * Dummy extra info that is used when no additional type information should be stored in the #Any.
  */
 struct NoExtraInfo {
-  template<typename T> static NoExtraInfo get()
+  template<typename T> static constexpr NoExtraInfo get()
   {
     return {};
   }
@@ -124,17 +99,20 @@ class Any {
   using RealExtraInfo =
       std::conditional_t<std::is_void_v<ExtraInfo>, detail::NoExtraInfo, ExtraInfo>;
   using Info = detail::AnyTypeInfo<RealExtraInfo>;
+  static constexpr size_t RealInlineBufferCapacity = std::max(InlineBufferCapacity,
+                                                              sizeof(std::unique_ptr<int>));
 
   /**
    * Inline buffer that either contains nothing, the stored value directly, or a #std::unique_ptr
    * to the value.
    */
-  AlignedBuffer<std::max(InlineBufferCapacity, sizeof(std::unique_ptr<int>)), Alignment> buffer_{};
+  AlignedBuffer<RealInlineBufferCapacity, Alignment> buffer_{};
 
   /**
    * Information about the type that is currently stored.
+   * This is null when the #Any does not contain a value.
    */
-  const Info *info_ = &Info::get_for_empty();
+  const Info *info_ = nullptr;
 
  public:
   /** Only copy constructible types can be stored in #Any. */
@@ -162,10 +140,10 @@ class Any {
     using DecayT = std::decay_t<T>;
     static_assert(is_allowed_v<DecayT>);
     if constexpr (is_inline_v<DecayT>) {
-      return Info::template get_for_inline<DecayT>();
+      return detail::template info_for_inline<RealExtraInfo, DecayT>;
     }
     else {
-      return Info::template get_for_unique_ptr<DecayT>();
+      return detail::template info_for_unique_ptr<RealExtraInfo, DecayT>;
     }
   }
 
@@ -174,7 +152,14 @@ class Any {
 
   Any(const Any &other) : info_(other.info_)
   {
-    info_->copy_construct(&buffer_, &other.buffer_);
+    if (info_ != nullptr) {
+      if (info_->copy_construct != nullptr) {
+        info_->copy_construct(&buffer_, &other.buffer_);
+      }
+      else {
+        memcpy(&buffer_, &other.buffer_, RealInlineBufferCapacity);
+      }
+    }
   }
 
   /**
@@ -183,7 +168,14 @@ class Any {
    */
   Any(Any &&other) noexcept : info_(other.info_)
   {
-    info_->move_construct(&buffer_, &other.buffer_);
+    if (info_ != nullptr) {
+      if (info_->move_construct != nullptr) {
+        info_->move_construct(&buffer_, &other.buffer_);
+      }
+      else {
+        memcpy(&buffer_, &other.buffer_, RealInlineBufferCapacity);
+      }
+    }
   }
 
   /**
@@ -192,18 +184,7 @@ class Any {
    */
   template<typename T, typename... Args> explicit Any(std::in_place_type_t<T>, Args &&...args)
   {
-    using DecayT = std::decay_t<T>;
-    static_assert(is_allowed_v<DecayT>);
-    info_ = &this->template get_info<DecayT>();
-    if constexpr (is_inline_v<DecayT>) {
-      /* Construct the value directly in the inline buffer. */
-      new (&buffer_) DecayT(std::forward<Args>(args)...);
-    }
-    else {
-      /* Construct the value in a new allocation and store a #std::unique_ptr to it in the inline
-       * buffer. */
-      new (&buffer_) std::unique_ptr<DecayT>(new DecayT(std::forward<Args>(args)...));
-    }
+    this->emplace_on_empty<T>(std::forward<Args>(args)...);
   }
 
   /**
@@ -216,11 +197,15 @@ class Any {
 
   ~Any()
   {
-    info_->destruct(&buffer_);
+    if (info_ != nullptr) {
+      if (info_->destruct != nullptr) {
+        info_->destruct(&buffer_);
+      }
+    }
   }
 
   /**
-   * \note: Only needed because the template below does not count as copy assignment operator.
+   * \note Only needed because the template below does not count as copy assignment operator.
    */
   Any &operator=(const Any &other)
   {
@@ -248,8 +233,12 @@ class Any {
   /** Destruct any existing value to make it empty. */
   void reset()
   {
-    info_->destruct(&buffer_);
-    info_ = &Info::get_for_empty();
+    if (info_ != nullptr) {
+      if (info_->destruct != nullptr) {
+        info_->destruct(&buffer_);
+      }
+    }
+    info_ = nullptr;
   }
 
   operator bool() const
@@ -259,7 +248,7 @@ class Any {
 
   bool has_value() const
   {
-    return info_ != &Info::get_for_empty();
+    return info_ != nullptr;
   }
 
   template<typename T, typename... Args> std::decay_t<T> &emplace(Args &&...args)
@@ -267,6 +256,26 @@ class Any {
     this->~Any();
     new (this) Any(std::in_place_type<T>, std::forward<Args>(args)...);
     return this->get<T>();
+  }
+
+  template<typename T, typename... Args> std::decay_t<T> &emplace_on_empty(Args &&...args)
+  {
+    BLI_assert(!this->has_value());
+    using DecayT = std::decay_t<T>;
+    static_assert(is_allowed_v<DecayT>);
+    info_ = &this->template get_info<DecayT>();
+    if constexpr (is_inline_v<DecayT>) {
+      /* Construct the value directly in the inline buffer. */
+      DecayT *stored_value = new (&buffer_) DecayT(std::forward<Args>(args)...);
+      return *stored_value;
+    }
+    else {
+      /* Construct the value in a new allocation and store a #std::unique_ptr to it in the inline
+       * buffer. */
+      std::unique_ptr<DecayT> *stored_value = new (&buffer_)
+          std::unique_ptr<DecayT>(new DecayT(std::forward<Args>(args)...));
+      return **stored_value;
+    }
   }
 
   /** Return true when the value that is currently stored is a #T. */
@@ -278,13 +287,21 @@ class Any {
   /** Get a pointer to the stored value. */
   void *get()
   {
-    return const_cast<void *>(info_->get(&buffer_));
+    BLI_assert(info_ != nullptr);
+    if (info_->get != nullptr) {
+      return const_cast<void *>(info_->get(&buffer_));
+    }
+    return &buffer_;
   }
 
   /** Get a pointer to the stored value. */
   const void *get() const
   {
-    return info_->get(&buffer_);
+    BLI_assert(info_ != nullptr);
+    if (info_->get != nullptr) {
+      return info_->get(&buffer_);
+    }
+    return &buffer_;
   }
 
   /**
@@ -312,6 +329,7 @@ class Any {
    */
   const RealExtraInfo &extra_info() const
   {
+    BLI_assert(info_ != nullptr);
     return info_->extra_info;
   }
 };

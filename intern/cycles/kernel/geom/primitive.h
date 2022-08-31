@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 /* Primitive Utilities
  *
@@ -31,11 +18,11 @@ CCL_NAMESPACE_BEGIN
  * attributes for performance, mainly for GPU performance to avoid bringing in
  * heavy volume interpolation code. */
 
-ccl_device_inline float primitive_surface_attribute_float(KernelGlobals kg,
-                                                          ccl_private const ShaderData *sd,
-                                                          const AttributeDescriptor desc,
-                                                          ccl_private float *dx,
-                                                          ccl_private float *dy)
+ccl_device_forceinline float primitive_surface_attribute_float(KernelGlobals kg,
+                                                               ccl_private const ShaderData *sd,
+                                                               const AttributeDescriptor desc,
+                                                               ccl_private float *dx,
+                                                               ccl_private float *dy)
 {
   if (sd->type & PRIMITIVE_TRIANGLE) {
     if (subd_triangle_patch(kg, sd) == ~0)
@@ -62,11 +49,11 @@ ccl_device_inline float primitive_surface_attribute_float(KernelGlobals kg,
   }
 }
 
-ccl_device_inline float2 primitive_surface_attribute_float2(KernelGlobals kg,
-                                                            ccl_private const ShaderData *sd,
-                                                            const AttributeDescriptor desc,
-                                                            ccl_private float2 *dx,
-                                                            ccl_private float2 *dy)
+ccl_device_forceinline float2 primitive_surface_attribute_float2(KernelGlobals kg,
+                                                                 ccl_private const ShaderData *sd,
+                                                                 const AttributeDescriptor desc,
+                                                                 ccl_private float2 *dx,
+                                                                 ccl_private float2 *dy)
 {
   if (sd->type & PRIMITIVE_TRIANGLE) {
     if (subd_triangle_patch(kg, sd) == ~0)
@@ -93,11 +80,11 @@ ccl_device_inline float2 primitive_surface_attribute_float2(KernelGlobals kg,
   }
 }
 
-ccl_device_inline float3 primitive_surface_attribute_float3(KernelGlobals kg,
-                                                            ccl_private const ShaderData *sd,
-                                                            const AttributeDescriptor desc,
-                                                            ccl_private float3 *dx,
-                                                            ccl_private float3 *dy)
+ccl_device_forceinline float3 primitive_surface_attribute_float3(KernelGlobals kg,
+                                                                 ccl_private const ShaderData *sd,
+                                                                 const AttributeDescriptor desc,
+                                                                 ccl_private float3 *dx,
+                                                                 ccl_private float3 *dy)
 {
   if (sd->type & PRIMITIVE_TRIANGLE) {
     if (subd_triangle_patch(kg, sd) == ~0)
@@ -148,10 +135,10 @@ ccl_device_forceinline float4 primitive_surface_attribute_float4(KernelGlobals k
 #endif
   else {
     if (dx)
-      *dx = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+      *dx = zero_float4();
     if (dy)
-      *dy = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-    return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+      *dy = zero_float4();
+    return zero_float4();
   }
 }
 
@@ -162,15 +149,15 @@ ccl_device_forceinline float4 primitive_surface_attribute_float4(KernelGlobals k
  * attributes for performance, mainly for GPU performance to avoid bringing in
  * heavy volume interpolation code. */
 
-ccl_device_inline bool primitive_is_volume_attribute(ccl_private const ShaderData *sd,
-                                                     const AttributeDescriptor desc)
+ccl_device_forceinline bool primitive_is_volume_attribute(ccl_private const ShaderData *sd,
+                                                          const AttributeDescriptor desc)
 {
   return sd->type == PRIMITIVE_VOLUME;
 }
 
-ccl_device_inline float primitive_volume_attribute_float(KernelGlobals kg,
-                                                         ccl_private const ShaderData *sd,
-                                                         const AttributeDescriptor desc)
+ccl_device_forceinline float primitive_volume_attribute_float(KernelGlobals kg,
+                                                              ccl_private const ShaderData *sd,
+                                                              const AttributeDescriptor desc)
 {
   if (primitive_is_volume_attribute(sd, desc)) {
     return volume_attribute_value_to_float(volume_attribute_float4(kg, sd, desc));
@@ -180,9 +167,9 @@ ccl_device_inline float primitive_volume_attribute_float(KernelGlobals kg,
   }
 }
 
-ccl_device_inline float3 primitive_volume_attribute_float3(KernelGlobals kg,
-                                                           ccl_private const ShaderData *sd,
-                                                           const AttributeDescriptor desc)
+ccl_device_forceinline float3 primitive_volume_attribute_float3(KernelGlobals kg,
+                                                                ccl_private const ShaderData *sd,
+                                                                const AttributeDescriptor desc)
 {
   if (primitive_is_volume_attribute(sd, desc)) {
     return volume_attribute_value_to_float3(volume_attribute_float4(kg, sd, desc));
@@ -192,22 +179,22 @@ ccl_device_inline float3 primitive_volume_attribute_float3(KernelGlobals kg,
   }
 }
 
-ccl_device_inline float4 primitive_volume_attribute_float4(KernelGlobals kg,
-                                                           ccl_private const ShaderData *sd,
-                                                           const AttributeDescriptor desc)
+ccl_device_forceinline float4 primitive_volume_attribute_float4(KernelGlobals kg,
+                                                                ccl_private const ShaderData *sd,
+                                                                const AttributeDescriptor desc)
 {
   if (primitive_is_volume_attribute(sd, desc)) {
     return volume_attribute_float4(kg, sd, desc);
   }
   else {
-    return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    return zero_float4();
   }
 }
 #endif
 
 /* Default UV coordinate */
 
-ccl_device_inline float3 primitive_uv(KernelGlobals kg, ccl_private const ShaderData *sd)
+ccl_device_forceinline float3 primitive_uv(KernelGlobals kg, ccl_private const ShaderData *sd)
 {
   const AttributeDescriptor desc = find_attribute(kg, sd, ATTR_STD_UV);
 
@@ -275,8 +262,8 @@ ccl_device float3 primitive_tangent(KernelGlobals kg, ccl_private ShaderData *sd
 
 /* Motion vector for motion pass */
 
-ccl_device_inline float4 primitive_motion_vector(KernelGlobals kg,
-                                                 ccl_private const ShaderData *sd)
+ccl_device_forceinline float4 primitive_motion_vector(KernelGlobals kg,
+                                                      ccl_private const ShaderData *sd)
 {
   /* center position */
   float3 center;

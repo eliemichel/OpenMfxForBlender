@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2017 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2017 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -40,11 +24,11 @@
 
 #include "GPU_capabilities.h"
 
-#include "draw_cache_extract.h"
+#include "draw_cache_extract.hh"
 #include "draw_cache_inline.h"
 #include "draw_subdivision.h"
 
-#include "mesh_extractors/extract_mesh.h"
+#include "mesh_extractors/extract_mesh.hh"
 
 // #define DEBUG_TIME
 
@@ -171,7 +155,7 @@ struct ExtractTaskData {
   bool use_threading = false;
 
   ExtractTaskData(const MeshRenderData *mr,
-                  struct MeshBatchCache *cache,
+                  MeshBatchCache *cache,
                   ExtractorRunDatas *extractors,
                   MeshBufferList *mbuflist,
                   const bool use_threading)
@@ -209,7 +193,7 @@ static void extract_task_data_free(void *data)
  * \{ */
 
 BLI_INLINE void extract_init(const MeshRenderData *mr,
-                             struct MeshBatchCache *cache,
+                             MeshBatchCache *cache,
                              ExtractorRunDatas &extractors,
                              MeshBufferList *mbuflist,
                              void *data_stack)
@@ -225,7 +209,7 @@ BLI_INLINE void extract_init(const MeshRenderData *mr,
 }
 
 BLI_INLINE void extract_finish(const MeshRenderData *mr,
-                               struct MeshBatchCache *cache,
+                               MeshBatchCache *cache,
                                const ExtractorRunDatas &extractors,
                                void *data_stack)
 {
@@ -567,22 +551,21 @@ static struct TaskNode *mesh_extract_render_data_node_create(struct TaskGraph *t
 /** \name Extract Loop
  * \{ */
 
-static void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
-                                               MeshBatchCache *cache,
-                                               MeshBufferCache *mbc,
-                                               Object *object,
-                                               Mesh *me,
+void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
+                                        MeshBatchCache *cache,
+                                        MeshBufferCache *mbc,
+                                        Object *object,
+                                        Mesh *me,
 
-                                               const bool is_editmode,
-                                               const bool is_paint_mode,
-                                               const bool is_mode_active,
-                                               const float obmat[4][4],
-                                               const bool do_final,
-                                               const bool do_uvedit,
-                                               const bool use_subsurf_fdots,
-                                               const Scene *scene,
-                                               const ToolSettings *ts,
-                                               const bool use_hide)
+                                        const bool is_editmode,
+                                        const bool is_paint_mode,
+                                        const bool is_mode_active,
+                                        const float obmat[4][4],
+                                        const bool do_final,
+                                        const bool do_uvedit,
+                                        const Scene *scene,
+                                        const ToolSettings *ts,
+                                        const bool use_hide)
 {
   /* For each mesh where batches needs to be updated a sub-graph will be added to the task_graph.
    * This sub-graph starts with an extract_render_data_node. This fills/converts the required
@@ -636,7 +619,6 @@ static void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
   EXTRACT_ADD_REQUESTED(vbo, lnor);
   EXTRACT_ADD_REQUESTED(vbo, uv);
   EXTRACT_ADD_REQUESTED(vbo, tan);
-  EXTRACT_ADD_REQUESTED(vbo, vcol);
   EXTRACT_ADD_REQUESTED(vbo, sculpt_data);
   EXTRACT_ADD_REQUESTED(vbo, orco);
   EXTRACT_ADD_REQUESTED(vbo, edge_fac);
@@ -703,7 +685,7 @@ static void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
   MeshRenderData *mr = mesh_render_data_create(
       object, me, is_editmode, is_paint_mode, is_mode_active, obmat, do_final, do_uvedit, ts);
   mr->use_hide = use_hide;
-  mr->use_subsurf_fdots = use_subsurf_fdots;
+  mr->use_subsurf_fdots = mr->me && mr->me->runtime.subsurf_face_dot_tags != nullptr;
   mr->use_final_mesh = do_final;
 
 #ifdef DEBUG_TIME
@@ -789,10 +771,10 @@ static void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
 /** \name Subdivision Extract Loop
  * \{ */
 
-static void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
-                                                      MeshBufferCache *mbc,
-                                                      DRWSubdivCache *subdiv_cache,
-                                                      MeshRenderData *mr)
+void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
+                                               MeshBufferCache *mbc,
+                                               DRWSubdivCache *subdiv_cache,
+                                               MeshRenderData *mr)
 {
   /* Create an array containing all the extractors that needs to be executed. */
   ExtractorRunDatas extractors;
@@ -810,7 +792,12 @@ static void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
   /* The order in which extractors are added to the list matters somewhat, as some buffers are
    * reused when building others. */
   EXTRACT_ADD_REQUESTED(ibo, tris);
-  EXTRACT_ADD_REQUESTED(vbo, pos_nor);
+
+  /* Orcos are extracted at the same time as positions. */
+  if (DRW_vbo_requested(mbuflist->vbo.pos_nor) || DRW_vbo_requested(mbuflist->vbo.orco)) {
+    extractors.append(&extract_pos_nor);
+  }
+
   EXTRACT_ADD_REQUESTED(vbo, lnor);
   for (int i = 0; i < GPU_MAX_ATTR; i++) {
     EXTRACT_ADD_REQUESTED(vbo, attr[i]);
@@ -860,7 +847,6 @@ static void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
   EXTRACT_ADD_REQUESTED(vbo, edituv_stretch_angle);
   EXTRACT_ADD_REQUESTED(ibo, lines_paint_mask);
   EXTRACT_ADD_REQUESTED(ibo, lines_adjacency);
-  EXTRACT_ADD_REQUESTED(vbo, vcol);
   EXTRACT_ADD_REQUESTED(vbo, weights);
   EXTRACT_ADD_REQUESTED(vbo, sculpt_data);
 
@@ -920,48 +906,3 @@ static void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
 /** \} */
 
 }  // namespace blender::draw
-
-extern "C" {
-void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
-                                        MeshBatchCache *cache,
-                                        MeshBufferCache *mbc,
-                                        Object *object,
-                                        Mesh *me,
-
-                                        const bool is_editmode,
-                                        const bool is_paint_mode,
-                                        const bool is_mode_active,
-                                        const float obmat[4][4],
-                                        const bool do_final,
-                                        const bool do_uvedit,
-                                        const bool use_subsurf_fdots,
-                                        const Scene *scene,
-                                        const ToolSettings *ts,
-                                        const bool use_hide)
-{
-  blender::draw::mesh_buffer_cache_create_requested(task_graph,
-                                                    cache,
-                                                    mbc,
-                                                    object,
-                                                    me,
-                                                    is_editmode,
-                                                    is_paint_mode,
-                                                    is_mode_active,
-                                                    obmat,
-                                                    do_final,
-                                                    do_uvedit,
-                                                    use_subsurf_fdots,
-                                                    scene,
-                                                    ts,
-                                                    use_hide);
-}
-
-void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
-                                               MeshBufferCache *mbc,
-                                               DRWSubdivCache *subdiv_cache,
-                                               MeshRenderData *mr)
-{
-  blender::draw::mesh_buffer_cache_create_requested_subdiv(cache, mbc, subdiv_cache, mr);
-}
-
-}  // extern "C"

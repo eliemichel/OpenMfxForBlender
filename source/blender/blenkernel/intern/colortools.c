@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -1172,6 +1156,80 @@ bool BKE_curvemapping_RGBA_does_something(const CurveMapping *cumap)
     }
   }
   return false;
+}
+
+void BKE_curvemapping_get_range_minimums(const CurveMapping *curve_mapping, float minimums[CM_TOT])
+{
+  for (int i = 0; i < CM_TOT; i++) {
+    minimums[i] = curve_mapping->cm[i].mintable;
+  }
+}
+
+void BKE_curvemapping_compute_range_dividers(const CurveMapping *curve_mapping,
+                                             float dividers[CM_TOT])
+{
+  for (int i = 0; i < CM_TOT; i++) {
+    const CurveMap *curve_map = &curve_mapping->cm[i];
+    dividers[i] = 1.0f / max_ff(1e-8f, curve_map->maxtable - curve_map->mintable);
+  }
+}
+
+void BKE_curvemapping_compute_slopes(const CurveMapping *curve_mapping,
+                                     float start_slopes[CM_TOT],
+                                     float end_slopes[CM_TOT])
+{
+  float range_dividers[CM_TOT];
+  BKE_curvemapping_compute_range_dividers(curve_mapping, range_dividers);
+  for (int i = 0; i < CM_TOT; i++) {
+    const CurveMap *curve_map = &curve_mapping->cm[i];
+    /* If extrapolation is not enabled, the slopes are horizontal. */
+    if (!(curve_mapping->flag & CUMA_EXTEND_EXTRAPOLATE)) {
+      start_slopes[i] = 0.0f;
+      end_slopes[i] = 0.0f;
+      continue;
+    }
+
+    if (curve_map->ext_in[0] != 0.0f) {
+      start_slopes[i] = curve_map->ext_in[1] / (curve_map->ext_in[0] * range_dividers[i]);
+    }
+    else {
+      start_slopes[i] = 1e8f;
+    }
+
+    if (curve_map->ext_out[0] != 0.0f) {
+      end_slopes[i] = curve_map->ext_out[1] / (curve_map->ext_out[0] * range_dividers[i]);
+    }
+    else {
+      end_slopes[i] = 1e8f;
+    }
+  }
+}
+
+bool BKE_curvemapping_is_map_identity(const CurveMapping *curve_mapping, int index)
+{
+  if (!(curve_mapping->flag & CUMA_EXTEND_EXTRAPOLATE)) {
+    return false;
+  }
+  const CurveMap *curve_map = &curve_mapping->cm[index];
+  if (curve_map->maxtable - curve_map->mintable != 1.0f) {
+    return false;
+  }
+  if (curve_map->ext_in[0] != curve_map->ext_in[1]) {
+    return false;
+  }
+  if (curve_map->ext_out[0] != curve_map->ext_out[1]) {
+    return false;
+  }
+  if (curve_map->totpoint != 2) {
+    return false;
+  }
+  if (curve_map->curve[0].x != 0 || curve_map->curve[0].y != 0) {
+    return false;
+  }
+  if (curve_map->curve[1].x != 0 || curve_map->curve[1].y != 0) {
+    return false;
+  }
+  return true;
 }
 
 void BKE_curvemapping_init(CurveMapping *cumap)

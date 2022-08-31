@@ -24,7 +24,7 @@ float linear_zdepth(float depth, vec4 viewvecs[2], mat4 proj_mat)
  */
 float calculate_transparent_weight(void)
 {
-  float z = linear_zdepth(gl_FragCoord.z, ViewVecs, ProjectionMatrix);
+  float z = linear_zdepth(gl_FragCoord.z, drw_view.viewvecs, drw_view.winmat);
 #if 0
   /* Eq 10 : Good for surfaces with varying opacity (like particles) */
   float a = min(1.0, alpha * 10.0) + 0.01;
@@ -62,7 +62,7 @@ void main()
 #endif
 
 #ifdef V3D_LIGHTING_STUDIO
-  vec3 shaded_color = get_world_lighting(color, roughness, metallic, N, I);
+  vec3 shaded_color = get_world_lighting(color, _roughness, metallic, N, I);
 #endif
 
 #ifdef V3D_LIGHTING_FLAT

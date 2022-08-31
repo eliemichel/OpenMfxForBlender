@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2020 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2020 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edsculpt
@@ -195,7 +179,11 @@ void SCULPT_neighbor_color_average(SculptSession *ss, float result[4], int index
 
   SculptVertexNeighborIter ni;
   SCULPT_VERTEX_NEIGHBORS_ITER_BEGIN (ss, index, ni) {
-    add_v4_v4(avg, SCULPT_vertex_color_get(ss, ni.index));
+    float tmp[4] = {0};
+
+    SCULPT_vertex_color_get(ss, ni.index, tmp);
+
+    add_v4_v4(avg, tmp);
     total++;
   }
   SCULPT_VERTEX_NEIGHBORS_ITER_END(ni);
@@ -204,7 +192,7 @@ void SCULPT_neighbor_color_average(SculptSession *ss, float result[4], int index
     mul_v4_v4fl(result, avg, 1.0f / total);
   }
   else {
-    copy_v4_v4(result, SCULPT_vertex_color_get(ss, index));
+    SCULPT_vertex_color_get(ss, index, result);
   }
 }
 
@@ -247,7 +235,7 @@ static void do_enhance_details_brush_task_cb_ex(void *__restrict userdata,
     SCULPT_clip(sd, ss, vd.co, disp);
 
     if (vd.mvert) {
-      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
+      BKE_pbvh_vert_tag_update_normal(ss->pbvh, vd.index);
     }
   }
   BKE_pbvh_vertex_iter_end;
@@ -267,7 +255,7 @@ static void SCULPT_enhance_details_brush(Sculpt *sd,
   if (SCULPT_stroke_is_first_brush_step(ss->cache)) {
     const int totvert = SCULPT_vertex_count_get(ss);
     ss->cache->detail_directions = MEM_malloc_arrayN(
-        totvert, 3 * sizeof(float), "details directions");
+        totvert, sizeof(float[3]), "details directions");
 
     for (int i = 0; i < totvert; i++) {
       float avg[3];
@@ -335,9 +323,9 @@ static void do_smooth_brush_task_cb_ex(void *__restrict userdata,
       sub_v3_v3v3(val, avg, vd.co);
       madd_v3_v3v3fl(val, vd.co, val, fade);
       SCULPT_clip(sd, ss, vd.co, val);
-    }
-    if (vd.mvert) {
-      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
+      if (vd.mvert) {
+        BKE_pbvh_vert_tag_update_normal(ss->pbvh, vd.index);
+      }
     }
   }
   BKE_pbvh_vertex_iter_end;
@@ -472,7 +460,7 @@ static void SCULPT_do_surface_smooth_brush_laplacian_task_cb_ex(
       ss, &test, data->brush->falloff_shape);
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
-  SCULPT_orig_vert_data_init(&orig_data, data->ob, data->nodes[n]);
+  SCULPT_orig_vert_data_init(&orig_data, data->ob, data->nodes[n], SCULPT_UNDO_COORDS);
 
   BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
@@ -494,7 +482,7 @@ static void SCULPT_do_surface_smooth_brush_laplacian_task_cb_ex(
         ss, disp, vd.co, ss->cache->surface_smooth_laplacian_disp, vd.index, orig_data.co, alpha);
     madd_v3_v3fl(vd.co, disp, clamp_f(fade, 0.0f, 1.0f));
     if (vd.mvert) {
-      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
+      BKE_pbvh_vert_tag_update_normal(ss->pbvh, vd.index);
     }
   }
   BKE_pbvh_vertex_iter_end;

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2009 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2009 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edgpencil
@@ -28,6 +12,10 @@
 #include "ED_numinput.h"
 
 #define DEPTH_INVALID 1.0f
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* internal exports only */
 struct Material;
@@ -738,16 +726,16 @@ struct GP_EditableStrokes_Iter {
   (void)0
 
 /**
- * Iterate over all editable editcurves in the current context,
- * stopping on each usable layer + stroke + curve pair (i.e. gpl, gps and gpc)
+ * Iterate over all editable edit-curves in the current context,
+ * stopping on each usable layer + stroke + curve pair (i.e. `gpl`, `gps` and `gpc`)
  * to perform some operations on the curve.
  *
  * \param gpl: The identifier to use for the layer of the stroke being processed.
- *                    Choose a suitable value to avoid name clashes.
+ *             Choose a suitable value to avoid name clashes.
  * \param gps: The identifier to use for current stroke being processed.
- *                    Choose a suitable value to avoid name clashes.
+ *             Choose a suitable value to avoid name clashes.
  * \param gpc: The identifier to use for current editcurve being processed.
- *                    Choose a suitable value to avoid name clashes.
+ *             Choose a suitable value to avoid name clashes.
  */
 #define GP_EDITABLE_CURVES_BEGIN(gpstroke_iter, C, gpl, gps, gpc) \
   { \
@@ -842,3 +830,7 @@ struct GP_EditableStrokes_Iter {
 extern const EnumPropertyItem rna_gpencil_reproject_type_items[];
 
 /* ****************************************************** */
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edutil
@@ -386,11 +370,13 @@ tSlider *ED_slider_create(struct bContext *C)
   slider->factor = 0.5;
 
   /* Add draw callback. Always in header. */
-  LISTBASE_FOREACH (ARegion *, region, &slider->area->regionbase) {
-    if (region->regiontype == RGN_TYPE_HEADER) {
-      slider->region_header = region;
-      slider->draw_handle = ED_region_draw_cb_activate(
-          region->type, slider_draw, slider, REGION_DRAW_POST_PIXEL);
+  if (slider->area) {
+    LISTBASE_FOREACH (ARegion *, region, &slider->area->regionbase) {
+      if (region->regiontype == RGN_TYPE_HEADER) {
+        slider->region_header = region;
+        slider->draw_handle = ED_region_draw_cb_activate(
+            region->type, slider_draw, slider, REGION_DRAW_POST_PIXEL);
+      }
     }
   }
 
@@ -481,7 +467,9 @@ void ED_slider_status_string_get(const struct tSlider *slider,
 void ED_slider_destroy(struct bContext *C, tSlider *slider)
 {
   /* Remove draw callback. */
-  ED_region_draw_cb_exit(slider->region_header->type, slider->draw_handle);
+  if (slider->draw_handle) {
+    ED_region_draw_cb_exit(slider->region_header->type, slider->draw_handle);
+  }
   ED_area_status_text(slider->area, NULL);
   ED_workspace_status_text(C, NULL);
   MEM_freeN(slider);
@@ -727,7 +715,7 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
         if (i == 4) {
           struct {
             struct ResultBLF info;
-            rctf rect;
+            rcti rect;
           } wrap;
 
           BLF_enable(fontid, BLF_WORD_WRAP);
@@ -776,7 +764,7 @@ void ED_region_image_metadata_draw(
   /* find window pixel coordinates of origin */
   GPU_matrix_push();
 
-  /* offset and zoom using ogl */
+  /* Offset and zoom using GPU viewport. */
   GPU_matrix_translate_2f(x, y);
   GPU_matrix_scale_2f(zoomx, zoomy);
 

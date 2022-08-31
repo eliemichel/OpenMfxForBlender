@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2018 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2018 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -41,7 +25,9 @@
 #include "opensubdiv_evaluator_capi.h"
 #include "opensubdiv_topology_refiner_capi.h"
 
-/* =================----====--===== MODULE ==========================------== */
+/* --------------------------------------------------------------------
+ * Module.
+ */
 
 void BKE_subdiv_init()
 {
@@ -53,7 +39,9 @@ void BKE_subdiv_exit()
   openSubdiv_cleanup();
 }
 
-/* ========================== CONVERSION HELPERS ============================ */
+/* --------------------------------------------------------------------
+ * Conversion helpers.
+ */
 
 eSubdivFVarLinearInterpolation BKE_subdiv_fvar_interpolation_from_uv_smooth(int uv_smooth)
 {
@@ -88,7 +76,9 @@ eSubdivVtxBoundaryInterpolation BKE_subdiv_vtx_boundary_interpolation_from_subsu
   return SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
 }
 
-/* ================================ SETTINGS ================================ */
+/* --------------------------------------------------------------------
+ * Settings.
+ */
 
 bool BKE_subdiv_settings_equal(const SubdivSettings *settings_a, const SubdivSettings *settings_b)
 {
@@ -99,7 +89,9 @@ bool BKE_subdiv_settings_equal(const SubdivSettings *settings_a, const SubdivSet
           settings_a->fvar_linear_interpolation == settings_b->fvar_linear_interpolation);
 }
 
-/* ============================== CONSTRUCTION ============================== */
+/* --------------------------------------------------------------------
+ * Construction.
+ */
 
 /* Creation from scratch. */
 
@@ -122,7 +114,7 @@ Subdiv *BKE_subdiv_new_from_converter(const SubdivSettings *settings,
      * The thing here is: OpenSubdiv can only deal with faces, but our
      * side of subdiv also deals with loose vertices and edges. */
   }
-  Subdiv *subdiv = MEM_callocN(sizeof(Subdiv), "subdiv from converetr");
+  Subdiv *subdiv = MEM_callocN(sizeof(Subdiv), "subdiv from converter");
   subdiv->settings = *settings;
   subdiv->topology_refiner = osd_topology_refiner;
   subdiv->evaluator = NULL;
@@ -210,7 +202,9 @@ void BKE_subdiv_free(Subdiv *subdiv)
   MEM_freeN(subdiv);
 }
 
-/* =========================== PTEX FACES AND GRIDS ========================= */
+/* --------------------------------------------------------------------
+ * Topology helpers.
+ */
 
 int *BKE_subdiv_face_ptex_offset_get(Subdiv *subdiv)
 {

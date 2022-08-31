@@ -1,24 +1,13 @@
-/*
- * Copyright 2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2021-2022 Blender Foundation */
 
 #include "blender/display_driver.h"
 
 #include "device/device.h"
 #include "util/log.h"
 #include "util/opengl.h"
+
+#include "GPU_platform.h"
 
 extern "C" {
 struct RenderEngine;
@@ -520,6 +509,7 @@ class DrawTileAndPBO {
 
   DrawTile tile;
   GLPixelBufferObject buffer_object;
+  bool need_update_texture_pixels = false;
 };
 
 /* --------------------------------------------------------------------
@@ -598,6 +588,8 @@ void BlenderDisplayDriver::next_tile_begin()
   /* Moving to the next tile without giving render data for the current tile is not an expected
    * situation. */
   DCHECK(!need_clear_);
+  /* Texture should have been updated from the PBO at this point. */
+  DCHECK(!tiles_->current_tile.need_update_texture_pixels);
 
   tiles_->finished_tiles.tiles.emplace_back(std::move(tiles_->current_tile.tile));
 }
@@ -715,8 +707,18 @@ void BlenderDisplayDriver::update_end()
    * One concern with this approach is that if the update happens more often than drawing then
    * doing the unpack here occupies GPU transfer for no good reason. However, the render scheduler
    * takes care of ensuring updates don't happen that often. In regular applications redraw will
-   * happen much more often than this update. */
-  update_tile_texture_pixels(tiles_->current_tile);
+   * happen much more often than this update.
+   *
+   * On some older GPUs on macOS, there is a driver crash when updating the texture for viewport
+   * renders while Blender is drawing. As a workaround update texture during draw, under assumption
+   * that there is no graphics interop on macOS and viewport render has a single tile. */
+  if (use_gl_context_ &&
+      GPU_type_matches_ex(GPU_DEVICE_NVIDIA, GPU_OS_MAC, GPU_DRIVER_ANY, GPU_BACKEND_ANY)) {
+    tiles_->current_tile.need_update_texture_pixels = true;
+  }
+  else {
+    update_tile_texture_pixels(tiles_->current_tile);
+  }
 
   gl_upload_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   glFlush();
@@ -926,8 +928,6 @@ void BlenderDisplayDriver::flush()
 void BlenderDisplayDriver::draw(const Params &params)
 {
   /* See do_update_begin() for why no locking is required here. */
-  const bool transparent = true;  // TODO(sergey): Derive this from Film.
-
   if (use_gl_context_) {
     gl_context_mutex_.lock();
   }
@@ -948,10 +948,8 @@ void BlenderDisplayDriver::draw(const Params &params)
     glWaitSync((GLsync)gl_upload_sync_, 0, GL_TIMEOUT_IGNORED);
   }
 
-  if (transparent) {
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-  }
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   glActiveTexture(GL_TEXTURE0);
 
@@ -969,6 +967,11 @@ void BlenderDisplayDriver::draw(const Params &params)
 
   glEnableVertexAttribArray(texcoord_attribute);
   glEnableVertexAttribArray(position_attribute);
+
+  if (tiles_->current_tile.need_update_texture_pixels) {
+    update_tile_texture_pixels(tiles_->current_tile);
+    tiles_->current_tile.need_update_texture_pixels = false;
+  }
 
   draw_tile(zoom_,
             texcoord_attribute,
@@ -988,17 +991,13 @@ void BlenderDisplayDriver::draw(const Params &params)
 
   glDeleteVertexArrays(1, &vertex_array_object);
 
-  if (transparent) {
-    glDisable(GL_BLEND);
-  }
+  glDisable(GL_BLEND);
 
   gl_render_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   glFlush();
 
-  if (VLOG_IS_ON(5)) {
-    VLOG(5) << "Number of textures: " << GLTexture::num_used;
-    VLOG(5) << "Number of PBOs: " << GLPixelBufferObject::num_used;
-  }
+  VLOG_DEVICE_STATS << "Display driver number of textures: " << GLTexture::num_used;
+  VLOG_DEVICE_STATS << "Display driver number of PBOs: " << GLPixelBufferObject::num_used;
 
   if (use_gl_context_) {
     gl_context_mutex_.unlock();

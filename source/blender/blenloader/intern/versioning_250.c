@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup blenloader
@@ -439,14 +425,14 @@ static void do_versions_windowmanager_2_50(bScreen *screen)
   }
 }
 
-static void versions_gpencil_add_main(ListBase *lb, ID *id, const char *name)
+static void versions_gpencil_add_main(Main *bmain, ListBase *lb, ID *id, const char *name)
 {
   BLI_addtail(lb, id);
   id->us = 1;
   id->flag = LIB_FAKEUSER;
   *((short *)id->name) = ID_GD;
 
-  BKE_id_new_name_validate(lb, id, name, false);
+  BKE_id_new_name_validate(bmain, lb, id, name, false);
   /* alphabetic insertion: is in BKE_id_new_name_validate */
 
   if ((id->tag & LIB_TAG_TEMP_MAIN) == 0) {
@@ -469,21 +455,21 @@ static void do_versions_gpencil_2_50(Main *main, bScreen *screen)
       if (sl->spacetype == SPACE_VIEW3D) {
         View3D *v3d = (View3D *)sl;
         if (v3d->gpd) {
-          versions_gpencil_add_main(&main->gpencils, (ID *)v3d->gpd, "GPencil View3D");
+          versions_gpencil_add_main(main, &main->gpencils, (ID *)v3d->gpd, "GPencil View3D");
           v3d->gpd = NULL;
         }
       }
       else if (sl->spacetype == SPACE_NODE) {
         SpaceNode *snode = (SpaceNode *)sl;
         if (snode->gpd) {
-          versions_gpencil_add_main(&main->gpencils, (ID *)snode->gpd, "GPencil Node");
+          versions_gpencil_add_main(main, &main->gpencils, (ID *)snode->gpd, "GPencil Node");
           snode->gpd = NULL;
         }
       }
       else if (sl->spacetype == SPACE_SEQ) {
         SpaceSeq *sseq = (SpaceSeq *)sl;
         if (sseq->gpd) {
-          versions_gpencil_add_main(&main->gpencils, (ID *)sseq->gpd, "GPencil Node");
+          versions_gpencil_add_main(main, &main->gpencils, (ID *)sseq->gpd, "GPencil Node");
           sseq->gpd = NULL;
         }
       }
@@ -491,7 +477,7 @@ static void do_versions_gpencil_2_50(Main *main, bScreen *screen)
         SpaceImage *sima = (SpaceImage *)sl;
 #if 0 /* see comment on r28002 */
         if (sima->gpd) {
-          versions_gpencil_add_main(&main->gpencil, (ID *)sima->gpd, "GPencil Image");
+          versions_gpencil_add_main(main, &main->gpencil, (ID *)sima->gpd, "GPencil Image");
           sima->gpd = NULL;
         }
 #else
@@ -1658,7 +1644,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
             BLI_addtail((ListBase *)&ob->modifiers, lmd);
             ob->partype = PAROBJECT;
           }
-          else if (parent->type == OB_CURVE && ob->partype == PARCURVE) {
+          else if (parent->type == OB_CURVES_LEGACY && ob->partype == PARCURVE) {
             CurveModifierData *cmd;
 
             cmd = (CurveModifierData *)BKE_modifier_new(eModifierType_Curve);
@@ -1737,7 +1723,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         brush->crease_pinch_factor = 0.5f;
       }
 
-      /* will sculpt no vertexes */
+      /* will sculpt no vertices */
       if (brush->plane_trim == 0) {
         brush->plane_trim = 0.5f;
       }

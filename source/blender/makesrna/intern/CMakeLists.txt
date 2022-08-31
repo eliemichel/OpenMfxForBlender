@@ -1,22 +1,5 @@
-# ***** BEGIN GPL LICENSE BLOCK *****
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software Foundation,
-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# The Original Code is Copyright (C) 2006, Blender Foundation
-# All rights reserved.
-# ***** END GPL LICENSE BLOCK *****
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2006 Blender Foundation. All rights reserved.
 
 if(CMAKE_COMPILER_IS_GNUCC)
   # add here so we fail early.
@@ -43,6 +26,7 @@ set(DEFSRC
   rna_context.c
   rna_curve.c
   rna_curveprofile.c
+  rna_curves.c
   rna_depsgraph.c
   rna_dynamicpaint.c
   rna_fcurve.c
@@ -101,9 +85,7 @@ set(DEFSRC
 
 if(WITH_EXPERIMENTAL_FEATURES)
   add_definitions(-DWITH_SIMULATION_DATABLOCK)
-  add_definitions(-DWITH_HAIR_NODES)
   list(APPEND DEFSRC
-    rna_hair.c
     rna_simulation.c
   )
 endif()
@@ -139,6 +121,7 @@ set(APISRC
 string(REGEX REPLACE "rna_([a-zA-Z0-9_-]*).c" "${CMAKE_CURRENT_BINARY_DIR}/rna_\\1_gen.c" GENSRC "${DEFSRC}")
 list(APPEND GENSRC
   "${CMAKE_CURRENT_BINARY_DIR}/rna_prototypes_gen.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/../RNA_prototypes.h"
 )
 set_source_files_properties(${GENSRC} PROPERTIES GENERATED TRUE)
 
@@ -176,6 +159,7 @@ set(SRC_RNA_INC
   ../RNA_documentation.h
   ../RNA_enum_items.h
   ../RNA_enum_types.h
+  ../RNA_path.h
   ../RNA_types.h
 )
 
@@ -208,6 +192,8 @@ set(INC
 
   # dna_type_offsets.h
   ${CMAKE_CURRENT_BINARY_DIR}/../../makesdna/intern
+  # RNA_prototypes.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../../makesrna/
 )
 
 set(INC_SYS
@@ -251,6 +237,10 @@ endif()
 
 if(WITH_IMAGE_HDR)
   add_definitions(-DWITH_HDR)
+endif()
+
+if(WITH_IMAGE_WEBP)
+  add_definitions(-DWITH_WEBP)
 endif()
 
 if(WITH_AUDASPACE)
@@ -422,7 +412,7 @@ endif()
 # note (linux only): with crashes try add this after COMMAND: valgrind --leak-check=full --track-origins=yes
 add_custom_command(
   OUTPUT ${GENSRC}
-  COMMAND "$<TARGET_FILE:makesrna>" ${CMAKE_CURRENT_BINARY_DIR}/
+  COMMAND "$<TARGET_FILE:makesrna>" ${CMAKE_CURRENT_BINARY_DIR}/  ${CMAKE_CURRENT_BINARY_DIR}/../
   DEPENDS makesrna
 )
 
@@ -430,6 +420,7 @@ add_custom_command(
 set(SRC
   rna_access.c
   rna_access_compare_override.c
+  rna_path.cc
   ${GENSRC}
 
   ${SRC_RNA_INC}
@@ -447,6 +438,7 @@ set(LIB
   bf_editor_armature
   bf_editor_asset
   bf_editor_curve
+  bf_editor_curves
   bf_editor_gizmo_library
   bf_editor_gpencil
   bf_editor_io

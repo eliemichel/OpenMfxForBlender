@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "blender/device.h"
 #include "blender/session.h"
@@ -28,6 +15,7 @@ enum ComputeDevice {
   COMPUTE_DEVICE_OPTIX = 3,
   COMPUTE_DEVICE_HIP = 4,
   COMPUTE_DEVICE_METAL = 5,
+  COMPUTE_DEVICE_ONEAPI = 6,
 
   COMPUTE_DEVICE_NUM
 };
@@ -88,6 +76,9 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
       }
       else if (compute_device == COMPUTE_DEVICE_METAL) {
         mask |= DEVICE_MASK_METAL;
+      }
+      else if (compute_device == COMPUTE_DEVICE_ONEAPI) {
+        mask |= DEVICE_MASK_ONEAPI;
       }
       vector<DeviceInfo> devices = Device::available_devices(mask);
 

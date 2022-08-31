@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "node_geometry_util.hh"
 
@@ -30,14 +16,15 @@ static void set_id_in_component(GeometryComponent &component,
                                 const Field<bool> &selection_field,
                                 const Field<int> &id_field)
 {
-  const AttributeDomain domain = (component.type() == GEO_COMPONENT_TYPE_INSTANCES) ?
-                                     ATTR_DOMAIN_INSTANCE :
-                                     ATTR_DOMAIN_POINT;
-  GeometryComponentFieldContext field_context{component, domain};
+  const eAttrDomain domain = (component.type() == GEO_COMPONENT_TYPE_INSTANCES) ?
+                                 ATTR_DOMAIN_INSTANCE :
+                                 ATTR_DOMAIN_POINT;
   const int domain_size = component.attribute_domain_size(domain);
   if (domain_size == 0) {
     return;
   }
+  MutableAttributeAccessor attributes = *component.attributes_for_write();
+  GeometryComponentFieldContext field_context{component, domain};
 
   fn::FieldEvaluator evaluator{field_context, domain_size};
   evaluator.set_selection(selection_field);
@@ -45,22 +32,21 @@ static void set_id_in_component(GeometryComponent &component,
   /* Since adding the ID attribute can change the result of the field evaluation (the random value
    * node uses the index if the ID is unavailable), make sure that it isn't added before evaluating
    * the field. However, as an optimization, use a faster code path when it already exists. */
-  if (component.attribute_exists("id")) {
-    OutputAttribute_Typed<int> id_attribute = component.attribute_try_get_for_output_only<int>(
-        "id", domain);
-    evaluator.add_with_destination(id_field, id_attribute.varray());
+  if (attributes.contains("id")) {
+    AttributeWriter<int> id_attribute = attributes.lookup_or_add_for_write<int>("id", domain);
+    evaluator.add_with_destination(id_field, id_attribute.varray);
     evaluator.evaluate();
-    id_attribute.save();
+    id_attribute.finish();
   }
   else {
     evaluator.add(id_field);
     evaluator.evaluate();
     const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
-    const VArray<int> &result_ids = evaluator.get_evaluated<int>(0);
-    OutputAttribute_Typed<int> id_attribute = component.attribute_try_get_for_output_only<int>(
-        "id", domain);
-    result_ids.materialize(selection, id_attribute.as_span());
-    id_attribute.save();
+    const VArray<int> result_ids = evaluator.get_evaluated<int>(0);
+    SpanAttributeWriter<int> id_attribute = attributes.lookup_or_add_for_write_span<int>("id",
+                                                                                         domain);
+    result_ids.materialize(selection, id_attribute.span);
+    id_attribute.finish();
   }
 }
 

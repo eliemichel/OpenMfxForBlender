@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -43,6 +29,15 @@ struct MFSignature {
   Vector<int> param_data_indices;
   bool depends_on_context = false;
 
+  /**
+   * Number of elements of each of these types that has to be passed into the multi-function as an
+   * input or output.
+   */
+  int span_num = 0;
+  int virtual_array_num = 0;
+  int virtual_vector_array_num = 0;
+  int vector_array_num = 0;
+
   int data_index(int param_index) const
   {
     return param_data_indices[param_index];
@@ -52,10 +47,6 @@ struct MFSignature {
 class MFSignatureBuilder {
  private:
   MFSignature signature_;
-  int span_count_ = 0;
-  int virtual_array_count_ = 0;
-  int virtual_vector_array_count_ = 0;
-  int vector_array_count_ = 0;
 
  public:
   MFSignatureBuilder(const char *function_name)
@@ -93,10 +84,10 @@ class MFSignatureBuilder {
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        signature_.param_data_indices.append(virtual_array_count_++);
+        signature_.param_data_indices.append(signature_.virtual_array_num++);
         break;
       case MFDataType::Vector:
-        signature_.param_data_indices.append(virtual_vector_array_count_++);
+        signature_.param_data_indices.append(signature_.virtual_vector_array_num++);
         break;
     }
   }
@@ -126,10 +117,10 @@ class MFSignatureBuilder {
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        signature_.param_data_indices.append(span_count_++);
+        signature_.param_data_indices.append(signature_.span_num++);
         break;
       case MFDataType::Vector:
-        signature_.param_data_indices.append(vector_array_count_++);
+        signature_.param_data_indices.append(signature_.vector_array_num++);
         break;
     }
   }
@@ -159,10 +150,10 @@ class MFSignatureBuilder {
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        signature_.param_data_indices.append(span_count_++);
+        signature_.param_data_indices.append(signature_.span_num++);
         break;
       case MFDataType::Vector:
-        signature_.param_data_indices.append(vector_array_count_++);
+        signature_.param_data_indices.append(signature_.vector_array_num++);
         break;
     }
   }
@@ -180,6 +171,32 @@ class MFSignatureBuilder {
         this->output(name, param_type.data_type());
         break;
     }
+  }
+
+  template<MFParamCategory Category, typename T>
+  void add(MFParamTag<Category, T> /* tag */, const char *name)
+  {
+    switch (Category) {
+      case MFParamCategory::SingleInput:
+        this->single_input<T>(name);
+        return;
+      case MFParamCategory::VectorInput:
+        this->vector_input<T>(name);
+        return;
+      case MFParamCategory::SingleOutput:
+        this->single_output<T>(name);
+        return;
+      case MFParamCategory::VectorOutput:
+        this->vector_output<T>(name);
+        return;
+      case MFParamCategory::SingleMutable:
+        this->single_mutable<T>(name);
+        return;
+      case MFParamCategory::VectorMutable:
+        this->vector_mutable<T>(name);
+        return;
+    }
+    BLI_assert_unreachable();
   }
 
   /* Context */

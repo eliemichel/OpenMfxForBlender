@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -33,6 +19,7 @@ struct BlendWriter;
 struct ID;
 struct IDProperty;
 struct IDPropertyUIData;
+struct Library;
 
 typedef union IDPropertyTemplate {
   int i;
@@ -183,7 +170,7 @@ struct IDProperty *IDP_GetPropertyTypeFromGroup(const struct IDProperty *prop,
 
 /*-------- Main Functions --------*/
 /**
- * Get the Group property that contains the id properties for ID id.
+ * Get the Group property that contains the id properties for ID `id`.
  *
  * \param create_if_needed: Set to create the group property and attach it to id if it doesn't
  * exist; otherwise the function will return NULL if there's no Group property attached to the ID.
@@ -332,7 +319,7 @@ void IDP_BlendReadData_impl(struct BlendDataReader *reader,
                             struct IDProperty **prop,
                             const char *caller_func_id);
 #define IDP_BlendDataRead(reader, prop) IDP_BlendReadData_impl(reader, prop, __func__)
-void IDP_BlendReadLib(struct BlendLibReader *reader, struct IDProperty *prop);
+void IDP_BlendReadLib(struct BlendLibReader *reader, struct Library *lib, struct IDProperty *prop);
 void IDP_BlendReadExpand(struct BlendExpander *expander, struct IDProperty *prop);
 
 typedef enum eIDPropertyUIDataType {

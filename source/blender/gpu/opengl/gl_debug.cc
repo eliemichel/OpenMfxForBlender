@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -205,7 +189,7 @@ void check_gl_error(const char *info)
   case err: { \
     char msg[256]; \
     SNPRINTF(msg, "%s : %s", #err, info); \
-    debug_callback(0, GL_DEBUG_TYPE_ERROR, 0, GL_DEBUG_SEVERITY_HIGH, 0, msg, NULL); \
+    debug_callback(0, GL_DEBUG_TYPE_ERROR, 0, GL_DEBUG_SEVERITY_HIGH, 0, msg, nullptr); \
     break; \
   }
 
@@ -347,11 +331,21 @@ void object_label(GLenum type, GLuint object, const char *name)
     char label[64];
     SNPRINTF(label, "%s%s%s", to_str_prefix(type), name, to_str_suffix(type));
     /* Small convenience for caller. */
-    if (ELEM(type, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_VERTEX_SHADER, GL_COMPUTE_SHADER)) {
-      type = GL_SHADER;
-    }
-    if (ELEM(type, GL_UNIFORM_BUFFER)) {
-      type = GL_BUFFER;
+    switch (type) {
+      case GL_FRAGMENT_SHADER:
+      case GL_GEOMETRY_SHADER:
+      case GL_VERTEX_SHADER:
+      case GL_COMPUTE_SHADER:
+        type = GL_SHADER;
+        break;
+      case GL_UNIFORM_BUFFER:
+      case GL_SHADER_STORAGE_BUFFER:
+      case GL_ARRAY_BUFFER:
+      case GL_ELEMENT_ARRAY_BUFFER:
+        type = GL_BUFFER;
+        break;
+      default:
+        break;
     }
     glObjectLabel(type, object, -1, label);
   }

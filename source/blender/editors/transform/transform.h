@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edtransform
@@ -27,10 +11,9 @@
 #include "ED_transform.h"
 #include "ED_view3d.h"
 
-#include "RE_engine.h"
-
 #include "DNA_listBase.h"
 #include "DNA_object_enums.h"
+#include "DNA_scene_types.h"
 
 #include "DEG_depsgraph.h"
 
@@ -55,6 +38,7 @@ struct ReportList;
 struct Scene;
 struct ScrArea;
 struct SnapObjectContext;
+struct TransConvertTypeInfo;
 struct TransDataContainer;
 struct TransInfo;
 struct TransSnap;
@@ -108,12 +92,10 @@ typedef enum {
   /** restrictions flags */
   T_NO_CONSTRAINT = 1 << 2,
   T_NULL_ONE = 1 << 3,
-  T_ALL_RESTRICTIONS = T_NO_CONSTRAINT | T_NULL_ONE,
 
   T_PROP_EDIT = 1 << 4,
   T_PROP_CONNECTED = 1 << 5,
   T_PROP_PROJECTED = 1 << 6,
-  T_PROP_EDIT_ALL = T_PROP_EDIT | T_PROP_CONNECTED | T_PROP_PROJECTED,
 
   T_V3D_ALIGN = 1 << 7,
   /** For 2D views such as UV or f-curve. */
@@ -153,9 +135,15 @@ typedef enum {
   /** Runs auto-merge & splits. */
   T_AUTOSPLIT = 1 << 21,
 
+  /** Use drag-start position of the event, otherwise use the cursor coordinates (unmodified). */
+  T_EVENT_DRAG_START = 1 << 22,
+
   /** No cursor wrapping on region bounds */
   T_NO_CURSOR_WRAP = 1 << 23,
 } eTFlag;
+
+#define T_ALL_RESTRICTIONS (T_NO_CONSTRAINT | T_NULL_ONE)
+#define T_PROP_EDIT_ALL (T_PROP_EDIT | T_PROP_CONNECTED | T_PROP_PROJECTED)
 
 /** #TransInfo.modifiers */
 typedef enum {
@@ -167,7 +155,8 @@ typedef enum {
 } eTModifier;
 
 /** #TransSnap.status */
-typedef enum {
+typedef enum eTSnap {
+  SNAP_RESETTED = 0,
   SNAP_FORCED = 1 << 0,
   TARGET_INIT = 1 << 1,
   /* Special flag for snap to grid. */
@@ -201,8 +190,8 @@ typedef enum {
 /** #TransInfo.redraw */
 typedef enum {
   TREDRAW_NOTHING = 0,
-  TREDRAW_HARD = 1,
-  TREDRAW_SOFT = 2,
+  TREDRAW_SOFT = (1 << 0),
+  TREDRAW_HARD = (1 << 1) | TREDRAW_SOFT,
 } eRedrawFlag;
 
 /** #TransInfo.helpline */
@@ -215,36 +204,6 @@ typedef enum {
   HLP_CARROW = 5,
   HLP_TRACKBALL = 6,
 } eTHelpline;
-
-typedef enum {
-  TC_NONE = 0,
-  TC_ACTION_DATA,
-  TC_POSE,
-  TC_ARMATURE_VERTS,
-  TC_CURSOR_IMAGE,
-  TC_CURSOR_SEQUENCER,
-  TC_CURSOR_VIEW3D,
-  TC_CURVE_VERTS,
-  TC_GRAPH_EDIT_DATA,
-  TC_GPENCIL,
-  TC_LATTICE_VERTS,
-  TC_MASKING_DATA,
-  TC_MBALL_VERTS,
-  TC_MESH_VERTS,
-  TC_MESH_EDGES,
-  TC_MESH_SKIN,
-  TC_MESH_UV,
-  TC_NLA_DATA,
-  TC_NODE_DATA,
-  TC_OBJECT,
-  TC_OBJECT_TEXSPACE,
-  TC_PAINT_CURVE_VERTS,
-  TC_PARTICLE_VERTS,
-  TC_SCULPT,
-  TC_SEQ_DATA,
-  TC_SEQ_IMAGE_DATA,
-  TC_TRACKING_DATA,
-} eTConvertType;
 
 /** \} */
 
@@ -308,18 +267,22 @@ typedef struct TransSnapPoint {
 } TransSnapPoint;
 
 typedef struct TransSnap {
-  short mode;
-  short target;
-  short modePoint;
-  short modeSelect;
+  /* Snapping options stored as flags */
+  eSnapFlag flag;
+  /* Method(s) used for snapping source to target */
+  eSnapMode mode;
+  /* Part of source to snap to target */
+  eSnapSourceSelect source_select;
+  /* Determines which objects are possible target */
+  eSnapTargetSelect target_select;
   bool align;
   bool project;
-  bool snap_self;
   bool peel;
   bool use_backface_culling;
+  short face_nearest_steps;
   eTSnap status;
   /* Snapped Element Type (currently for objects only). */
-  char snapElem;
+  eSnapMode snapElem;
   /** snapping from this point (in global-space). */
   float snapTarget[3];
   /** to this point (in global-space). */
@@ -392,10 +355,12 @@ typedef struct MouseInput {
 
   /** Initial mouse position. */
   int imval[2];
-  bool precision;
-  float precision_factor;
+  float imval_unproj[3];
   float center[2];
   float factor;
+  float precision_factor;
+  bool precision;
+
   /** Additional data, if needed by the particular function. */
   void *data;
 
@@ -471,6 +436,8 @@ typedef struct TransDataContainer {
   int data_len;
   /** Total number of transformed data_mirror. */
   int data_mirror_len;
+  /** Total number of transformed gp-frames. */
+  int data_gpf_len;
 
   struct Object *obedit;
 
@@ -524,7 +491,7 @@ typedef struct TransInfo {
   int data_len_all;
 
   /** TODO: It should be a member of #TransDataContainer. */
-  eTConvertType data_type;
+  struct TransConvertTypeInfo *data_type;
 
   /** Current context/options for transform. */
   eTContext options;
@@ -545,6 +512,13 @@ typedef struct TransInfo {
   void (*transform)(struct TransInfo *, const int[2]);
   /* Event handler function that determines whether the viewport needs to be redrawn. */
   eRedrawFlag (*handleEvent)(struct TransInfo *, const struct wmEvent *);
+
+  /**
+   * Optional callback to transform a single matrix.
+   *
+   * \note used by the gizmo to transform the matrix used to position it.
+   */
+  void (*transform_matrix)(struct TransInfo *t, float mat_xform[4][4]);
 
   /** Constraint Data. */
   TransCon con;
@@ -580,11 +554,11 @@ typedef struct TransInfo {
   /** Mouse side of the current frame, 'L', 'R' or 'B' */
   char frame_side;
 
-  /** copy from G.vd, prevents feedback. */
+  /** copy from #RegionView3D, prevents feedback. */
   float viewmat[4][4];
   /** and to make sure we don't have to. */
   float viewinv[4][4];
-  /** access G.vd from other space types. */
+  /** Access #RegionView3D from other space types. */
   float persmat[4][4];
   float persinv[4][4];
   short persp;
@@ -608,9 +582,11 @@ typedef struct TransInfo {
   /*************** NEW STUFF *********************/
   /** event type used to launch transform. */
   short launch_event;
-  /** Is the actual launch event a tweak event? (launch_event above is set to the corresponding
-   * mouse button then.) */
-  bool is_launch_event_tweak;
+  /**
+   * Is the actual launch event a drag event?
+   * (`launch_event` is set to the corresponding mouse button then.)
+   */
+  bool is_launch_event_drag;
 
   bool is_orient_default_overwrite;
 
@@ -673,7 +649,6 @@ typedef struct TransInfo {
   int mval[2];
   /** use for 3d view. */
   float zfac;
-  void *draw_handle_apply;
   void *draw_handle_view;
   void *draw_handle_pixel;
   void *draw_handle_cursor;
@@ -725,6 +700,12 @@ void removeAspectRatio(TransInfo *t, float vec[2]);
  */
 struct wmKeyMap *transform_modal_keymap(struct wmKeyConfig *keyconf);
 
+/**
+ * Transform a single matrix using the current `t->final_values`.
+ */
+bool transform_apply_matrix(TransInfo *t, float mat[4][4]);
+void transform_final_value_get(const TransInfo *t, float *value, int value_num);
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -732,11 +713,11 @@ struct wmKeyMap *transform_modal_keymap(struct wmKeyConfig *keyconf);
  * \{ */
 
 /* transform_gizmo.c */
+
 #define GIZMO_AXIS_LINE_WIDTH 2.0f
 
 bool gimbal_axis_pose(struct Object *ob, const struct bPoseChannel *pchan, float gmat[3][3]);
 bool gimbal_axis_object(struct Object *ob, float gmat[3][3]);
-void drawDial3d(const TransInfo *t);
 
 /** \} */
 
@@ -776,6 +757,7 @@ void applyMouseInput(struct TransInfo *t,
                      struct MouseInput *mi,
                      const int mval[2],
                      float output[3]);
+void transform_input_update(TransInfo *t, const float fac);
 
 void setCustomPoints(TransInfo *t, MouseInput *mi, const int start[2], const int end[2]);
 void setCustomPointsFromDirection(TransInfo *t, MouseInput *mi, const float dir[2]);
@@ -824,6 +806,7 @@ void calculateCenter2D(TransInfo *t);
 void calculateCenterLocal(TransInfo *t, const float center_global[3]);
 
 void calculateCenter(TransInfo *t);
+void tranformViewUpdate(TransInfo *t);
 
 /* API functions for getting center points */
 void calculateCenterBound(TransInfo *t, float r_center[3]);

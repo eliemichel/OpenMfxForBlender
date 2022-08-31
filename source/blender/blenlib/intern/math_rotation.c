@@ -1,23 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * The Original Code is: some of this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bli
@@ -933,6 +915,109 @@ float tri_to_quat(float q[4], const float a[3], const float b[3], const float c[
   return len;
 }
 
+void sin_cos_from_fraction(int numerator, const int denominator, float *r_sin, float *r_cos)
+{
+  /* By default, creating an circle from an integer: calling #sinf & #cosf on the fraction doesn't
+   * create symmetrical values (because of float imprecision).
+   * Resolve this when the rotation is calculated from a fraction by mapping the `numerator`
+   * to lower values so X/Y values for points around a circle are exactly symmetrical, see T87779.
+   *
+   * - Numbers divisible by 4 are mapped to the lower 8th (8 axis symmetry).
+   * - Even numbers are mapped to the lower quarter (4 axis symmetry).
+   * - Odd numbers are mapped to the lower half (1 axis symmetry).
+   *
+   * Once the values are calculated, the are mapped back to their position in the circle
+   * using negation & swapping values. */
+
+  BLI_assert((numerator <= denominator) && (denominator > 0));
+  enum { NEGATE_SIN_BIT = 0, NEGATE_COS_BIT = 1, SWAP_SIN_COS_BIT = 2 };
+  enum {
+    NEGATE_SIN = (1 << NEGATE_SIN_BIT),
+    NEGATE_COS = (1 << NEGATE_COS_BIT),
+    SWAP_SIN_COS = (1 << SWAP_SIN_COS_BIT),
+  } xform = 0;
+  if ((denominator & 3) == 0) {
+    /* The denominator divides by 4, determine the quadrant then further refine the upper 8th. */
+    const int denominator_4 = denominator / 4;
+    if (numerator < denominator_4) {
+      /* Fall through. */
+    }
+    else {
+      if (numerator < denominator_4 * 2) {
+        numerator -= denominator_4;
+        xform = NEGATE_SIN | SWAP_SIN_COS;
+      }
+      else if (numerator == denominator_4 * 2) {
+        numerator = 0;
+        xform = NEGATE_COS;
+      }
+      else if (numerator < denominator_4 * 3) {
+        numerator -= denominator_4 * 2;
+        xform = NEGATE_SIN | NEGATE_COS;
+      }
+      else if (numerator == denominator_4 * 3) {
+        numerator = 0;
+        xform = NEGATE_COS | SWAP_SIN_COS;
+      }
+      else {
+        numerator -= denominator_4 * 3;
+        xform = NEGATE_COS | SWAP_SIN_COS;
+      }
+    }
+    /* Further increase accuracy by using the range of the upper 8th. */
+    const int numerator_test = denominator_4 - numerator;
+    if (numerator_test < numerator) {
+      numerator = numerator_test;
+      xform ^= SWAP_SIN_COS;
+      /* Swap #NEGATE_SIN, #NEGATE_COS flags. */
+      xform = (xform & (uint)(~(NEGATE_SIN | NEGATE_COS))) |
+              (((xform & NEGATE_SIN) >> NEGATE_SIN_BIT) << NEGATE_COS_BIT) |
+              (((xform & NEGATE_COS) >> NEGATE_COS_BIT) << NEGATE_SIN_BIT);
+    }
+  }
+  else if ((denominator & 1) == 0) {
+    /* The denominator divides by 2, determine the quadrant then further refine the upper 4th. */
+    const int denominator_2 = denominator / 2;
+    if (numerator < denominator_2) {
+      /* Fall through. */
+    }
+    else if (numerator == denominator_2) {
+      numerator = 0;
+      xform = NEGATE_COS;
+    }
+    else {
+      numerator -= denominator_2;
+      xform = NEGATE_SIN | NEGATE_COS;
+    }
+    /* Further increase accuracy by using the range of the upper 4th. */
+    const int numerator_test = denominator_2 - numerator;
+    if (numerator_test < numerator) {
+      numerator = numerator_test;
+      xform ^= NEGATE_COS;
+    }
+  }
+  else {
+    /* The denominator is an odd number, only refine the upper half. */
+    const int numerator_test = denominator - numerator;
+    if (numerator_test < numerator) {
+      numerator = numerator_test;
+      xform ^= NEGATE_SIN;
+    }
+  }
+
+  const float phi = (float)(2.0 * M_PI) * ((float)numerator / (float)denominator);
+  const float sin_phi = sinf(phi) * ((xform & NEGATE_SIN) ? -1.0f : 1.0f);
+  const float cos_phi = cosf(phi) * ((xform & NEGATE_COS) ? -1.0f : 1.0f);
+  if ((xform & SWAP_SIN_COS) == 0) {
+    *r_sin = sin_phi;
+    *r_cos = cos_phi;
+  }
+  else {
+    *r_sin = cos_phi;
+    *r_cos = sin_phi;
+  }
+}
+
 void print_qt(const char *str, const float q[4])
 {
   printf("%s: %.3f %.3f %.3f %.3f\n", str, q[0], q[1], q[2], q[3]);
@@ -1161,7 +1246,7 @@ void axis_angle_to_mat3_single(float R[3][3], const char axis, const float angle
       R[2][2] = 1.0f;
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 }
@@ -1858,30 +1943,13 @@ void sub_eul_euleul(float r_eul[3], float a[3], float b[3], const short order)
 
 /******************************* Dual Quaternions ****************************/
 
-/**
- * Conversion routines between (regular quaternion, translation) and
- * dual quaternion.
+/* Conversion routines between (regular quaternion, translation) and dual quaternion.
  *
  * Version 1.0.0, February 7th, 2007
  *
- * Copyright (C) 2006-2007 University of Dublin, Trinity College, All Rights
- * Reserved
+ * SPDX-License-Identifier: Zlib
+ * Copyright 2006-2007 University of Dublin, Trinity College, All Rights Reserved.
  *
- * This software is provided 'as-is', without any express or implied
- * warranty.  In no event will the author(s) be held liable for any damages
- * arising from the use of this software.
- *
- * Permission is granted to anyone to use this software for any purpose,
- * including commercial applications, and to alter it and redistribute it
- * freely, subject to the following restrictions:
- *
- * 1. The origin of this software must not be misrepresented; you must not
- *    claim that you wrote the original software. If you use this software
- *    in a product, an acknowledgment in the product documentation would be
- *    appreciated but is not required.
- * 2. Altered source versions must be plainly marked as such, and must not be
- *    misrepresented as being the original software.
- * 3. This notice may not be removed or altered from any source distribution.
  * Changes for Blender:
  * - renaming, style changes and optimization's
  * - added support for scaling

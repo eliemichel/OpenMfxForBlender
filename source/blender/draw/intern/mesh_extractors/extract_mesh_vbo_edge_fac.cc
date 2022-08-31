@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -26,7 +10,7 @@
 #include "GPU_capabilities.h"
 
 #include "draw_subdivision.h"
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 namespace blender::draw {
 
@@ -59,7 +43,7 @@ static float loop_edge_factor_get(const float f_no[3],
 }
 
 static void extract_edge_fac_init(const MeshRenderData *mr,
-                                  struct MeshBatchCache *UNUSED(cache),
+                                  MeshBatchCache *UNUSED(cache),
                                   void *buf,
                                   void *tls_data)
 {
@@ -78,7 +62,7 @@ static void extract_edge_fac_init(const MeshRenderData *mr,
     data->edge_loop_count = static_cast<uchar *>(
         MEM_callocN(sizeof(uint32_t) * mr->edge_len, __func__));
 
-    /* HACK(fclem) Detecting the need for edge render.
+    /* HACK(@fclem): Detecting the need for edge render.
      * We could have a flag in the mesh instead or check the modifier stack. */
     const MEdge *med = mr->medge;
     for (int e_index = 0; e_index < mr->edge_len; e_index++, med++) {
@@ -183,7 +167,7 @@ static void extract_edge_fac_iter_ledge_mesh(const MeshRenderData *mr,
 }
 
 static void extract_edge_fac_finish(const MeshRenderData *mr,
-                                    struct MeshBatchCache *UNUSED(cache),
+                                    MeshBatchCache *UNUSED(cache),
                                     void *buf,
                                     void *_data)
 {
@@ -234,7 +218,7 @@ static GPUVertFormat *get_subdiv_edge_fac_format()
 
 static void extract_edge_fac_init_subdiv(const DRWSubdivCache *subdiv_cache,
                                          const MeshRenderData *UNUSED(mr),
-                                         struct MeshBatchCache *cache,
+                                         MeshBatchCache *cache,
                                          void *buffer,
                                          void *UNUSED(data))
 {
@@ -319,6 +303,4 @@ constexpr MeshExtract create_extractor_edge_fac()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_edge_fac = blender::draw::create_extractor_edge_fac();
-}

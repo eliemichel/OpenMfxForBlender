@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup imbuf
@@ -50,6 +36,17 @@ typedef struct ImFileType {
                         char colorspace[IM_MAX_SPACE]);
   /** Load an image from a file. */
   struct ImBuf *(*load_filepath)(const char *filepath, int flags, char colorspace[IM_MAX_SPACE]);
+  /**
+   * Load/Create a thumbnail image from a filepath. `max_thumb_size` is maximum size of either
+   * dimension, so can return less on either or both. Should, if possible and performant, return
+   * dimensions of the full-size image in r_width & r_height.
+   */
+  struct ImBuf *(*load_filepath_thumbnail)(const char *filepath,
+                                           int flags,
+                                           size_t max_thumb_size,
+                                           char colorspace[IM_MAX_SPACE],
+                                           size_t *r_width,
+                                           size_t *r_height);
   /** Save to a file (or memory if #IB_mem is set in `flags` and the format supports it). */
   bool (*save)(struct ImBuf *ibuf, const char *filepath, int flags);
   void (*load_tile)(struct ImBuf *ibuf,
@@ -157,6 +154,12 @@ struct ImBuf *imb_load_jpeg(const unsigned char *buffer,
                             size_t size,
                             int flags,
                             char colorspace[IM_MAX_SPACE]);
+struct ImBuf *imb_thumbnail_jpeg(const char *filepath,
+                                 int flags,
+                                 size_t max_thumb_size,
+                                 char colorspace[IM_MAX_SPACE],
+                                 size_t *r_width,
+                                 size_t *r_height);
 
 /** \} */
 
@@ -237,11 +240,10 @@ void imb_loadtiletiff(
 /**
  * Saves a TIFF file.
  *
- * #ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA
- * respectively) are accepted, and interpreted correctly.  Note that the TIFF
- * convention is to use pre-multiplied alpha, which can be achieved within
- * Blender by setting "Premul" alpha handling.  Other alpha conventions are
- * not strictly correct, but are permitted anyhow.
+ * #ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA respectively)
+ * are accepted, and interpreted correctly. Note that the TIFF convention is to use
+ * pre-multiplied alpha, which can be achieved within Blender by setting `premul` alpha handling.
+ * Other alpha conventions are not strictly correct, but are permitted anyhow.
  *
  * \param ibuf: Image buffer.
  * \param filepath: Name of the TIFF file to create.
@@ -250,5 +252,18 @@ void imb_loadtiletiff(
  * \return 1 if the function is successful, 0 on failure.
  */
 bool imb_savetiff(struct ImBuf *ibuf, const char *filepath, int flags);
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Format: TIFF (#IMB_FTYPE_WEBP)
+ * \{ */
+
+bool imb_is_a_webp(const unsigned char *buf, size_t size);
+struct ImBuf *imb_loadwebp(const unsigned char *mem,
+                           size_t size,
+                           int flags,
+                           char colorspace[IM_MAX_SPACE]);
+bool imb_savewebp(struct ImBuf *ibuf, const char *name, int flags);
 
 /** \} */

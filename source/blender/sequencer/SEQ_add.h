@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -31,7 +15,7 @@ struct ListBase;
 struct Scene;
 struct Sequence;
 
-/* SeqLoadData.flags */
+/** #SeqLoadData.flags */
 typedef enum eSeqLoadFlags {
   SEQ_LOAD_SOUND_CACHE = (1 << 1),
   SEQ_LOAD_SOUND_MONO = (1 << 2),
@@ -66,6 +50,7 @@ typedef struct SeqLoadData {
   struct Stereo3dFormat *stereo3d_format;
   bool allow_invalid_file;     /* Used by RNA API to create placeholder strips. */
   double r_video_stream_start; /* For AV synchronization. Set by `SEQ_add_movie_strip`. */
+  bool adjust_playback_rate;
 } SeqLoadData;
 
 /**
@@ -192,16 +177,16 @@ void SEQ_add_image_set_directory(struct Sequence *seq, char *path);
  * \param strip_frame: frame index of strip to be changed
  * \param filename: image filename (only filename, not complete path)
  */
-void SEQ_add_image_load_file(struct Sequence *seq, size_t strip_frame, char *filename);
+void SEQ_add_image_load_file(struct Scene *scene,
+                             struct Sequence *seq,
+                             size_t strip_frame,
+                             char *filename);
 /**
  * Set image strip alpha mode
  *
  * \param seq: image strip to be changed
  */
 void SEQ_add_image_init_alpha_mode(struct Sequence *seq);
-/**
- * \note caller should run `SEQ_time_update_sequence(scene, seq)` after..
- */
 void SEQ_add_reload_new_file(struct Main *bmain,
                              struct Scene *scene,
                              struct Sequence *seq,

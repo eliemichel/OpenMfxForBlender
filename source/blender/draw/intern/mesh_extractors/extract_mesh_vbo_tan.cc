@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -30,7 +14,7 @@
 #include "BKE_mesh.h"
 #include "BKE_mesh_tangent.h"
 
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 #include "draw_subdivision.h"
 
@@ -41,7 +25,7 @@ namespace blender::draw {
  * \{ */
 
 static void extract_tan_init_common(const MeshRenderData *mr,
-                                    struct MeshBatchCache *cache,
+                                    MeshBatchCache *cache,
                                     GPUVertFormat *format,
                                     GPUVertCompType comp_type,
                                     GPUVertFetchMode fetch_mode,
@@ -177,7 +161,7 @@ static void extract_tan_init_common(const MeshRenderData *mr,
 }
 
 static void extract_tan_ex_init(const MeshRenderData *mr,
-                                struct MeshBatchCache *cache,
+                                MeshBatchCache *cache,
                                 GPUVertBuf *vbo,
                                 const bool do_hq)
 {
@@ -251,7 +235,7 @@ static void extract_tan_ex_init(const MeshRenderData *mr,
 }
 
 static void extract_tan_init(const MeshRenderData *mr,
-                             struct MeshBatchCache *cache,
+                             MeshBatchCache *cache,
                              void *buf,
                              void *UNUSED(tls_data))
 {
@@ -270,7 +254,7 @@ static GPUVertFormat *get_coarse_tan_format()
 
 static void extract_tan_init_subdiv(const DRWSubdivCache *subdiv_cache,
                                     const MeshRenderData *mr,
-                                    struct MeshBatchCache *cache,
+                                    MeshBatchCache *cache,
                                     void *buffer,
                                     void *UNUSED(data))
 {
@@ -307,7 +291,8 @@ static void extract_tan_init_subdiv(const DRWSubdivCache *subdiv_cache,
   for (int i = 0; i < tan_len; i++) {
     float(*tan_data)[4] = (float(*)[4])GPU_vertbuf_get_data(coarse_vbo);
     const char *name = tangent_names[i];
-    float(*layer_data)[4] = (float(*)[4])CustomData_get_layer_named(&loop_data, CD_TANGENT, name);
+    const float(*layer_data)[4] = (float(*)[4])CustomData_get_layer_named(
+        &loop_data, CD_TANGENT, name);
     for (int ml_index = 0; ml_index < mr->loop_len; ml_index++) {
       copy_v3_v3(*tan_data, layer_data[ml_index]);
       (*tan_data)[3] = (layer_data[ml_index][3] > 0.0f) ? 1.0f : -1.0f;
@@ -322,7 +307,7 @@ static void extract_tan_init_subdiv(const DRWSubdivCache *subdiv_cache,
   }
   if (use_orco_tan) {
     float(*tan_data)[4] = (float(*)[4])GPU_vertbuf_get_data(coarse_vbo);
-    float(*layer_data)[4] = (float(*)[4])CustomData_get_layer_n(&loop_data, CD_TANGENT, 0);
+    const float(*layer_data)[4] = (float(*)[4])CustomData_get_layer_n(&loop_data, CD_TANGENT, 0);
     for (int ml_index = 0; ml_index < mr->loop_len; ml_index++) {
       copy_v3_v3(*tan_data, layer_data[ml_index]);
       (*tan_data)[3] = (layer_data[ml_index][3] > 0.0f) ? 1.0f : -1.0f;
@@ -333,7 +318,7 @@ static void extract_tan_init_subdiv(const DRWSubdivCache *subdiv_cache,
     GPU_vertbuf_tag_dirty(coarse_vbo);
     /* Include stride in offset. */
     const int dst_offset = (int)subdiv_cache->num_subdiv_loops * 4 * pack_layer_index++;
-    draw_subdiv_interp_custom_data(subdiv_cache, coarse_vbo, dst_buffer, 4, dst_offset, true);
+    draw_subdiv_interp_custom_data(subdiv_cache, coarse_vbo, dst_buffer, 4, dst_offset, false);
   }
 
   CustomData_free(&loop_data, mr->loop_len);
@@ -359,7 +344,7 @@ constexpr MeshExtract create_extractor_tan()
  * \{ */
 
 static void extract_tan_hq_init(const MeshRenderData *mr,
-                                struct MeshBatchCache *cache,
+                                MeshBatchCache *cache,
                                 void *buf,
                                 void *UNUSED(tls_data))
 {
@@ -382,7 +367,5 @@ constexpr MeshExtract create_extractor_tan_hq()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_tan = blender::draw::create_extractor_tan();
 const MeshExtract extract_tan_hq = blender::draw::create_extractor_tan_hq();
-}

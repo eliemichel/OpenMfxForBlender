@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -151,7 +138,7 @@ ccl_device_noinline int svm_node_tex_coord_bump_dx(KernelGlobals kg,
     case NODE_TEXCO_WINDOW: {
       if ((path_flag & PATH_RAY_CAMERA) && sd->object == OBJECT_NONE &&
           kernel_data.cam.type == CAMERA_ORTHOGRAPHIC)
-        data = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(sd->ray_dP, 0.0f, 0.0f));
+        data = camera_world_to_ndc(kg, sd, sd->ray_P);
       else
         data = camera_world_to_ndc(kg, sd, sd->P + sd->dP.dx);
       data.z = 0.0f;
@@ -236,7 +223,7 @@ ccl_device_noinline int svm_node_tex_coord_bump_dy(KernelGlobals kg,
     case NODE_TEXCO_WINDOW: {
       if ((path_flag & PATH_RAY_CAMERA) && sd->object == OBJECT_NONE &&
           kernel_data.cam.type == CAMERA_ORTHOGRAPHIC)
-        data = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(0.0f, sd->ray_dP, 0.0f));
+        data = camera_world_to_ndc(kg, sd, sd->ray_P);
       else
         data = camera_world_to_ndc(kg, sd, sd->P + sd->dP.dy);
       data.z = 0.0f;

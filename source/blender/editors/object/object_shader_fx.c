@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2018 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2018 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edobj
@@ -41,6 +25,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -53,6 +38,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_prototypes.h"
 
 #include "ED_object.h"
 #include "ED_screen.h"
@@ -293,8 +279,8 @@ static bool edit_shaderfx_poll_generic(bContext *C,
     CTX_wm_operator_poll_msg_set(C, "Object type is not supported");
     return false;
   }
-  if (ptr.owner_id != NULL && ID_IS_LINKED(ptr.owner_id)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit library data");
+  if (ptr.owner_id != NULL && !BKE_id_is_editable(CTX_data_main(C), ptr.owner_id)) {
+    CTX_wm_operator_poll_msg_set(C, "Cannot edit library or override data");
     return false;
   }
   if (!is_liboverride_allowed && BKE_shaderfx_is_nonlocal_in_liboverride(ob, fx)) {
@@ -495,12 +481,15 @@ static int shaderfx_remove_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   Object *ob = ED_object_active_context(C);
   ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
+  if (!fx) {
+    return OPERATOR_CANCELLED;
+  }
 
   /* Store name temporarily for report. */
   char name[MAX_NAME];
   strcpy(name, fx->name);
 
-  if (!fx || !ED_object_shaderfx_remove(op->reports, bmain, ob, fx)) {
+  if (!ED_object_shaderfx_remove(op->reports, bmain, ob, fx)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -685,7 +674,9 @@ static int shaderfx_copy_exec(bContext *C, wmOperator *op)
 {
   Object *ob = ED_object_active_context(C);
   ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
-
+  if (!fx) {
+    return OPERATOR_CANCELLED;
+  }
   ShaderFxData *nfx = BKE_shaderfx_new(fx->type);
   if (!nfx) {
     return OPERATOR_CANCELLED;

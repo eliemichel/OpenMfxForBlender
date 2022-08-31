@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -79,7 +65,7 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
   if (UNDO_DISK) {
     const struct BlendFileReadParams params = {0};
     BlendFileReadReport bf_reports = {.reports = NULL};
-    struct BlendFileData *bfd = BKE_blendfile_read(mfu->filename, &params, &bf_reports);
+    struct BlendFileData *bfd = BKE_blendfile_read(mfu->filepath, &params, &bf_reports);
     if (bfd != NULL) {
       BKE_blendfile_read_setup(C, bfd, &params, &bf_reports);
       success = true;
@@ -122,20 +108,20 @@ MemFileUndoData *BKE_memfile_undo_encode(Main *bmain, MemFileUndoData *mfu_prev)
   /* disk save version */
   if (UNDO_DISK) {
     static int counter = 0;
-    char filename[FILE_MAX];
+    char filepath[FILE_MAX];
     char numstr[32];
 
-    /* Calculate current filename. */
+    /* Calculate current filepath. */
     counter++;
     counter = counter % U.undosteps;
 
     BLI_snprintf(numstr, sizeof(numstr), "%d.blend", counter);
-    BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_session(), numstr);
+    BLI_join_dirfile(filepath, sizeof(filepath), BKE_tempdir_session(), numstr);
 
     /* success = */ /* UNUSED */ BLO_write_file(
-        bmain, filename, fileflags, &(const struct BlendFileWriteParams){0}, NULL);
+        bmain, filepath, fileflags, &(const struct BlendFileWriteParams){0}, NULL);
 
-    BLI_strncpy(mfu->filename, filename, sizeof(mfu->filename));
+    BLI_strncpy(mfu->filepath, filepath, sizeof(mfu->filepath));
   }
   else {
     MemFile *prevfile = (mfu_prev) ? &(mfu_prev->memfile) : NULL;

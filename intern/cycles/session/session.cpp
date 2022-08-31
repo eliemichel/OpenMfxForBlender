@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include <limits.h>
 #include <string.h>
@@ -159,11 +146,11 @@ void Session::run_main_render_loop()
     RenderWork render_work = run_update_for_next_iteration();
 
     if (!render_work) {
-      if (VLOG_IS_ON(2)) {
+      if (VLOG_INFO_IS_ON) {
         double total_time, render_time;
         progress.get_time(total_time, render_time);
-        VLOG(2) << "Rendering in main loop is done in " << render_time << " seconds.";
-        VLOG(2) << path_trace_->full_report();
+        VLOG_INFO << "Rendering in main loop is done in " << render_time << " seconds.";
+        VLOG_INFO << path_trace_->full_report();
       }
 
       if (params.background) {
@@ -383,6 +370,14 @@ RenderWork Session::run_update_for_next_iteration()
     if (update_scene(width, height)) {
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
+
+    /* Unlock scene mutex before loading denoiser kernels, since that may attempt to activate
+     * graphics interop, which can deadlock when the scene mutex is still being held. */
+    scene_lock.unlock();
+
+    path_trace_->load_kernels();
+    path_trace_->alloc_work_memory();
+
     progress.add_skip_time(update_timer, params.background);
   }
 
@@ -631,12 +626,7 @@ bool Session::update_scene(int width, int height)
   Camera *cam = scene->camera;
   cam->set_screen_size(width, height);
 
-  const bool scene_update_result = scene->update(progress);
-
-  path_trace_->load_kernels();
-  path_trace_->alloc_work_memory();
-
-  return scene_update_result;
+  return scene->update(progress);
 }
 
 static string status_append(const string &status, const string &suffix)

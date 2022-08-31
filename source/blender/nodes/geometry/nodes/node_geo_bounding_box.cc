@@ -1,18 +1,6 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "GEO_mesh_primitive_cuboid.hh"
 
 #include "node_geometry_util.hh"
 
@@ -62,15 +50,15 @@ static void node_geo_exec(GeoNodeExecParams params)
       }
 
       if (sub_min == float3(FLT_MAX)) {
-        sub_geometry.keep_only({GEO_COMPONENT_TYPE_INSTANCES});
+        sub_geometry.remove_geometry_during_modify();
       }
       else {
         const float3 scale = sub_max - sub_min;
         const float3 center = sub_min + scale / 2.0f;
-        Mesh *mesh = create_cuboid_mesh(scale, 2, 2, 2);
+        Mesh *mesh = geometry::create_cuboid_mesh(scale, 2, 2, 2, "uv_map");
         transform_mesh(*mesh, center, float3(0), float3(1));
         sub_geometry.replace_mesh(mesh);
-        sub_geometry.keep_only({GEO_COMPONENT_TYPE_MESH, GEO_COMPONENT_TYPE_INSTANCES});
+        sub_geometry.keep_only_during_modify({GEO_COMPONENT_TYPE_MESH});
       }
     });
 

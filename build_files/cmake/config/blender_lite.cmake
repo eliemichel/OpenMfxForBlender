@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 # turn everything OFF except for python which defaults to ON
 # and is needed for the UI
 #
@@ -32,8 +34,12 @@ set(WITH_IMAGE_HDR           OFF CACHE BOOL "" FORCE)
 set(WITH_IMAGE_OPENEXR       OFF CACHE BOOL "" FORCE)
 set(WITH_IMAGE_OPENJPEG      OFF CACHE BOOL "" FORCE)
 set(WITH_IMAGE_TIFF          OFF CACHE BOOL "" FORCE)
+set(WITH_IMAGE_WEBP          OFF CACHE BOOL "" FORCE)
 set(WITH_INPUT_NDOF          OFF CACHE BOOL "" FORCE)
 set(WITH_INTERNATIONAL       OFF CACHE BOOL "" FORCE)
+set(WITH_IO_STL              OFF CACHE BOOL "" FORCE)
+set(WITH_IO_WAVEFRONT_OBJ    OFF CACHE BOOL "" FORCE)
+set(WITH_IO_GPENCIL          OFF CACHE BOOL "" FORCE)
 set(WITH_JACK                OFF CACHE BOOL "" FORCE)
 set(WITH_LIBMV               OFF CACHE BOOL "" FORCE)
 set(WITH_LLVM                OFF CACHE BOOL "" FORCE)

@@ -1,19 +1,6 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include "BKE_curves.hh"
 #include "BKE_spline.hh"
 #include "BLI_task.hh"
 
@@ -131,10 +118,10 @@ struct TrimLocation {
 };
 
 template<typename T>
-static void shift_slice_to_start(MutableSpan<T> data, const int start_index, const int size)
+static void shift_slice_to_start(MutableSpan<T> data, const int start_index, const int num)
 {
-  BLI_assert(start_index + size - 1 <= data.size());
-  memmove(data.data(), &data[start_index], sizeof(T) * size);
+  BLI_assert(start_index + num - 1 <= data.size());
+  memmove(data.data(), &data[start_index], sizeof(T) * num);
 }
 
 /* Shift slice to start of span and modifies start and end data. */
@@ -143,17 +130,17 @@ static void linear_trim_data(const TrimLocation &start,
                              const TrimLocation &end,
                              MutableSpan<T> data)
 {
-  const int size = end.right_index - start.left_index + 1;
+  const int num = end.right_index - start.left_index + 1;
 
   if (start.left_index > 0) {
-    shift_slice_to_start<T>(data, start.left_index, size);
+    shift_slice_to_start<T>(data, start.left_index, num);
   }
 
   const T start_data = mix2<T>(start.factor, data.first(), data[1]);
-  const T end_data = mix2<T>(end.factor, data[size - 2], data[size - 1]);
+  const T end_data = mix2<T>(end.factor, data[num - 2], data[num - 1]);
 
   data.first() = start_data;
-  data[size - 1] = end_data;
+  data[num - 1] = end_data;
 }
 
 /**
@@ -166,12 +153,12 @@ static void linear_trim_to_output_data(const TrimLocation &start,
                                        Span<T> src,
                                        MutableSpan<T> dst)
 {
-  const int size = end.right_index - start.left_index + 1;
+  const int num = end.right_index - start.left_index + 1;
 
   const T start_data = mix2<T>(start.factor, src[start.left_index], src[start.right_index]);
   const T end_data = mix2<T>(end.factor, src[end.left_index], src[end.right_index]);
 
-  dst.copy_from(src.slice(start.left_index, size));
+  dst.copy_from(src.slice(start.left_index, num));
   dst.first() = start_data;
   dst.last() = end_data;
 }
@@ -189,8 +176,8 @@ static TrimLocation lookup_control_point_position(const Spline::LookupResult &lo
   const int right = left == (spline.size() - 1) ? 0 : left + 1;
 
   const float offset_in_segment = lookup.evaluated_index + lookup.factor - offsets[left];
-  const int segment_eval_size = offsets[left + 1] - offsets[left];
-  const float factor = std::clamp(offset_in_segment / segment_eval_size, 0.0f, 1.0f);
+  const int segment_eval_num = offsets[left + 1] - offsets[left];
+  const float factor = std::clamp(offset_in_segment / segment_eval_num, 0.0f, 1.0f);
 
   return {left, right, factor};
 }
@@ -205,7 +192,7 @@ static void trim_poly_spline(Spline &spline,
   const TrimLocation end = {
       end_lookup.evaluated_index, end_lookup.next_evaluated_index, end_lookup.factor};
 
-  const int size = end.right_index - start.left_index + 1;
+  const int num = end.right_index - start.left_index + 1;
 
   linear_trim_data<float3>(start, end, spline.positions());
   linear_trim_data<float>(start, end, spline.radii());
@@ -223,7 +210,7 @@ static void trim_poly_spline(Spline &spline,
       },
       ATTR_DOMAIN_POINT);
 
-  spline.resize(size);
+  spline.resize(num);
 }
 
 /**
@@ -239,11 +226,11 @@ static PolySpline trim_nurbs_spline(const Spline &spline,
   const TrimLocation end = {
       end_lookup.evaluated_index, end_lookup.next_evaluated_index, end_lookup.factor};
 
-  const int size = end.right_index - start.left_index + 1;
+  const int num = end.right_index - start.left_index + 1;
 
   /* Create poly spline and copy trimmed data to it. */
   PolySpline new_spline;
-  new_spline.resize(size);
+  new_spline.resize(num);
 
   /* Copy generic attribute data. */
   spline.attributes.foreach_attribute(
@@ -297,7 +284,7 @@ static void trim_bezier_spline(Spline &spline,
   const Span<int> control_offsets = bezier_spline.control_point_offsets();
 
   /* The number of control points in the resulting spline. */
-  const int size = end.right_index - start.left_index + 1;
+  const int num = end.right_index - start.left_index + 1;
 
   /* Trim the spline attributes. Done before end.factor recalculation as it needs
    * the original end.factor value. */
@@ -315,10 +302,10 @@ static void trim_bezier_spline(Spline &spline,
       },
       ATTR_DOMAIN_POINT);
 
-  /* Recalculate end.factor if the size is two, because the adjustment in the
+  /* Recalculate end.factor if the `num` is two, because the adjustment in the
    * position of the control point of the spline to the left of the new end point will change the
    * factor between them. */
-  if (size == 2) {
+  if (num == 2) {
     if (start_lookup.factor == 1.0f) {
       end.factor = 0.0f;
     }
@@ -342,38 +329,38 @@ static void trim_bezier_spline(Spline &spline,
   const BezierSpline::InsertResult end_point = bezier_spline.calculate_segment_insertion(
       end.left_index, end.right_index, end.factor);
 
-  /* If size is two, then the start point right handle needs to change to reflect the end point
+  /* If `num` is two, then the start point right handle needs to change to reflect the end point
    * previous handle update. */
-  if (size == 2) {
+  if (num == 2) {
     start_point.right_handle = end_point.handle_prev;
   }
 
   /* Shift control point position data to start at beginning of array. */
   if (start.left_index > 0) {
-    shift_slice_to_start(bezier_spline.positions(), start.left_index, size);
-    shift_slice_to_start(bezier_spline.handle_positions_left(), start.left_index, size);
-    shift_slice_to_start(bezier_spline.handle_positions_right(), start.left_index, size);
+    shift_slice_to_start(bezier_spline.positions(), start.left_index, num);
+    shift_slice_to_start(bezier_spline.handle_positions_left(), start.left_index, num);
+    shift_slice_to_start(bezier_spline.handle_positions_right(), start.left_index, num);
   }
 
   bezier_spline.positions().first() = start_point.position;
-  bezier_spline.positions()[size - 1] = end_point.position;
+  bezier_spline.positions()[num - 1] = end_point.position;
 
   bezier_spline.handle_positions_left().first() = start_point.left_handle;
-  bezier_spline.handle_positions_left()[size - 1] = end_point.left_handle;
+  bezier_spline.handle_positions_left()[num - 1] = end_point.left_handle;
 
   bezier_spline.handle_positions_right().first() = start_point.right_handle;
-  bezier_spline.handle_positions_right()[size - 1] = end_point.right_handle;
+  bezier_spline.handle_positions_right()[num - 1] = end_point.right_handle;
 
   /* If there is at least one control point between the endpoints, update the control
    * point handle to the right of the start point and to the left of the end point. */
-  if (size > 2) {
+  if (num > 2) {
     bezier_spline.handle_positions_left()[start.right_index - start.left_index] =
         start_point.handle_next;
     bezier_spline.handle_positions_right()[end.left_index - start.left_index] =
         end_point.handle_prev;
   }
 
-  bezier_spline.resize(size);
+  bezier_spline.resize(num);
 }
 
 static void trim_spline(SplinePtr &spline,
@@ -381,15 +368,18 @@ static void trim_spline(SplinePtr &spline,
                         const Spline::LookupResult end)
 {
   switch (spline->type()) {
-    case Spline::Type::Bezier:
+    case CURVE_TYPE_BEZIER:
       trim_bezier_spline(*spline, start, end);
       break;
-    case Spline::Type::Poly:
+    case CURVE_TYPE_POLY:
       trim_poly_spline(*spline, start, end);
       break;
-    case Spline::Type::NURBS:
+    case CURVE_TYPE_NURBS:
       spline = std::make_unique<PolySpline>(trim_nurbs_spline(*spline, start, end));
       break;
+    case CURVE_TYPE_CATMULL_ROM:
+      BLI_assert_unreachable();
+      spline = {};
   }
   spline->mark_cache_invalid();
 }
@@ -414,8 +404,8 @@ static void to_single_point_bezier(Spline &spline, const Spline::LookupResult &l
   const BezierSpline::InsertResult new_point = bezier.calculate_segment_insertion(
       trim.left_index, trim.right_index, trim.factor);
   bezier.positions().first() = new_point.position;
-  bezier.handle_types_left().first() = BezierSpline::HandleType::Free;
-  bezier.handle_types_right().first() = BezierSpline::HandleType::Free;
+  bezier.handle_types_left().first() = BEZIER_HANDLE_FREE;
+  bezier.handle_types_right().first() = BEZIER_HANDLE_FREE;
   bezier.handle_positions_left().first() = new_point.left_handle;
   bezier.handle_positions_right().first() = new_point.right_handle;
 
@@ -491,15 +481,18 @@ static PolySpline to_single_point_nurbs(const Spline &spline, const Spline::Look
 static void to_single_point_spline(SplinePtr &spline, const Spline::LookupResult &lookup)
 {
   switch (spline->type()) {
-    case Spline::Type::Bezier:
+    case CURVE_TYPE_BEZIER:
       to_single_point_bezier(*spline, lookup);
       break;
-    case Spline::Type::Poly:
+    case CURVE_TYPE_POLY:
       to_single_point_poly(*spline, lookup);
       break;
-    case Spline::Type::NURBS:
+    case CURVE_TYPE_NURBS:
       spline = std::make_unique<PolySpline>(to_single_point_nurbs(*spline, lookup));
       break;
+    case CURVE_TYPE_CATMULL_ROM:
+      BLI_assert_unreachable();
+      spline = {};
   }
 }
 
@@ -508,7 +501,7 @@ static void geometry_set_curve_trim(GeometrySet &geometry_set,
                                     Field<float> &start_field,
                                     Field<float> &end_field)
 {
-  if (!geometry_set.has_curve()) {
+  if (!geometry_set.has_curves()) {
     return;
   }
 
@@ -520,11 +513,12 @@ static void geometry_set_curve_trim(GeometrySet &geometry_set,
   evaluator.add(start_field);
   evaluator.add(end_field);
   evaluator.evaluate();
-  const blender::VArray<float> &starts = evaluator.get_evaluated<float>(0);
-  const blender::VArray<float> &ends = evaluator.get_evaluated<float>(1);
+  const VArray<float> starts = evaluator.get_evaluated<float>(0);
+  const VArray<float> ends = evaluator.get_evaluated<float>(1);
 
-  CurveEval &curve = *geometry_set.get_curve_for_write();
-  MutableSpan<SplinePtr> splines = curve.splines();
+  const Curves &src_curves_id = *geometry_set.get_curves_for_read();
+  std::unique_ptr<CurveEval> curve = curves_to_curve_eval(src_curves_id);
+  MutableSpan<SplinePtr> splines = curve->splines();
 
   threading::parallel_for(splines.index_range(), 128, [&](IndexRange range) {
     for (const int i : range) {
@@ -535,7 +529,7 @@ static void geometry_set_curve_trim(GeometrySet &geometry_set,
         continue;
       }
 
-      if (spline->evaluated_edges_size() == 0) {
+      if (spline->evaluated_edges_num() == 0) {
         continue;
       }
 
@@ -573,6 +567,10 @@ static void geometry_set_curve_trim(GeometrySet &geometry_set,
       }
     }
   });
+
+  Curves *dst_curves_id = curve_eval_to_curves(*curve);
+  bke::curves_copy_parameters(src_curves_id, *dst_curves_id);
+  geometry_set.replace_curves(dst_curves_id);
 }
 
 static void node_geo_exec(GeoNodeExecParams params)
@@ -581,6 +579,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   const GeometryNodeCurveSampleMode mode = (GeometryNodeCurveSampleMode)storage.mode;
 
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
+  GeometryComponentEditData::remember_deformed_curve_positions_if_necessary(geometry_set);
 
   if (mode == GEO_NODE_CURVE_SAMPLE_FACTOR) {
     Field<float> start_field = params.extract_input<Field<float>>("Start");

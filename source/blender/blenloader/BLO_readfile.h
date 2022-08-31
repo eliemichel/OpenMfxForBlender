@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 #pragma once
 
 #include "BLI_listbase.h"
@@ -117,8 +101,6 @@ typedef struct BlendFileReadReport {
     /* Number of root override IDs that were resynced. */
     int resynced_lib_overrides;
 
-    /* Number of (non-converted) linked proxies. */
-    int linked_proxies;
     /* Number of proxies converted to library overrides. */
     int proxies_to_lib_overrides_success;
     /* Number of proxies that failed to convert to library overrides. */
@@ -174,10 +156,11 @@ BlendFileData *BLO_read_from_memory(const void *mem,
  *
  * \param oldmain: old main,
  * from which we will keep libraries and other data-blocks that should not have changed.
- * \param filename: current file, only for retrieving library data.
+ * \param filepath: current file, only for retrieving library data.
+ * Typically `BKE_main_blendfile_path(oldmain)`.
  */
 BlendFileData *BLO_read_from_memfile(struct Main *oldmain,
-                                     const char *filename,
+                                     const char *filepath,
                                      struct MemFile *memfile,
                                      const struct BlendFileReadParams *params,
                                      struct ReportList *reports);

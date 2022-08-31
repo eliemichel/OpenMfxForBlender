@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BKE_context.h"
 
@@ -53,7 +39,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
   uiItemR(layout, ptr, "data_type", 0, "", ICON_NONE);
 }
 
-static eNodeSocketDatatype custom_data_type_to_socket_type(const CustomDataType type)
+static eNodeSocketDatatype custom_data_type_to_socket_type(const eCustomDataType type)
 {
   switch (type) {
     case CD_PROP_FLOAT:
@@ -75,7 +61,7 @@ static eNodeSocketDatatype custom_data_type_to_socket_type(const CustomDataType 
 static void node_update(bNodeTree *ntree, bNode *node)
 {
   const NodeGeometryViewer &storage = node_storage(*node);
-  const CustomDataType data_type = static_cast<CustomDataType>(storage.data_type);
+  const eCustomDataType data_type = static_cast<eCustomDataType>(storage.data_type);
   const eNodeSocketDatatype socket_type = custom_data_type_to_socket_type(data_type);
 
   LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
@@ -96,7 +82,7 @@ static void node_gather_link_searches(GatherLinkSearchOpParams &params)
     ED_spreadsheet_context_paths_set_geometry_node(bmain, snode, &viewer_node);
   };
 
-  const std::optional<CustomDataType> type = node_socket_to_custom_data_type(
+  const std::optional<eCustomDataType> type = node_socket_to_custom_data_type(
       params.other_socket());
   if (params.in_out() == SOCK_OUT) {
     /* The viewer node only has inputs. */

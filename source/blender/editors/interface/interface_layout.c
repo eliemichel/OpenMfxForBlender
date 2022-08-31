@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup edinterface
@@ -47,6 +33,7 @@
 #include "BKE_screen.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "UI_interface.h"
 
@@ -506,7 +493,7 @@ static void ui_layer_but_cb(bContext *C, void *arg_but, void *arg_index)
   PointerRNA *ptr = &but->rnapoin;
   PropertyRNA *prop = but->rnaprop;
   const int index = POINTER_AS_INT(arg_index);
-  const int shift = win->eventstate->shift;
+  const bool shift = win->eventstate->modifier & KM_SHIFT;
   const int len = RNA_property_array_length(ptr, prop);
 
   if (!shift) {
@@ -766,7 +753,7 @@ static void ui_item_enum_expand_handle(bContext *C, void *arg1, void *arg2)
 {
   wmWindow *win = CTX_wm_window(C);
 
-  if (!win->eventstate->shift) {
+  if ((win->eventstate->modifier & KM_SHIFT) == 0) {
     uiBut *but = (uiBut *)arg1;
     const int enum_value = POINTER_AS_INT(arg2);
 
@@ -974,11 +961,17 @@ static void ui_item_enum_expand_tabs(uiLayout *layout,
 static void ui_keymap_but_cb(bContext *UNUSED(C), void *but_v, void *UNUSED(key_v))
 {
   uiBut *but = but_v;
+  BLI_assert(but->type == UI_BTYPE_HOTKEY_EVENT);
+  const uiButHotkeyEvent *hotkey_but = (uiButHotkeyEvent *)but;
 
-  RNA_int_set(&but->rnapoin, "shift", (but->modifier_key & KM_SHIFT) ? KM_MOD_HELD : KM_NOTHING);
-  RNA_int_set(&but->rnapoin, "ctrl", (but->modifier_key & KM_CTRL) ? KM_MOD_HELD : KM_NOTHING);
-  RNA_int_set(&but->rnapoin, "alt", (but->modifier_key & KM_ALT) ? KM_MOD_HELD : KM_NOTHING);
-  RNA_int_set(&but->rnapoin, "oskey", (but->modifier_key & KM_OSKEY) ? KM_MOD_HELD : KM_NOTHING);
+  RNA_int_set(
+      &but->rnapoin, "shift", (hotkey_but->modifier_key & KM_SHIFT) ? KM_MOD_HELD : KM_NOTHING);
+  RNA_int_set(
+      &but->rnapoin, "ctrl", (hotkey_but->modifier_key & KM_CTRL) ? KM_MOD_HELD : KM_NOTHING);
+  RNA_int_set(
+      &but->rnapoin, "alt", (hotkey_but->modifier_key & KM_ALT) ? KM_MOD_HELD : KM_NOTHING);
+  RNA_int_set(
+      &but->rnapoin, "oskey", (hotkey_but->modifier_key & KM_OSKEY) ? KM_MOD_HELD : KM_NOTHING);
 }
 
 /**
@@ -1040,10 +1033,10 @@ static uiBut *ui_item_with_label(uiLayout *layout,
     {
       int w_label;
       if (ui_layout_variable_size(layout)) {
-        /* w_hint is width for label in this case.
-         * Use a default width for property button(s) */
+        /* In this case, a pure label without additional padding.
+         * Use a default width for property button(s). */
         prop_but_width = UI_UNIT_X * 5;
-        w_label = w_hint;
+        w_label = ui_text_icon_width_ex(layout, name, ICON_NONE, &ui_text_pad_none);
       }
       else {
         w_label = w_hint / 3;
@@ -1114,7 +1107,7 @@ static uiBut *ui_item_with_label(uiLayout *layout,
                          NULL);
     UI_but_func_set(but, ui_keymap_but_cb, but, NULL);
     if (flag & UI_ITEM_R_IMMEDIATE) {
-      UI_but_flag_enable(but, UI_BUT_IMMEDIATE);
+      UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
     }
   }
   else {
@@ -2345,7 +2338,14 @@ void uiItemFullR(uiLayout *layout,
   /* property with separate label */
   else if (ELEM(type, PROP_ENUM, PROP_STRING, PROP_POINTER)) {
     but = ui_item_with_label(layout, block, name, icon, ptr, prop, index, 0, 0, w, h, flag);
-    but = ui_but_add_search(but, ptr, prop, NULL, NULL);
+    bool results_are_suggestions = false;
+    if (type == PROP_STRING) {
+      const eStringPropertySearchFlag search_flag = RNA_property_string_search_flag(prop);
+      if (search_flag & PROP_STRING_SEARCH_SUGGESTION) {
+        results_are_suggestions = true;
+      }
+    }
+    but = ui_but_add_search(but, ptr, prop, NULL, NULL, results_are_suggestions);
 
     if (layout->redalert) {
       UI_but_flag_enable(but, UI_BUT_REDALERT);
@@ -2713,12 +2713,21 @@ static void ui_rna_collection_search_arg_free_fn(void *ptr)
   MEM_freeN(ptr);
 }
 
-uiBut *ui_but_add_search(
-    uiBut *but, PointerRNA *ptr, PropertyRNA *prop, PointerRNA *searchptr, PropertyRNA *searchprop)
+uiBut *ui_but_add_search(uiBut *but,
+                         PointerRNA *ptr,
+                         PropertyRNA *prop,
+                         PointerRNA *searchptr,
+                         PropertyRNA *searchprop,
+                         const bool results_are_suggestions)
 {
   /* for ID's we do automatic lookup */
+  bool has_search_fn = false;
+
   PointerRNA sptr;
   if (!searchprop) {
+    if (RNA_property_type(prop) == PROP_STRING) {
+      has_search_fn = (RNA_property_string_search_flag(prop) != 0);
+    }
     if (RNA_property_type(prop) == PROP_POINTER) {
       StructRNA *ptype = RNA_property_pointer_type(ptr, prop);
       search_id_collection(ptype, &sptr, &searchprop);
@@ -2727,14 +2736,18 @@ uiBut *ui_but_add_search(
   }
 
   /* turn button into search button */
-  if (searchprop) {
+  if (has_search_fn || searchprop) {
     uiRNACollectionSearch *coll_search = MEM_mallocN(sizeof(*coll_search), __func__);
     uiButSearch *search_but;
 
     but = ui_but_change_type(but, UI_BTYPE_SEARCH_MENU);
     search_but = (uiButSearch *)but;
-    search_but->rnasearchpoin = *searchptr;
-    search_but->rnasearchprop = searchprop;
+
+    if (searchptr) {
+      search_but->rnasearchpoin = *searchptr;
+      search_but->rnasearchprop = searchprop;
+    }
+
     but->hardmax = MAX2(but->hardmax, 256.0f);
     but->drawflag |= UI_BUT_ICON_LEFT | UI_BUT_TEXT_LEFT;
     if (RNA_property_is_unlink(prop)) {
@@ -2743,8 +2756,17 @@ uiBut *ui_but_add_search(
 
     coll_search->target_ptr = *ptr;
     coll_search->target_prop = prop;
-    coll_search->search_ptr = *searchptr;
-    coll_search->search_prop = searchprop;
+
+    if (searchptr) {
+      coll_search->search_ptr = *searchptr;
+      coll_search->search_prop = searchprop;
+    }
+    else {
+      /* Rely on `has_search_fn`. */
+      coll_search->search_ptr = PointerRNA_NULL;
+      coll_search->search_prop = NULL;
+    }
+
     coll_search->search_but = but;
     coll_search->butstore_block = but->block;
     coll_search->butstore = UI_butstore_create(coll_search->butstore_block);
@@ -2756,6 +2778,8 @@ uiBut *ui_but_add_search(
       but->str[0] = 0;
     }
 
+    UI_but_func_search_set_results_are_suggestions(but, results_are_suggestions);
+
     UI_but_func_search_set(but,
                            ui_searchbox_create_generic,
                            ui_rna_collection_search_update_fn,
@@ -2764,6 +2788,10 @@ uiBut *ui_but_add_search(
                            ui_rna_collection_search_arg_free_fn,
                            NULL,
                            NULL);
+    /* If this is called multiple times for the same button, an earlier call may have taken the
+     * else branch below so the button was disabled. Now we have a searchprop, so it can be enabled
+     * again. */
+    but->flag &= ~UI_BUT_DISABLED;
   }
   else if (but->type == UI_BTYPE_SEARCH_MENU) {
     /* In case we fail to find proper searchprop,
@@ -2780,7 +2808,8 @@ void uiItemPointerR_prop(uiLayout *layout,
                          PointerRNA *searchptr,
                          PropertyRNA *searchprop,
                          const char *name,
-                         int icon)
+                         int icon,
+                         bool results_are_suggestions)
 {
   const bool use_prop_sep = ((layout->item.flag & UI_ITEM_PROP_SEP) != 0);
 
@@ -2829,7 +2858,7 @@ void uiItemPointerR_prop(uiLayout *layout,
   w += UI_UNIT_X; /* X icon needs more space */
   uiBut *but = ui_item_with_label(layout, block, name, icon, ptr, prop, 0, 0, 0, w, h, 0);
 
-  ui_but_add_search(but, ptr, prop, searchptr, searchprop);
+  but = ui_but_add_search(but, ptr, prop, searchptr, searchprop, results_are_suggestions);
 }
 
 void uiItemPointerR(uiLayout *layout,
@@ -2854,7 +2883,7 @@ void uiItemPointerR(uiLayout *layout,
     return;
   }
 
-  uiItemPointerR_prop(layout, ptr, prop, searchptr, searchprop, name, icon);
+  uiItemPointerR_prop(layout, ptr, prop, searchptr, searchprop, name, icon, false);
 }
 
 void ui_item_menutype_func(bContext *C, uiLayout *layout, void *arg_mt)
@@ -2999,7 +3028,14 @@ void uiItemMContents(uiLayout *layout, const char *menuname)
   if (WM_menutype_poll(C, mt) == false) {
     return;
   }
+
+  bContextStore *previous_ctx = CTX_store_get(C);
   UI_menutype_draw(C, mt, layout);
+
+  /* Restore context that was cleared by `UI_menutype_draw`. */
+  if (layout->context) {
+    CTX_store_set(C, previous_ctx);
+  }
 }
 
 void uiItemDecoratorR_prop(uiLayout *layout, PointerRNA *ptr, PropertyRNA *prop, int index)
@@ -5681,6 +5717,40 @@ void uiLayoutContextCopy(uiLayout *layout, bContextStore *context)
 {
   uiBlock *block = layout->root->block;
   layout->context = CTX_store_add_all(&block->contexts, context);
+}
+
+void uiLayoutSetTooltipFunc(uiLayout *layout,
+                            uiButToolTipFunc func,
+                            void *arg,
+                            uiCopyArgFunc copy_arg,
+                            uiFreeArgFunc free_arg)
+{
+  bool arg_used = false;
+
+  LISTBASE_FOREACH (uiItem *, item, &layout->items) {
+    /* Each button will call free_arg for "its" argument, so we need to
+     * duplicate the allocation for each button after the first. */
+    if (copy_arg != NULL && arg_used) {
+      arg = copy_arg(arg);
+    }
+    arg_used = true;
+
+    if (item->type == ITEM_BUTTON) {
+      uiButtonItem *bitem = (uiButtonItem *)item;
+      if (bitem->but->type == UI_BTYPE_DECORATOR) {
+        continue;
+      }
+      UI_but_func_tooltip_set(bitem->but, func, arg, free_arg);
+    }
+    else {
+      uiLayoutSetTooltipFunc((uiLayout *)item, func, arg, copy_arg, free_arg);
+    }
+  }
+
+  if (!arg_used) {
+    /* Free the original copy of arg in case the layout is empty. */
+    free_arg(arg);
+  }
 }
 
 void uiLayoutSetContextFromBut(uiLayout *layout, uiBut *but)

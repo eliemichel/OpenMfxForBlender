@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup obj
@@ -22,8 +8,6 @@
 
 #include "BLI_map.hh"
 #include "BLI_math_vec_types.hh"
-#include "BLI_string_ref.hh"
-#include "BLI_vector.hh"
 
 #include "DNA_node_types.h"
 #include "obj_export_io.hh"
@@ -39,19 +23,22 @@ template<> struct DefaultHash<io::obj::eMTLSyntaxElement> {
 }  // namespace blender
 
 namespace blender::io::obj {
-class OBJMesh;
 
 /**
  * Generic container for texture node properties.
  */
 struct tex_map_XX {
   tex_map_XX(StringRef to_socket_id) : dest_socket_id(to_socket_id){};
+  bool is_valid() const
+  {
+    return !image_path.empty();
+  }
 
-  /** Target socket which this texture node connects to. */
+  /* Target socket which this texture node connects to. */
   const std::string dest_socket_id;
   float3 translation{0.0f};
   float3 scale{1.0f};
-  /* Only Flat and Smooth projections are supported. */
+  /* Only Flat and Sphere projections are supported. */
   int projection_type = SHD_PROJ_FLAT;
   std::string image_path;
   std::string mtl_dir_path;
@@ -72,16 +59,15 @@ struct MTLMaterial {
     texture_maps.add(eMTLSyntaxElement::map_Bump, tex_map_XX("Normal"));
   }
 
-  /**
-   * Caller must ensure that the given lookup key exists in the Map.
-   * \return Texture map corresponding to the given ID.
-   */
+  const tex_map_XX &tex_map_of_type(const eMTLSyntaxElement key) const
+  {
+    BLI_assert(texture_maps.contains(key));
+    return texture_maps.lookup(key);
+  }
   tex_map_XX &tex_map_of_type(const eMTLSyntaxElement key)
   {
-    {
-      BLI_assert(texture_maps.contains_as(key));
-      return texture_maps.lookup_as(key);
-    }
+    BLI_assert(texture_maps.contains(key));
+    return texture_maps.lookup(key);
   }
 
   std::string name;

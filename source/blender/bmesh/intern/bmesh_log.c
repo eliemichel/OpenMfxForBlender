@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bmesh
@@ -48,42 +34,41 @@
 struct BMLogEntry {
   struct BMLogEntry *next, *prev;
 
-  /* The following GHashes map from an element ID to one of the log
-   * types above */
+  /* The following #GHash members map from an element ID to one of the log types above. */
 
-  /* Elements that were in the previous entry, but have been
-   * deleted */
+  /** Elements that were in the previous entry, but have been deleted. */
   GHash *deleted_verts;
   GHash *deleted_faces;
-  /* Elements that were not in the previous entry, but are in the
-   * result of this entry */
+  /** Elements that were not in the previous entry, but are in the result of this entry. */
   GHash *added_verts;
   GHash *added_faces;
 
-  /* Vertices whose coordinates, mask value, or hflag have changed */
+  /** Vertices whose coordinates, mask value, or hflag have changed. */
   GHash *modified_verts;
   GHash *modified_faces;
 
   BLI_mempool *pool_verts;
   BLI_mempool *pool_faces;
 
-  /* This is only needed for dropping BMLogEntries while still in
+  /**
+   * This is only needed for dropping BMLogEntries while still in
    * dynamic-topology mode, as that should release vert/face IDs
-   * back to the BMLog but no BMLog pointer is available at that
-   * time.
+   * back to the BMLog but no BMLog pointer is available at that time.
    *
    * This field is not guaranteed to be valid, any use of it should
-   * check for NULL. */
+   * check for NULL.
+   */
   BMLog *log;
 };
 
 struct BMLog {
-  /* Tree of free IDs */
+  /** Tree of free IDs */
   struct RangeTreeUInt *unused_ids;
 
-  /* Mapping from unique IDs to vertices and faces
+  /**
+   * Mapping from unique IDs to vertices and faces
    *
-   * Each vertex and face in the log gets a unique uinteger
+   * Each vertex and face in the log gets a unique `uint`
    * assigned. That ID is taken from the set managed by the
    * unused_ids range tree.
    *
@@ -93,10 +78,11 @@ struct BMLog {
   GHash *id_to_elem;
   GHash *elem_to_id;
 
-  /* All BMLogEntrys, ordered from earliest to most recent */
+  /** All #BMLogEntrys, ordered from earliest to most recent. */
   ListBase entries;
 
-  /* The current log entry from entries list
+  /**
+   * The current log entry from entries list
    *
    * If null, then the original mesh from before any of the log
    * entries is current (i.e. there is nothing left to undo.)
@@ -302,6 +288,8 @@ static void bm_log_verts_restore(BMesh *bm, BMLog *log, GHash *verts)
 static void bm_log_faces_restore(BMesh *bm, BMLog *log, GHash *faces)
 {
   GHashIterator gh_iter;
+  const int cd_face_sets = CustomData_get_offset(&bm->pdata, CD_SCULPT_FACE_SETS);
+
   GHASH_ITER (gh_iter, faces) {
     void *key = BLI_ghashIterator_getKey(&gh_iter);
     BMLogFace *lf = BLI_ghashIterator_getValue(&gh_iter);
@@ -315,6 +303,11 @@ static void bm_log_faces_restore(BMesh *bm, BMLog *log, GHash *faces)
     f = BM_face_create_verts(bm, v, 3, NULL, BM_CREATE_NOP, true);
     f->head.hflag = lf->hflag;
     bm_log_face_id_set(log, f, POINTER_AS_UINT(key));
+
+    /* Ensure face sets have valid values.  Fixes T80174. */
+    if (cd_face_sets != -1) {
+      BM_ELEM_CD_SET_INT(f, cd_face_sets, 1);
+    }
   }
 }
 

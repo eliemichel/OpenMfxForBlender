@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup obj
@@ -39,15 +25,12 @@ OBJCurve::OBJCurve(const Depsgraph *depsgraph,
   set_world_axes_transform(export_params.forward_axis, export_params.up_axis);
 }
 
-void OBJCurve::set_world_axes_transform(const eTransformAxisForward forward,
-                                        const eTransformAxisUp up)
+void OBJCurve::set_world_axes_transform(const eIOAxis forward, const eIOAxis up)
 {
   float axes_transform[3][3];
   unit_m3(axes_transform);
   /* +Y-forward and +Z-up are the Blender's default axis settings. */
-  mat3_from_axis_conversion(OBJ_AXIS_Y_FORWARD, OBJ_AXIS_Z_UP, forward, up, axes_transform);
-  /* mat3_from_axis_conversion returns a transposed matrix! */
-  transpose_m3(axes_transform);
+  mat3_from_axis_conversion(forward, up, IO_AXIS_Y, IO_AXIS_Z, axes_transform);
   mul_m4_m3m4(world_axes_transform_, axes_transform, export_object_eval_->obmat);
   /* #mul_m4_m3m4 does not transform last row of #Object.obmat, i.e. location data. */
   mul_v3_m3v3(world_axes_transform_[3], axes_transform, export_object_eval_->obmat[3]);
@@ -86,12 +69,12 @@ float3 OBJCurve::vertex_coordinates(const int spline_index,
 int OBJCurve::total_spline_control_points(const int spline_index) const
 {
   const Nurb *const nurb = static_cast<Nurb *>(BLI_findlink(&export_curve_->nurb, spline_index));
-  const int r_nurbs_degree = nurb->orderu - 1;
+  int degree = nurb->type == CU_POLY ? 1 : nurb->orderu - 1;
   /* Total control points = Number of points in the curve (+ degree of the
    * curve if it is cyclic). */
   int r_tot_control_points = nurb->pntsv * nurb->pntsu;
   if (nurb->flagu & CU_NURB_CYCLIC) {
-    r_tot_control_points += r_nurbs_degree;
+    r_tot_control_points += degree;
   }
   return r_tot_control_points;
 }
@@ -99,7 +82,7 @@ int OBJCurve::total_spline_control_points(const int spline_index) const
 int OBJCurve::get_nurbs_degree(const int spline_index) const
 {
   const Nurb *const nurb = static_cast<Nurb *>(BLI_findlink(&export_curve_->nurb, spline_index));
-  return nurb->orderu - 1;
+  return nurb->type == CU_POLY ? 1 : nurb->orderu - 1;
 }
 
 short OBJCurve::get_nurbs_flagu(const int spline_index) const

@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2020 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "bvh/bvh.h"
 #include "bvh/bvh2.h"
@@ -192,8 +179,12 @@ bool Geometry::has_true_displacement() const
   return false;
 }
 
-void Geometry::compute_bvh(
-    Device *device, DeviceScene *dscene, SceneParams *params, Progress *progress, int n, int total)
+void Geometry::compute_bvh(Device *device,
+                           DeviceScene *dscene,
+                           SceneParams *params,
+                           Progress *progress,
+                           size_t n,
+                           size_t total)
 {
   if (progress->get_cancel())
     return;
@@ -226,8 +217,7 @@ void Geometry::compute_bvh(
     if (bvh && !need_update_rebuild) {
       progress->set_status(msg, "Refitting BVH");
 
-      bvh->geometry = geometry;
-      bvh->objects = objects;
+      bvh->replace_geometry(geometry, objects);
 
       device->build_bvh(bvh, *progress, true);
     }
@@ -416,43 +406,47 @@ void GeometryManager::update_osl_attributes(Device *device,
 
 /* Generate a normal attribute map entry from an attribute descriptor. */
 static void emit_attribute_map_entry(
-    uint4 *attr_map, int index, uint id, TypeDesc type, const AttributeDescriptor &desc)
+    AttributeMap *attr_map, int index, uint id, TypeDesc type, const AttributeDescriptor &desc)
 {
-  attr_map[index].x = id;
-  attr_map[index].y = desc.element;
-  attr_map[index].z = as_uint(desc.offset);
+  attr_map[index].id = id;
+  attr_map[index].element = desc.element;
+  attr_map[index].offset = as_uint(desc.offset);
 
   if (type == TypeDesc::TypeFloat)
-    attr_map[index].w = NODE_ATTR_FLOAT;
+    attr_map[index].type = NODE_ATTR_FLOAT;
   else if (type == TypeDesc::TypeMatrix)
-    attr_map[index].w = NODE_ATTR_MATRIX;
+    attr_map[index].type = NODE_ATTR_MATRIX;
   else if (type == TypeFloat2)
-    attr_map[index].w = NODE_ATTR_FLOAT2;
+    attr_map[index].type = NODE_ATTR_FLOAT2;
   else if (type == TypeFloat4)
-    attr_map[index].w = NODE_ATTR_FLOAT4;
+    attr_map[index].type = NODE_ATTR_FLOAT4;
   else if (type == TypeRGBA)
-    attr_map[index].w = NODE_ATTR_RGBA;
+    attr_map[index].type = NODE_ATTR_RGBA;
   else
-    attr_map[index].w = NODE_ATTR_FLOAT3;
+    attr_map[index].type = NODE_ATTR_FLOAT3;
 
-  attr_map[index].w |= desc.flags << 8;
+  attr_map[index].flags = desc.flags;
 }
 
 /* Generate an attribute map end marker, optionally including a link to another map.
  * Links are used to connect object attribute maps to mesh attribute maps. */
-static void emit_attribute_map_terminator(uint4 *attr_map, int index, bool chain, uint chain_link)
+static void emit_attribute_map_terminator(AttributeMap *attr_map,
+                                          int index,
+                                          bool chain,
+                                          uint chain_link)
 {
   for (int j = 0; j < ATTR_PRIM_TYPES; j++) {
-    attr_map[index + j].x = ATTR_STD_NONE;
-    attr_map[index + j].y = chain;                      /* link is valid flag */
-    attr_map[index + j].z = chain ? chain_link + j : 0; /* link to the correct sub-entry */
-    attr_map[index + j].w = 0;
+    attr_map[index + j].id = ATTR_STD_NONE;
+    attr_map[index + j].element = chain;                     /* link is valid flag */
+    attr_map[index + j].offset = chain ? chain_link + j : 0; /* link to the correct sub-entry */
+    attr_map[index + j].type = 0;
+    attr_map[index + j].flags = 0;
   }
 }
 
 /* Generate all necessary attribute map entries from the attribute request. */
 static void emit_attribute_mapping(
-    uint4 *attr_map, int index, Scene *scene, AttributeRequest &req, Geometry *geom)
+    AttributeMap *attr_map, int index, Scene *scene, AttributeRequest &req, Geometry *geom)
 {
   uint id;
 
@@ -510,8 +504,8 @@ void GeometryManager::update_svm_attributes(Device *,
   }
 
   /* create attribute map */
-  uint4 *attr_map = dscene->attributes_map.alloc(attr_map_size);
-  memset(attr_map, 0, dscene->attributes_map.size() * sizeof(uint));
+  AttributeMap *attr_map = dscene->attributes_map.alloc(attr_map_size);
+  memset(attr_map, 0, dscene->attributes_map.size() * sizeof(*attr_map));
 
   for (size_t i = 0; i < scene->geometry.size(); i++) {
     Geometry *geom = scene->geometry[i];
@@ -627,6 +621,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size; k++) {
           attr_uchar4[offset + k] = data[k];
         }
+        attr_uchar4.tag_modified();
       }
       attr_uchar4_offset += size;
     }
@@ -639,6 +634,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size; k++) {
           attr_float[offset + k] = data[k];
         }
+        attr_float.tag_modified();
       }
       attr_float_offset += size;
     }
@@ -651,6 +647,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size; k++) {
           attr_float2[offset + k] = data[k];
         }
+        attr_float2.tag_modified();
       }
       attr_float2_offset += size;
     }
@@ -663,6 +660,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size * 3; k++) {
           attr_float4[offset + k] = (&tfm->x)[k];
         }
+        attr_float4.tag_modified();
       }
       attr_float4_offset += size * 3;
     }
@@ -675,6 +673,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size; k++) {
           attr_float4[offset + k] = data[k];
         }
+        attr_float4.tag_modified();
       }
       attr_float4_offset += size;
     }
@@ -687,6 +686,7 @@ void GeometryManager::update_attribute_element_offset(Geometry *geom,
         for (size_t k = 0; k < size; k++) {
           attr_float3[offset + k] = data[k];
         }
+        attr_float3.tag_modified();
       }
       attr_float3_offset += size;
     }
@@ -1291,7 +1291,7 @@ void GeometryManager::device_update_bvh(Device *device,
   bparams.bvh_type = scene->params.bvh_type;
   bparams.curve_subdivisions = scene->params.curve_subdivisions();
 
-  VLOG(1) << "Using " << bvh_layout_name(bparams.bvh_layout) << " layout.";
+  VLOG_INFO << "Using " << bvh_layout_name(bparams.bvh_layout) << " layout.";
 
   const bool can_refit = scene->bvh != nullptr &&
                          (bparams.bvh_layout == BVHLayout::BVH_LAYOUT_OPTIX ||
@@ -1361,7 +1361,7 @@ void GeometryManager::device_update_bvh(Device *device,
   dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
   dscene->data.bvh.curve_subdivisions = scene->params.curve_subdivisions();
   /* The scene handle is set in 'CPUDevice::const_copy_to' and 'OptiXDevice::const_copy_to' */
-  dscene->data.bvh.scene = 0;
+  dscene->data.device_bvh = 0;
 }
 
 /* Set of flags used to help determining what data has been modified or needs reallocation, so we
@@ -1550,7 +1550,7 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       }
 
       Volume *volume = static_cast<Volume *>(geom);
-      create_volume_mesh(volume, progress);
+      create_volume_mesh(scene, volume, progress);
 
       /* always reallocate when we have a volume, as we need to rebuild the BVH */
       device_update_flags |= DEVICE_MESH_DATA_NEEDS_REALLOC;
@@ -1802,7 +1802,7 @@ void GeometryManager::device_update(Device *device,
   if (!need_update())
     return;
 
-  VLOG(1) << "Total " << scene->geometry.size() << " meshes.";
+  VLOG_INFO << "Total " << scene->geometry.size() << " meshes.";
 
   bool true_displacement_used = false;
   bool curve_shadow_transparency_used = false;
@@ -1956,7 +1956,7 @@ void GeometryManager::device_update(Device *device,
 
   {
     /* Copy constant data needed by shader evaluation. */
-    device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
+    device->const_copy_to("data", &dscene->data, sizeof(dscene->data));
 
     scoped_callback_timer timer([scene](double time) {
       if (scene->update_stats) {
@@ -2041,7 +2041,7 @@ void GeometryManager::device_update(Device *device,
 
     TaskPool::Summary summary;
     pool.wait_work(&summary);
-    VLOG(2) << "Objects BVH build pool statistics:\n" << summary.full_report();
+    VLOG_WORK << "Objects BVH build pool statistics:\n" << summary.full_report();
   }
 
   foreach (Shader *shader, scene->shaders) {

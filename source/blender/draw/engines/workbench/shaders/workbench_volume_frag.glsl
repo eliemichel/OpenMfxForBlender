@@ -94,7 +94,7 @@ vec4 flag_to_color(uint flag)
   if (bool(flag & uint(16))) {
     color.rgb += vec3(0.9, 0.3, 0.0); /* orange */
   }
-  if (color.rgb == vec3(0.0)) {
+  if (is_zero(color.rgb)) {
     color.rgb += vec3(0.5, 0.0, 0.0); /* medium red */
   }
   return color;
@@ -218,7 +218,15 @@ void main()
   /* Manual depth test. TODO: remove. */
   float depth = texelFetch(depthBuffer, ivec2(gl_FragCoord.xy), 0).r;
   if (gl_FragCoord.z >= depth) {
+    /* NOTE: In the Metal API, prior to Metal 2.3, Discard is not an explicit return and can
+     * produce undefined behavior. This is especially prominent with derivatives if control-flow
+     * divergence is present.
+     *
+     * Adding a return call eliminates undefined behavior and a later out-of-bounds read causing
+     * a crash on AMD platforms.
+     * This behavior can also affect OpenGL on certain devices. */
     discard;
+    return;
   }
 
   vec3 Lscat;
@@ -229,7 +237,7 @@ void main()
   fragColor = vec4(Lscat, Tr);
 #else
   vec2 screen_uv = gl_FragCoord.xy / vec2(textureSize(depthBuffer, 0).xy);
-  bool is_persp = ProjectionMatrix[3][3] == 0.0;
+  bool is_persp = drw_view.winmat[3][3] == 0.0;
 
   vec3 volume_center = ModelMatrix[3].xyz;
 
@@ -268,6 +276,7 @@ void main()
     /* Start is further away than the end.
      * That means no volume is intersected. */
     discard;
+    return;
   }
 
   fragColor = volume_integration(ls_ray_ori,

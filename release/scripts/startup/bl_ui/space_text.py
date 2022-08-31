@@ -1,25 +1,10 @@
-# ##### BEGIN GPL LICENSE BLOCK #####
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program; if not, write to the Free Software Foundation,
-#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# ##### END GPL LICENSE BLOCK #####
-
-# <pep8-80 compliant>
+# SPDX-License-Identifier: GPL-2.0-or-later
 import bpy
 from bpy.types import Header, Menu, Panel
-from bpy.app.translations import pgettext_iface as iface_
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+    pgettext_iface as iface_,
+)
 
 
 class TEXT_HT_header(Header):
@@ -185,8 +170,10 @@ class TEXT_PT_find(Panel):
         row = layout.row(align=True)
         if not st.text:
             row.active = False
-        row.prop(st, "use_match_case", text="Case", toggle=True)
-        row.prop(st, "use_find_wrap", text="Wrap", toggle=True)
+        row.prop(st, "use_match_case", text="Case",
+                 text_ctxt=i18n_contexts.id_text, toggle=True)
+        row.prop(st, "use_find_wrap", text="Wrap",
+                 text_ctxt=i18n_contexts.id_text, toggle=True)
         row.prop(st, "use_find_all", text="All", toggle=True)
 
 
@@ -252,7 +239,8 @@ class TEXT_MT_text(Menu):
         st = context.space_data
         text = st.text
 
-        layout.operator("text.new", text="New", icon='FILE_NEW')
+        layout.operator("text.new", text="New",
+                        text_ctxt=i18n_contexts.id_text, icon='FILE_NEW')
         layout.operator("text.open", text="Open...", icon='FILE_FOLDER')
 
         if text:

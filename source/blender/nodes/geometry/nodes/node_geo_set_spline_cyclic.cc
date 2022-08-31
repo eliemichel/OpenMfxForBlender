@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "node_geometry_util.hh"
 
@@ -30,21 +16,23 @@ static void set_cyclic_in_component(GeometryComponent &component,
                                     const Field<bool> &selection_field,
                                     const Field<bool> &cyclic_field)
 {
-  GeometryComponentFieldContext field_context{component, ATTR_DOMAIN_CURVE};
   const int domain_size = component.attribute_domain_size(ATTR_DOMAIN_CURVE);
   if (domain_size == 0) {
     return;
   }
+  MutableAttributeAccessor attributes = *component.attributes_for_write();
 
-  OutputAttribute_Typed<bool> cyclics = component.attribute_try_get_for_output_only<bool>(
-      "cyclic", ATTR_DOMAIN_CURVE);
+  GeometryComponentFieldContext field_context{component, ATTR_DOMAIN_CURVE};
+
+  AttributeWriter<bool> cyclics = attributes.lookup_or_add_for_write<bool>("cyclic",
+                                                                           ATTR_DOMAIN_CURVE);
 
   fn::FieldEvaluator evaluator{field_context, domain_size};
   evaluator.set_selection(selection_field);
-  evaluator.add_with_destination(cyclic_field, cyclics.varray());
+  evaluator.add_with_destination(cyclic_field, cyclics.varray);
   evaluator.evaluate();
 
-  cyclics.save();
+  cyclics.finish();
 }
 
 static void node_geo_exec(GeoNodeExecParams params)
@@ -54,7 +42,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   Field<bool> cyclic_field = params.extract_input<Field<bool>>("Cyclic");
 
   geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
-    if (geometry_set.has_curve()) {
+    if (geometry_set.has_curves()) {
       set_cyclic_in_component(
           geometry_set.get_component_for_write<CurveComponent>(), selection_field, cyclic_field);
     }

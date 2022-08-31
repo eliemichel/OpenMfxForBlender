@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "integrator/denoiser.h"
 
@@ -71,8 +58,8 @@ bool Denoiser::load_kernels(Progress *progress)
     return false;
   }
 
-  VLOG(3) << "Will denoise on " << denoiser_device->info.description << " ("
-          << denoiser_device->info.id << ")";
+  VLOG_WORK << "Will denoise on " << denoiser_device->info.description << " ("
+            << denoiser_device->info.id << ")";
 
   return true;
 }
@@ -93,7 +80,8 @@ static bool is_single_supported_device(Device *device, DenoiserType type)
 
   if (!device->info.multi_devices.empty()) {
     /* Some configurations will use multi_devices, but keep the type of an individual device.
-     * This does simplify checks for homogenous setups, but here we really need a single device. */
+     * This does simplify checks for homogeneous setups, but here we really need a single device.
+     */
     return false;
   }
 
@@ -113,10 +101,17 @@ static Device *find_best_device(Device *device, DenoiserType type)
     if ((sub_device->info.denoisers & type) == 0) {
       return;
     }
+
     if (!best_device) {
       best_device = sub_device;
     }
     else {
+      /* Prefer a device that can use graphics interop for faster display update. */
+      if (sub_device->should_use_graphics_interop() &&
+          !best_device->should_use_graphics_interop()) {
+        best_device = sub_device;
+      }
+
       /* TODO(sergey): Choose fastest device from available ones. Taking into account performance
        * of the device and data transfer cost. */
     }

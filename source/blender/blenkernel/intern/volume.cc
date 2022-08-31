@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -74,6 +60,7 @@ using blender::float3;
 using blender::float4x4;
 using blender::IndexRange;
 using blender::StringRef;
+using blender::StringRefNull;
 
 #ifdef WITH_OPENVDB
 #  include <atomic>
@@ -110,12 +97,7 @@ static struct VolumeFileCache {
   /* Cache Entry */
   struct Entry {
     Entry(const std::string &filepath, const openvdb::GridBase::Ptr &grid)
-        : filepath(filepath),
-          grid_name(grid->getName()),
-          grid(grid),
-          is_loaded(false),
-          num_metadata_users(0),
-          num_tree_users(0)
+        : filepath(filepath), grid_name(grid->getName()), grid(grid)
     {
     }
 
@@ -123,9 +105,7 @@ static struct VolumeFileCache {
         : filepath(other.filepath),
           grid_name(other.grid_name),
           grid(other.grid),
-          is_loaded(other.is_loaded),
-          num_metadata_users(0),
-          num_tree_users(0)
+          is_loaded(other.is_loaded)
     {
     }
 
@@ -164,12 +144,12 @@ static struct VolumeFileCache {
     blender::Map<int, openvdb::GridBase::Ptr> simplified_grids;
 
     /* Has the grid tree been loaded? */
-    mutable bool is_loaded;
+    mutable bool is_loaded = false;
     /* Error message if an error occurred while loading. */
     std::string error_msg;
     /* User counting. */
-    int num_metadata_users;
-    int num_tree_users;
+    int num_metadata_users = 0;
+    int num_tree_users = 0;
     /* Mutex for on-demand reading of tree. */
     mutable std::mutex mutex;
   };
@@ -531,6 +511,8 @@ static void volume_init_data(ID *id)
   MEMCPY_STRUCT_AFTER(volume, DNA_struct_default_get(Volume), id);
 
   BKE_volume_init_grids(volume);
+
+  BLI_strncpy(volume->velocity_grid, "velocity", sizeof(volume->velocity_grid));
 }
 
 static void volume_copy_data(Main *UNUSED(bmain),
@@ -583,8 +565,7 @@ static void volume_foreach_cache(ID *id,
   Volume *volume = (Volume *)id;
   IDCacheKey key = {
       /* id_session_uuid */ id->session_uuid,
-      /*offset_in_ID*/ offsetof(Volume, runtime.grids),
-      /* cache_v */ volume->runtime.grids,
+      /* offset_in_ID */ offsetof(Volume, runtime.grids),
   };
 
   function_callback(id, &key, (void **)&volume->runtime.grids, 0, user_data);
@@ -809,6 +790,57 @@ bool BKE_volume_is_loaded(const Volume *volume)
 #endif
 }
 
+bool BKE_volume_set_velocity_grid_by_name(Volume *volume, const char *base_name)
+{
+  const StringRefNull ref_base_name = base_name;
+
+  if (BKE_volume_grid_find_for_read(volume, base_name)) {
+    BLI_strncpy(volume->velocity_grid, base_name, sizeof(volume->velocity_grid));
+    volume->runtime.velocity_x_grid[0] = '\0';
+    volume->runtime.velocity_y_grid[0] = '\0';
+    volume->runtime.velocity_z_grid[0] = '\0';
+    return true;
+  }
+
+  /* It could be that the velocity grid is split in multiple grids, try with known postfixes. */
+  const StringRefNull postfixes[][3] = {{"x", "y", "z"}, {".x", ".y", ".z"}, {"_x", "_y", "_z"}};
+
+  for (const StringRefNull *postfix : postfixes) {
+    bool found = true;
+    for (int i = 0; i < 3; i++) {
+      std::string post_fixed_name = ref_base_name + postfix[i];
+      if (!BKE_volume_grid_find_for_read(volume, post_fixed_name.c_str())) {
+        found = false;
+        break;
+      }
+    }
+
+    if (!found) {
+      continue;
+    }
+
+    /* Save the base name as well. */
+    BLI_strncpy(volume->velocity_grid, base_name, sizeof(volume->velocity_grid));
+    BLI_strncpy(volume->runtime.velocity_x_grid,
+                (ref_base_name + postfix[0]).c_str(),
+                sizeof(volume->runtime.velocity_x_grid));
+    BLI_strncpy(volume->runtime.velocity_y_grid,
+                (ref_base_name + postfix[1]).c_str(),
+                sizeof(volume->runtime.velocity_y_grid));
+    BLI_strncpy(volume->runtime.velocity_z_grid,
+                (ref_base_name + postfix[2]).c_str(),
+                sizeof(volume->runtime.velocity_z_grid));
+    return true;
+  }
+
+  /* Reset to avoid potential issues. */
+  volume->velocity_grid[0] = '\0';
+  volume->runtime.velocity_x_grid[0] = '\0';
+  volume->runtime.velocity_y_grid[0] = '\0';
+  volume->runtime.velocity_z_grid[0] = '\0';
+  return false;
+}
+
 bool BKE_volume_load(const Volume *volume, const Main *bmain)
 {
 #ifdef WITH_OPENVDB
@@ -869,6 +901,14 @@ bool BKE_volume_load(const Volume *volume, const Main *bmain)
     if (vdb_grid) {
       VolumeFileCache::Entry template_entry(filepath, vdb_grid);
       grids.emplace_back(template_entry, volume->runtime.default_simplify_level);
+    }
+  }
+
+  /* Try to detect the velocity grid. */
+  const char *common_velocity_names[] = {"velocity", "vel", "v"};
+  for (const char *common_velocity_name : common_velocity_names) {
+    if (BKE_volume_set_velocity_grid_by_name(const_cast<Volume *>(volume), common_velocity_name)) {
+      break;
     }
   }
 
@@ -1048,6 +1088,8 @@ static void volume_evaluate_modifiers(struct Depsgraph *depsgraph,
   const int required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
   ModifierApplyFlag apply_flag = use_render ? MOD_APPLY_RENDER : MOD_APPLY_USECACHE;
   const ModifierEvalContext mectx = {depsgraph, object, apply_flag};
+
+  BKE_modifiers_clear_errors(object);
 
   /* Get effective list of modifiers to execute. Some effects like shape keys
    * are added as virtual modifiers before the user created modifiers. */
@@ -1319,6 +1361,26 @@ const char *BKE_volume_grid_name(const VolumeGrid *volume_grid)
 }
 
 #ifdef WITH_OPENVDB
+struct ClearGridOp {
+  openvdb::GridBase &grid;
+
+  template<typename Grid> void operator()()
+  {
+    static_cast<Grid &>(grid).clear();
+  }
+};
+void BKE_volume_grid_clear_tree(openvdb::GridBase &grid)
+{
+  const VolumeGridType grid_type = BKE_volume_grid_type_openvdb(grid);
+  ClearGridOp op{grid};
+  BKE_volume_grid_type_operation(grid_type, op);
+}
+void BKE_volume_grid_clear_tree(Volume &volume, VolumeGrid &volume_grid)
+{
+  openvdb::GridBase::Ptr grid = BKE_volume_grid_openvdb_for_write(&volume, &volume_grid, false);
+  BKE_volume_grid_clear_tree(*grid);
+}
+
 VolumeGridType BKE_volume_grid_type_openvdb(const openvdb::GridBase &grid)
 {
   if (grid.isType<openvdb::FloatGrid>()) {
@@ -1406,6 +1468,23 @@ void BKE_volume_grid_transform_matrix(const VolumeGrid *volume_grid, float mat[4
 #else
   unit_m4(mat);
   UNUSED_VARS(volume_grid);
+#endif
+}
+
+void BKE_volume_grid_transform_matrix_set(struct VolumeGrid *volume_grid, const float mat[4][4])
+{
+#ifdef WITH_OPENVDB
+  openvdb::math::Mat4f mat_openvdb;
+  for (int col = 0; col < 4; col++) {
+    for (int row = 0; row < 4; row++) {
+      mat_openvdb(col, row) = mat[col][row];
+    }
+  }
+  openvdb::GridBase::Ptr grid = volume_grid->grid();
+  grid->setTransform(std::make_shared<openvdb::math::Transform>(
+      std::make_shared<openvdb::math::AffineMap>(mat_openvdb)));
+#else
+  UNUSED_VARS(volume_grid, mat);
 #endif
 }
 
@@ -1502,6 +1581,17 @@ void BKE_volume_grid_remove(Volume *volume, VolumeGrid *grid)
   }
 #else
   UNUSED_VARS(volume, grid);
+#endif
+}
+
+bool BKE_volume_grid_determinant_valid(const double determinant)
+{
+#ifdef WITH_OPENVDB
+  /* Limit taken from openvdb/math/Maps.h. */
+  return std::abs(determinant) >= 3.0 * openvdb::math::Tolerance<double>::value();
+#else
+  UNUSED_VARS(determinant);
+  return true;
 #endif
 }
 

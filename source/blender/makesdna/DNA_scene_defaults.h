@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup DNA
@@ -351,7 +337,9 @@
     .snap_mode = SCE_SNAP_MODE_INCREMENT, \
     .snap_node_mode = SCE_SNAP_MODE_GRID, \
     .snap_uv_mode = SCE_SNAP_MODE_INCREMENT, \
+    .snap_flag = SCE_SNAP_TO_INCLUDE_EDITED | SCE_SNAP_TO_INCLUDE_NONEDITED, \
     .snap_transform_mode_flag = SCE_SNAP_TRANSFORM_MODE_TRANSLATE, \
+    .snap_face_nearest_steps = 1, \
  \
     .curve_paint_settings = _DNA_DEFAULTS_CurvePaintSettings, \
  \
@@ -374,6 +362,10 @@
     /* GP Stroke Placement */ \
     .gpencil_v3d_align = GP_PROJECT_VIEWSPACE, \
     .gpencil_v2d_align = GP_PROJECT_VIEWSPACE, \
+ \
+    /* UV painting */ \
+    .uv_sculpt_settings = 0, \
+    .uv_relax_method = UV_SCULPT_TOOL_RELAX_LAPLACIAN, \
   }
 
 /* clang-format off */

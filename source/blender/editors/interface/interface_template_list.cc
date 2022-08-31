@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup edinterface
@@ -37,6 +23,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "UI_interface.h"
 #include "UI_view2d.h"
@@ -612,7 +599,7 @@ static char *uilist_item_tooltip_func(bContext *UNUSED(C), void *argN, const cha
 }
 
 /**
- * \note Note that \a layout_type may be null.
+ * \note that \a layout_type may be null.
  */
 static uiList *ui_list_ensure(bContext *C,
                               uiListType *ui_list_type,
@@ -958,13 +945,8 @@ static void ui_template_list_layout_draw(bContext *C,
 
       const bool show_names = (flags & UI_TEMPLATE_LIST_NO_NAMES) == 0;
 
-      /* TODO ED_fileselect_init_layout(). Share somehow? */
-      float size_x = (96.0f / 20.0f) * UI_UNIT_X;
-      float size_y = (96.0f / 20.0f) * UI_UNIT_Y;
-
-      if (!show_names) {
-        size_y -= UI_UNIT_Y;
-      }
+      const int size_x = UI_preview_tile_size_x();
+      const int size_y = show_names ? UI_preview_tile_size_y() : UI_preview_tile_size_y_no_label();
 
       const int cols_per_row = MAX2((uiLayoutGetWidth(box) - V2D_SCROLL_WIDTH) / size_x, 1);
       uiLayout *grid = uiLayoutGridFlow(row, true, cols_per_row, true, true, true);

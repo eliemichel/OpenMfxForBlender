@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -31,7 +17,7 @@ static void node_declare(NodeDeclarationBuilder &b)
 }
 
 static VArray<float> construct_face_area_gvarray(const MeshComponent &component,
-                                                 const AttributeDomain domain)
+                                                 const eAttrDomain domain)
 {
   const Mesh *mesh = component.get_for_read();
   if (mesh == nullptr) {
@@ -43,7 +29,7 @@ static VArray<float> construct_face_area_gvarray(const MeshComponent &component,
     return BKE_mesh_calc_poly_area(mp, &mesh->mloop[mp->loopstart], mesh->mvert);
   };
 
-  return component.attribute_try_adapt_domain<float>(
+  return component.attributes()->adapt_domain<float>(
       VArray<float>::ForFunc(mesh->totpoly, area_fn), ATTR_DOMAIN_FACE, domain);
 }
 
@@ -55,7 +41,7 @@ class FaceAreaFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask UNUSED(mask)) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_MESH) {

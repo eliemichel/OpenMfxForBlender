@@ -406,8 +406,8 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
   NodeGeometryOpenMfx *data = MEM_cnew<NodeGeometryOpenMfx>(__func__);
-  data->olive_count = 5;
   data->runtime = MEM_new<RuntimeData>(__func__);
+  // elie: or node->runtime now that it's been added?
   node->storage = data;
 }
 
@@ -441,10 +441,10 @@ static void node_copy_storage(struct bNodeTree *dest_ntree,
 static void force_redeclare(bNodeTree *ntree, bNode *node)
 {
   BLI_assert(node->typeinfo->declaration_is_dynamic);
-  if (node->declaration != nullptr)
+  if (node->runtime->declaration != nullptr)
   {
-    delete node->declaration;
-    node->declaration = nullptr;
+    delete node->runtime->declaration;
+    node->runtime->declaration = nullptr;
   }
   node_verify_sockets(ntree, node, true);
 }
@@ -573,10 +573,11 @@ static void set_bool_face_field_output(GeoNodeExecParams &params, const char* at
   component.replace(mesh, GeometryOwnershipType::Editable);
 
   StrongAnonymousAttributeID id(attribute_name);
-  OutputAttribute_Typed<bool> attribute = component.attribute_try_get_for_output_only<bool>(
-      id.get(), ATTR_DOMAIN_FACE);
-  attribute.as_span().slice(poly_range).fill(true);
-  attribute.save();
+  blender::bke::SpanAttributeWriter<bool> attribute =
+      component.attributes_for_write()->lookup_or_add_for_write_only_span<bool>(id.get(),
+                                                                                 ATTR_DOMAIN_FACE);
+  attribute.span.slice(poly_range).fill(true);
+  attribute.finish();
 
   params.set_output(
       attribute_name,
@@ -587,16 +588,16 @@ static void set_float_field_output(GeoNodeExecParams &params,
                                        const char *attribute_name,
                                        const IndexRange &poly_range,
                                        Mesh *mesh,
-                                       const AttributeDomain domain) // ATTR_DOMAIN_POINT
+                                       const eAttrDomain domain) // ATTR_DOMAIN_POINT
 {
   MeshComponent component;
   component.replace(mesh, GeometryOwnershipType::Editable);
 
   StrongAnonymousAttributeID id(attribute_name);
-  OutputAttribute_Typed<float> attribute = component.attribute_try_get_for_output_only<float>(
-      id.get(), domain);
-  attribute.as_span().slice(poly_range).fill(true);
-  attribute.save();
+  blender::bke::SpanAttributeWriter<float> attribute =
+      component.attributes_for_write()->lookup_or_add_for_write_only_span<float>(id.get(), domain);
+  attribute.span.slice(poly_range).fill(true);
+  attribute.finish();
 
   params.set_output(
       attribute_name,

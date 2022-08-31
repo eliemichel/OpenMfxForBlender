@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -450,10 +436,10 @@ static void rna_ClothSettings_gravity_set(PointerRNA *ptr, const float *values)
   sim->gravity[2] = values[2];
 }
 
-static char *rna_ClothSettings_path(PointerRNA *ptr)
+static char *rna_ClothSettings_path(const PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->owner_id;
-  ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Cloth);
+  const Object *ob = (Object *)ptr->owner_id;
+  const ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Cloth);
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
@@ -465,10 +451,10 @@ static char *rna_ClothSettings_path(PointerRNA *ptr)
   }
 }
 
-static char *rna_ClothCollisionSettings_path(PointerRNA *ptr)
+static char *rna_ClothCollisionSettings_path(const PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->owner_id;
-  ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Cloth);
+  const Object *ob = (Object *)ptr->owner_id;
+  const ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Cloth);
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
@@ -936,7 +922,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "internal_spring_max_diversion", PROP_FLOAT, PROP_ANGLE);
   RNA_def_property_float_sdna(prop, NULL, "internal_spring_max_diversion");
-  RNA_def_property_range(prop, 0.0f, M_PI / 4.0f);
+  RNA_def_property_range(prop, 0.0f, M_PI_4);
   RNA_def_property_ui_text(prop,
                            "Internal Spring Max Diversion",
                            "How much the rays used to connect the internal points can diverge "

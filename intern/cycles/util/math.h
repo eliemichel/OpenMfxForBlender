@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #ifndef __UTIL_MATH_H__
 #define __UTIL_MATH_H__
@@ -92,7 +79,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Scalar */
 
-#ifndef __HIP__
+#if !defined(__HIP__) && !defined(__KERNEL_ONEAPI__)
 #  ifdef _WIN32
 ccl_device_inline float fmaxf(float a, float b)
 {
@@ -105,12 +92,18 @@ ccl_device_inline float fminf(float a, float b)
 }
 
 #  endif /* _WIN32 */
-#endif   /* __HIP__ */
+#endif   /* __HIP__, __KERNEL_ONEAPI__ */
 
-#ifndef __KERNEL_GPU__
+#if !defined(__KERNEL_GPU__) || defined(__KERNEL_ONEAPI__)
+#  ifndef __KERNEL_ONEAPI__
 using std::isfinite;
 using std::isnan;
 using std::sqrt;
+#  else
+using sycl::sqrt;
+#    define isfinite(x) sycl::isfinite((x))
+#    define isnan(x) sycl::isnan((x))
+#  endif
 
 ccl_device_inline int abs(int x)
 {
@@ -310,8 +303,15 @@ ccl_device_inline float4 __int4_as_float4(int4 i)
 #endif /* !defined(__KERNEL_METAL__) */
 
 #if defined(__KERNEL_METAL__)
-#  define isnan_safe(v) isnan(v)
-#  define isfinite_safe(v) isfinite(v)
+ccl_device_forceinline bool isnan_safe(float f)
+{
+  return isnan(f);
+}
+
+ccl_device_forceinline bool isfinite_safe(float f)
+{
+  return isfinite(f);
+}
 #else
 template<typename T> ccl_device_inline uint pointer_pack_to_uint_0(T *ptr)
 {
@@ -511,6 +511,11 @@ ccl_device_inline float4 float3_to_float4(const float3 a)
   return make_float4(a.x, a.y, a.z, 1.0f);
 }
 
+ccl_device_inline float4 float3_to_float4(const float3 a, const float w)
+{
+  return make_float4(a.x, a.y, a.z, w);
+}
+
 ccl_device_inline float inverse_lerp(float a, float b, float x)
 {
   return (x - a) / (b - a);
@@ -535,6 +540,7 @@ CCL_NAMESPACE_END
 #include "util/math_float2.h"
 #include "util/math_float3.h"
 #include "util/math_float4.h"
+#include "util/math_float8.h"
 
 #include "util/rect.h"
 
@@ -799,6 +805,11 @@ ccl_device_inline uint popcount(uint x)
   return i & 1;
 }
 #  endif
+#elif defined(__KERNEL_ONEAPI__)
+#  define popcount(x) sycl::popcount(x)
+#elif defined(__KERNEL_HIP__)
+/* Use popcll to support 64-bit wave for pre-RDNA AMD GPUs */
+#  define popcount(x) __popcll(x)
 #elif !defined(__KERNEL_METAL__)
 #  define popcount(x) __popc(x)
 #endif
@@ -809,6 +820,8 @@ ccl_device_inline uint count_leading_zeros(uint x)
   return __clz(x);
 #elif defined(__KERNEL_METAL__)
   return clz(x);
+#elif defined(__KERNEL_ONEAPI__)
+  return sycl::clz(x);
 #else
   assert(x != 0);
 #  ifdef _MSC_VER
@@ -827,6 +840,8 @@ ccl_device_inline uint count_trailing_zeros(uint x)
   return (__ffs(x) - 1);
 #elif defined(__KERNEL_METAL__)
   return ctz(x);
+#elif defined(__KERNEL_ONEAPI__)
+  return sycl::ctz(x);
 #else
   assert(x != 0);
 #  ifdef _MSC_VER
@@ -938,7 +953,11 @@ ccl_device_inline uint prev_power_of_two(uint x)
 ccl_device_inline uint32_t reverse_integer_bits(uint32_t x)
 {
   /* Use a native instruction if it exists. */
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(__KERNEL_CUDA__)
+  return __brev(x);
+#elif defined(__KERNEL_METAL__)
+  return reverse_bits(x);
+#elif defined(__aarch64__) || defined(_M_ARM64)
   /* Assume the rbit is always available on 64bit ARM architecture. */
   __asm__("rbit %w0, %w1" : "=r"(x) : "r"(x));
   return x;
@@ -947,10 +966,6 @@ ccl_device_inline uint32_t reverse_integer_bits(uint32_t x)
    * This 32-bit Thumb instruction is available in ARMv6T2 and above. */
   __asm__("rbit %0, %1" : "=r"(x) : "r"(x));
   return x;
-#elif defined(__KERNEL_CUDA__)
-  return __brev(x);
-#elif defined(__KERNEL_METAL__)
-  return reverse_bits(x);
 #elif __has_builtin(__builtin_bitreverse32)
   return __builtin_bitreverse32(x);
 #else

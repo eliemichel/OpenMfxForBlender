@@ -1,25 +1,11 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup wm
  */
 
 /*
- * These define have its origin at sgi, where all device defines were written down in device.h.
+ * These define have its origin at SGI, where all device defines were written down in device.h.
  * Blender copied the conventions quite some, and expanded it with internal new defines (ton)
  */
 
@@ -58,9 +44,12 @@ enum {
   /* non-event, for example disabled timer */
   EVENT_NONE = 0x0000,
 
-  /* ********** Start of Input devices. ********** */
+/* ********** Start of Input devices. ********** */
 
-  /* MOUSE : 0x000x, 0x001x */
+/* Minimum mouse value (inclusive). */
+#define _EVT_MOUSE_MIN 0x0001
+
+  /* MOUSE: 0x000x, 0x001x */
   LEFTMOUSE = 0x0001,
   MIDDLEMOUSE = 0x0002,
   RIGHTMOUSE = 0x0003,
@@ -71,7 +60,7 @@ enum {
   /* More mouse buttons - can't use 9 and 10 here (wheel) */
   BUTTON6MOUSE = 0x0012,
   BUTTON7MOUSE = 0x0013,
-  /* Extra trackpad gestures */
+  /* Extra track-pad gestures. */
   MOUSEPAN = 0x000e,
   MOUSEZOOM = 0x000f,
   MOUSEROTATE = 0x0010,
@@ -87,6 +76,9 @@ enum {
    * ignore all but the most recent MOUSEMOVE (for better performance),
    * paint and drawing tools however will want to handle these. */
   INBETWEEN_MOUSEMOVE = 0x0011,
+
+/* Maximum keyboard value (inclusive). */
+#define _EVT_MOUSE_MAX 0x0011 /* 17 */
 
   /* IME event, GHOST_kEventImeCompositionStart in ghost */
   WM_IME_COMPOSITE_START = 0x0014,
@@ -258,6 +250,7 @@ enum {
   NDOF_MOTION = 0x0190, /* 400 */
 
 #define _NDOF_MIN NDOF_MOTION
+#define _NDOF_BUTTON_MIN NDOF_BUTTON_MENU
 
   /* used internally, never sent */
   NDOF_BUTTON_NONE = NDOF_MOTION,
@@ -288,11 +281,17 @@ enum {
   NDOF_BUTTON_DOMINANT = 0x01a3, /* 419 */
   NDOF_BUTTON_PLUS = 0x01a4,     /* 420 */
   NDOF_BUTTON_MINUS = 0x01a5,    /* 421 */
+
+/* Disabled as GHOST converts these to keyboard events
+ * which use regular keyboard event handling logic. */
+#if 0
   /* keyboard emulation */
   NDOF_BUTTON_ESC = 0x01a6,   /* 422 */
   NDOF_BUTTON_ALT = 0x01a7,   /* 423 */
   NDOF_BUTTON_SHIFT = 0x01a8, /* 424 */
   NDOF_BUTTON_CTRL = 0x01a9,  /* 425 */
+#endif
+
   /* general-purpose buttons */
   NDOF_BUTTON_1 = 0x01aa,  /* 426 */
   NDOF_BUTTON_2 = 0x01ab,  /* 427 */
@@ -310,6 +309,7 @@ enum {
   NDOF_BUTTON_C = 0x01b6, /* 438 */
 
 #define _NDOF_MAX NDOF_BUTTON_C
+#define _NDOF_BUTTON_MAX NDOF_BUTTON_C
 
   /* ********** End of Input devices. ********** */
 
@@ -339,16 +339,6 @@ enum {
 
   /* NOTE: these values are saved in key-map files, do not change them but just add new ones. */
 
-  /* Tweak events:
-   * Sent as additional event with the mouse coordinates
-   * from where the initial click was placed. */
-
-  /* Tweak events for L M R mouse-buttons. */
-  EVT_TWEAK_L = 0x5002, /* 20482 */
-  EVT_TWEAK_M = 0x5003, /* 20483 */
-  EVT_TWEAK_R = 0x5004, /* 20484 */
-  /* 0x5010 (and lower) should be left to add other tweak types in the future. */
-
   /* 0x5011 is taken, see EVT_ACTIONZONE_FULLSCREEN */
 
   /* Misc Blender internals: 0x502x */
@@ -374,29 +364,37 @@ enum {
 /** Test whether the event is timer event. */
 #define ISTIMER(event_type) ((event_type) >= TIMER && (event_type) <= TIMERF)
 
-/* for event checks */
-/* only used for KM_TEXTINPUT, so assume that we want all user-inputtable ascii codes included */
-/* Unused, see #wm_eventmatch, see: T30479. */
-// #define ISTEXTINPUT(event_type)  ((event_type) >= ' ' && (event_type) <= 255)
-/* NOTE: an alternative could be to check `event->utf8_buf`. */
-
 /** Test whether the event is a key on the keyboard (including modifier keys). */
 #define ISKEYBOARD(event_type) \
   (((event_type) >= _EVT_KEYBOARD_MIN && (event_type) <= _EVT_KEYBOARD_MAX) || \
    ((event_type) >= EVT_F1KEY && (event_type) <= EVT_F24KEY))
+
+/**
+ * Test whether the event is a key on the keyboard
+ * or any other kind of button that supports press & release
+ * (use for click & click-drag detection).
+ *
+ * \note Mouse wheel events are excluded from this macro, while they do generate press events it
+ * doesn't make sense to have click & click-drag events for a mouse-wheel as it can't be held down.
+ */
+#define ISKEYBOARD_OR_BUTTON(event_type) \
+  (ISMOUSE_BUTTON(event_type) || ISKEYBOARD(event_type) || ISNDOF_BUTTON(event_type))
 
 /** Test whether the event is a modifier key. */
 #define ISKEYMODIFIER(event_type) \
   (((event_type) >= EVT_LEFTCTRLKEY && (event_type) <= EVT_LEFTSHIFTKEY) || \
    (event_type) == EVT_OSKEY)
 
-/** Test whether the event is a mouse button. */
-#define ISMOUSE(event_type) \
-  (((event_type) >= LEFTMOUSE && (event_type) <= BUTTON7MOUSE) || (event_type) == MOUSESMARTZOOM)
-/** Test whether the event is a mouse wheel. */
-#define ISMOUSE_WHEEL(event_type) ((event_type) >= WHEELUPMOUSE && (event_type) <= WHEELOUTMOUSE)
-/** Test whether the event is a mouse (track-pad) gesture. */
-#define ISMOUSE_GESTURE(event_type) ((event_type) >= MOUSEPAN && (event_type) <= MOUSEROTATE)
+/**
+ * Test whether the event is any kind:
+ * #ISMOUSE_MOTION, #ISMOUSE_BUTTON, #ISMOUSE_WHEEL & #ISMOUSE_GESTURE.
+ *
+ * \note It's best to use more specific check if possible as mixing motion/buttons/gestures
+ * is very broad and not necessarily obvious which kinds of events are important.
+ */
+#define ISMOUSE(event_type) ((event_type) >= _EVT_MOUSE_MIN && (event_type) <= _EVT_MOUSE_MAX)
+/** Test whether the event is a mouse button (excluding mouse-wheel). */
+#define ISMOUSE_MOTION(event_type) ELEM(event_type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)
 /** Test whether the event is a mouse button (excluding mouse-wheel). */
 #define ISMOUSE_BUTTON(event_type) \
   (ELEM(event_type, \
@@ -407,29 +405,24 @@ enum {
         BUTTON5MOUSE, \
         BUTTON6MOUSE, \
         BUTTON7MOUSE))
-
-/** Test whether the event is tweak event. */
-#define ISTWEAK(event_type) ((event_type) >= EVT_TWEAK_L && (event_type) <= EVT_TWEAK_R)
+/** Test whether the event is a mouse wheel. */
+#define ISMOUSE_WHEEL(event_type) ((event_type) >= WHEELUPMOUSE && (event_type) <= WHEELOUTMOUSE)
+/** Test whether the event is a mouse (track-pad) gesture. */
+#define ISMOUSE_GESTURE(event_type) ((event_type) >= MOUSEPAN && (event_type) <= MOUSESMARTZOOM)
 
 /** Test whether the event is a NDOF event. */
 #define ISNDOF(event_type) ((event_type) >= _NDOF_MIN && (event_type) <= _NDOF_MAX)
+#define ISNDOF_BUTTON(event_type) \
+  ((event_type) >= _NDOF_BUTTON_MIN && (event_type) <= _NDOF_BUTTON_MAX)
 
 #define IS_EVENT_ACTIONZONE(event_type) \
   ELEM(event_type, EVT_ACTIONZONE_AREA, EVT_ACTIONZONE_REGION, EVT_ACTIONZONE_FULLSCREEN)
 
 /** Test whether event type is acceptable as hotkey (excluding modifiers). */
 #define ISHOTKEY(event_type) \
-  ((ISKEYBOARD(event_type) || ISMOUSE(event_type) || ISNDOF(event_type)) && \
+  ((ISKEYBOARD(event_type) || ISMOUSE_BUTTON(event_type) || ISMOUSE_WHEEL(event_type) || \
+    ISNDOF_BUTTON(event_type)) && \
    (ISKEYMODIFIER(event_type) == false))
-
-/* Internal helpers. */
-#define _VA_IS_EVENT_MOD2(v, a) (CHECK_TYPE_INLINE(v, wmEvent *), ((v)->a))
-#define _VA_IS_EVENT_MOD3(v, a, b) (_VA_IS_EVENT_MOD2(v, a) || ((v)->b))
-#define _VA_IS_EVENT_MOD4(v, a, b, c) (_VA_IS_EVENT_MOD3(v, a, b) || ((v)->c))
-#define _VA_IS_EVENT_MOD5(v, a, b, c, d) (_VA_IS_EVENT_MOD4(v, a, b, c) || ((v)->d))
-
-/** Reusable `IS_EVENT_MOD(event, shift, ctrl, alt, oskey)` macro. */
-#define IS_EVENT_MOD(...) VA_NARGS_CALL_OVERLOAD(_VA_IS_EVENT_MOD, __VA_ARGS__)
 
 enum eEventType_Mask {
   /** #ISKEYMODIFIER */
@@ -446,14 +439,11 @@ enum eEventType_Mask {
   EVT_TYPE_MASK_MOUSE = (1 << 5),
   /** #ISNDOF */
   EVT_TYPE_MASK_NDOF = (1 << 6),
-  /** #ISTWEAK */
-  EVT_TYPE_MASK_TWEAK = (1 << 7),
   /** #IS_EVENT_ACTIONZONE */
-  EVT_TYPE_MASK_ACTIONZONE = (1 << 8),
+  EVT_TYPE_MASK_ACTIONZONE = (1 << 7),
 };
 #define EVT_TYPE_MASK_ALL \
-  (EVT_TYPE_MASK_KEYBOARD | EVT_TYPE_MASK_MOUSE | EVT_TYPE_MASK_NDOF | EVT_TYPE_MASK_TWEAK | \
-   EVT_TYPE_MASK_ACTIONZONE)
+  (EVT_TYPE_MASK_KEYBOARD | EVT_TYPE_MASK_MOUSE | EVT_TYPE_MASK_NDOF | EVT_TYPE_MASK_ACTIONZONE)
 
 #define EVT_TYPE_MASK_HOTKEY_INCLUDE \
   (EVT_TYPE_MASK_KEYBOARD | EVT_TYPE_MASK_MOUSE | EVT_TYPE_MASK_NDOF)
@@ -468,18 +458,6 @@ bool WM_event_type_mask_test(int event_type, enum eEventType_Mask mask);
  * \{ */
 
 /* Gestures */
-/* NOTE: these values are saved in keymap files, do not change them but just add new ones */
-enum {
-  /* Value of tweaks and line gestures. #KM_ANY (-1) works for this case too. */
-  EVT_GESTURE_N = 1,
-  EVT_GESTURE_NE = 2,
-  EVT_GESTURE_E = 3,
-  EVT_GESTURE_SE = 4,
-  EVT_GESTURE_S = 5,
-  EVT_GESTURE_SW = 6,
-  EVT_GESTURE_W = 7,
-  EVT_GESTURE_NW = 8,
-};
 
 /* File select */
 enum {

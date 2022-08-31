@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -99,7 +86,7 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
     /* Generate camera ray. */
     Ray ray;
     integrate_camera_sample(kg, sample, x, y, rng_hash, &ray);
-    if (ray.t == 0.0f) {
+    if (ray.tmax == 0.0f) {
       return true;
     }
 
@@ -113,10 +100,10 @@ ccl_device bool integrator_init_from_camera(KernelGlobals kg,
   /* Continue with intersect_closest kernel, optionally initializing volume
    * stack before that if the camera may be inside a volume. */
   if (kernel_data.cam.is_inside_volume) {
-    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK);
+    integrator_path_init(kg, state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK);
   }
   else {
-    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
+    integrator_path_init(kg, state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
   }
 
   return true;

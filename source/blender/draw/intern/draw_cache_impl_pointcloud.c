@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2017 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2017 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -34,6 +18,7 @@
 #include "DNA_object_types.h"
 #include "DNA_pointcloud_types.h"
 
+#include "BKE_customdata.h"
 #include "BKE_pointcloud.h"
 
 #include "GPU_batch.h"
@@ -155,7 +140,11 @@ static void pointcloud_batch_cache_ensure_pos(Object *ob, PointCloudBatchCache *
   }
 
   PointCloud *pointcloud = ob->data;
-  const bool has_radius = pointcloud->radius != NULL;
+  const float(*positions)[3] = (float(*)[3])CustomData_get_layer_named(
+      &pointcloud->pdata, CD_PROP_FLOAT3, "position");
+  const float *radii = (float *)CustomData_get_layer_named(
+      &pointcloud->pdata, CD_PROP_FLOAT, "radius");
+  const bool has_radius = radii != NULL;
 
   static GPUVertFormat format = {0};
   static GPUVertFormat format_no_radius = {0};
@@ -178,14 +167,14 @@ static void pointcloud_batch_cache_ensure_pos(Object *ob, PointCloudBatchCache *
   if (has_radius) {
     float(*vbo_data)[4] = (float(*)[4])GPU_vertbuf_get_data(cache->pos);
     for (int i = 0; i < pointcloud->totpoint; i++) {
-      copy_v3_v3(vbo_data[i], pointcloud->co[i]);
+      copy_v3_v3(vbo_data[i], positions[i]);
       /* TODO(fclem): remove multiplication here.
        * Here only for keeping the size correct for now. */
-      vbo_data[i][3] = pointcloud->radius[i] * 100.0f;
+      vbo_data[i][3] = radii[i] * 100.0f;
     }
   }
   else {
-    GPU_vertbuf_attr_fill(cache->pos, pos, pointcloud->co);
+    GPU_vertbuf_attr_fill(cache->pos, pos, positions);
   }
 }
 

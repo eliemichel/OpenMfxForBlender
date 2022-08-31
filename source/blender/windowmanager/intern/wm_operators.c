@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup wm
@@ -67,6 +51,7 @@
 #include "BKE_icons.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
+#include "BKE_image_format.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
@@ -96,6 +81,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_path.h"
+#include "RNA_prototypes.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
@@ -120,47 +107,38 @@
 /** \name Operator API
  * \{ */
 
-void WM_operator_py_idname(char *to, const char *from)
+size_t WM_operator_py_idname(char *dst, const char *src)
 {
-  const char *sep = strstr(from, "_OT_");
+  const char *sep = strstr(src, "_OT_");
   if (sep) {
-    int ofs = (sep - from);
+    int ofs = (sep - src);
 
     /* NOTE: we use ascii `tolower` instead of system `tolower`, because the
      * latter depends on the locale, and can lead to `idname` mismatch. */
-    memcpy(to, from, sizeof(char) * ofs);
-    BLI_str_tolower_ascii(to, ofs);
+    memcpy(dst, src, sizeof(char) * ofs);
+    BLI_str_tolower_ascii(dst, ofs);
 
-    to[ofs] = '.';
-    BLI_strncpy(to + (ofs + 1), sep + 4, OP_MAX_TYPENAME - (ofs + 1));
+    dst[ofs] = '.';
+    return BLI_strncpy_rlen(dst + (ofs + 1), sep + 4, OP_MAX_TYPENAME - (ofs + 1)) + (ofs + 1);
   }
-  else {
-    /* should not happen but support just in case */
-    BLI_strncpy(to, from, OP_MAX_TYPENAME);
-  }
+  /* Should not happen but support just in case. */
+  return BLI_strncpy_rlen(dst, src, OP_MAX_TYPENAME);
 }
 
-void WM_operator_bl_idname(char *to, const char *from)
+size_t WM_operator_bl_idname(char *dst, const char *src)
 {
-  if (from) {
-    const char *sep = strchr(from, '.');
-
-    int from_len;
-    if (sep && (from_len = strlen(from)) < OP_MAX_TYPENAME - 3) {
-      const int ofs = (sep - from);
-      memcpy(to, from, sizeof(char) * ofs);
-      BLI_str_toupper_ascii(to, ofs);
-      memcpy(to + ofs, "_OT_", 4);
-      memcpy(to + (ofs + 4), sep + 1, (from_len - ofs));
-    }
-    else {
-      /* should not happen but support just in case */
-      BLI_strncpy(to, from, OP_MAX_TYPENAME);
-    }
+  const char *sep = strchr(src, '.');
+  int from_len;
+  if (sep && (from_len = strlen(src)) < OP_MAX_TYPENAME - 3) {
+    const int ofs = (sep - src);
+    memcpy(dst, src, sizeof(char) * ofs);
+    BLI_str_toupper_ascii(dst, ofs);
+    memcpy(dst + ofs, "_OT_", 4);
+    memcpy(dst + (ofs + 4), sep + 1, (from_len - ofs));
+    return (from_len - ofs) - 1;
   }
-  else {
-    to[0] = 0;
-  }
+  /* Should not happen but support just in case. */
+  return BLI_strncpy_rlen(dst, src, OP_MAX_TYPENAME);
 }
 
 bool WM_operator_py_idname_ok_or_report(ReportList *reports,
@@ -399,7 +377,7 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
  *   since there is no convenient way to calculate partial RNA paths.
  *
  * \note While the path to the ID is typically sufficient to calculate the remainder of the path,
- * in practice this would cause #WM_context_path_resolve_property_full to crate a path such as:
+ * in practice this would cause #WM_context_path_resolve_property_full to create a path such as:
  * `object.data.bones["Bones"].use_deform` such paths are not useful for key-shortcuts,
  * so this function supports returning data-paths directly to context members that aren't ID types.
  */
@@ -602,7 +580,13 @@ char *WM_context_path_resolve_property_full(const bContext *C,
       if (data_path != NULL) {
         if (prop != NULL) {
           char *prop_str = RNA_path_property_py(ptr, prop, index);
-          member_id_data_path = BLI_string_join_by_sep_charN('.', member_id, data_path, prop_str);
+          if (prop_str[0] == '[') {
+            member_id_data_path = BLI_string_joinN(member_id, ".", data_path, prop_str);
+          }
+          else {
+            member_id_data_path = BLI_string_join_by_sep_charN(
+                '.', member_id, data_path, prop_str);
+          }
           MEM_freeN(prop_str);
         }
         else {
@@ -614,7 +598,12 @@ char *WM_context_path_resolve_property_full(const bContext *C,
     else {
       if (prop != NULL) {
         char *prop_str = RNA_path_property_py(ptr, prop, index);
-        member_id_data_path = BLI_string_join_by_sep_charN('.', member_id, prop_str);
+        if (prop_str[0] == '[') {
+          member_id_data_path = BLI_string_joinN(member_id, prop_str);
+        }
+        else {
+          member_id_data_path = BLI_string_join_by_sep_charN('.', member_id, prop_str);
+        }
         MEM_freeN(prop_str);
       }
       else {
@@ -927,7 +916,6 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       ret_value = op->type->exec(C, op);
       OPERATOR_RETVAL_CHECK(ret_value);
-
       op->customdata = POINTER_FROM_INT((int)event->type);
       if (ret_value & OPERATOR_RUNNING_MODAL) {
         WM_event_add_modal_handler(C, op);
@@ -952,7 +940,7 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
     return ret_value | OPERATOR_PASS_THROUGH;
   }
-  if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
+  if (ISMOUSE_MOTION(event->type)) {
     const int drag_delta[2] = {
         mval[0] - event->mval[0],
         mval[1] - event->mval[1],
@@ -964,7 +952,7 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
       return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
     }
     /* Important not to return anything other than PASS_THROUGH here,
-     * otherwise it prevents underlying tweak detection code to work properly. */
+     * otherwise it prevents underlying drag detection code to work properly. */
     return OPERATOR_PASS_THROUGH;
   }
 
@@ -973,8 +961,13 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 int WM_generic_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  RNA_int_set(op->ptr, "mouse_x", event->mval[0]);
-  RNA_int_set(op->ptr, "mouse_y", event->mval[1]);
+  ARegion *region = CTX_wm_region(C);
+
+  int mval[2];
+  WM_event_drag_start_mval(event, region, mval);
+
+  RNA_int_set(op->ptr, "mouse_x", mval[0]);
+  RNA_int_set(op->ptr, "mouse_y", mval[1]);
 
   op->customdata = POINTER_FROM_INT(0);
 
@@ -1274,6 +1267,7 @@ ID *WM_operator_drop_load_path(struct bContext *C, wmOperator *op, const short i
 {
   Main *bmain = CTX_data_main(C);
   ID *id = NULL;
+
   /* check input variables */
   if (RNA_struct_property_is_set(op->ptr, "filepath")) {
     const bool is_relative_path = RNA_boolean_get(op->ptr, "relative_path");
@@ -1311,19 +1305,33 @@ ID *WM_operator_drop_load_path(struct bContext *C, wmOperator *op, const short i
         }
       }
     }
+
+    return id;
   }
-  else if (RNA_struct_property_is_set(op->ptr, "name")) {
-    char name[MAX_ID_NAME - 2];
-    RNA_string_get(op->ptr, "name", name);
-    id = BKE_libblock_find_name(bmain, idcode, name);
-    if (!id) {
+
+  if (!WM_operator_properties_id_lookup_is_set(op->ptr)) {
+    return NULL;
+  }
+
+  /* Lookup an already existing ID. */
+  id = WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, idcode);
+
+  if (!id) {
+    /* Print error with the name if the name is available. */
+
+    if (RNA_struct_property_is_set(op->ptr, "name")) {
+      char name[MAX_ID_NAME - 2];
+      RNA_string_get(op->ptr, "name", name);
       BKE_reportf(
           op->reports, RPT_ERROR, "%s '%s' not found", BKE_idtype_idcode_to_name(idcode), name);
       return NULL;
     }
-    id_us_plus(id);
+
+    BKE_reportf(op->reports, RPT_ERROR, "%s not found", BKE_idtype_idcode_to_name(idcode));
+    return NULL;
   }
 
+  id_us_plus(id);
   return id;
 }
 
@@ -1867,7 +1875,14 @@ static void WM_OT_call_menu(wmOperatorType *ot)
 
   ot->flag = OPTYPE_INTERNAL;
 
-  RNA_def_string(ot->srna, "name", NULL, BKE_ST_MAXNAME, "Name", "Name of the menu");
+  PropertyRNA *prop;
+
+  prop = RNA_def_string(ot->srna, "name", NULL, BKE_ST_MAXNAME, "Name", "Name of the menu");
+  RNA_def_property_string_search_func_runtime(
+      prop,
+      WM_menutype_idname_visit_for_search,
+      /* Only a suggestion as menu items may be referenced from add-ons that have been disabled. */
+      (PROP_STRING_SEARCH_SORT | PROP_STRING_SEARCH_SUGGESTION));
 }
 
 static int wm_call_pie_menu_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -1899,7 +1914,14 @@ static void WM_OT_call_menu_pie(wmOperatorType *ot)
 
   ot->flag = OPTYPE_INTERNAL;
 
-  RNA_def_string(ot->srna, "name", NULL, BKE_ST_MAXNAME, "Name", "Name of the pie menu");
+  PropertyRNA *prop;
+
+  prop = RNA_def_string(ot->srna, "name", NULL, BKE_ST_MAXNAME, "Name", "Name of the pie menu");
+  RNA_def_property_string_search_func_runtime(
+      prop,
+      WM_menutype_idname_visit_for_search,
+      /* Only a suggestion as menu items may be referenced from add-ons that have been disabled. */
+      (PROP_STRING_SEARCH_SORT | PROP_STRING_SEARCH_SUGGESTION));
 }
 
 static int wm_call_panel_exec(bContext *C, wmOperator *op)
@@ -1935,6 +1957,11 @@ static void WM_OT_call_panel(wmOperatorType *ot)
   PropertyRNA *prop;
 
   prop = RNA_def_string(ot->srna, "name", NULL, BKE_ST_MAXNAME, "Name", "Name of the menu");
+  RNA_def_property_string_search_func_runtime(
+      prop,
+      WM_paneltype_idname_visit_for_search,
+      /* Only a suggestion as menu items may be referenced from add-ons that have been disabled. */
+      (PROP_STRING_SEARCH_SORT | PROP_STRING_SEARCH_SUGGESTION));
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   prop = RNA_def_boolean(ot->srna, "keep_open", true, "Keep Open", "");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
@@ -2001,7 +2028,7 @@ static void WM_OT_window_fullscreen_toggle(wmOperatorType *ot)
 {
   ot->name = "Toggle Window Fullscreen";
   ot->idname = "WM_OT_window_fullscreen_toggle";
-  ot->description = "Toggle the current window fullscreen";
+  ot->description = "Toggle the current window full-screen";
 
   ot->exec = wm_window_fullscreen_toggle_exec;
   ot->poll = WM_operator_winactive;
@@ -2046,7 +2073,7 @@ static void WM_OT_quit_blender(wmOperatorType *ot)
 
 static int wm_console_toggle_exec(bContext *UNUSED(C), wmOperator *UNUSED(op))
 {
-  GHOST_toggleConsole(2);
+  GHOST_setConsoleWindowState(GHOST_kConsoleWindowStateToggle);
   return OPERATOR_FINISHED;
 }
 
@@ -2838,7 +2865,7 @@ static int radial_control_modal(bContext *C, wmOperator *op, const wmEvent *even
   float numValue;
   /* TODO: fix hardcoded events */
 
-  bool snap = event->ctrl != 0;
+  bool snap = (event->modifier & KM_CTRL) != 0;
 
   /* Modal numinput active, try to handle numeric inputs first... */
   if (event->val == KM_PRESS && has_numInput && handleNumInput(C, &rc->num_input, event)) {
@@ -3260,6 +3287,14 @@ static void redraw_timer_step(bContext *C,
   }
 }
 
+static bool redraw_timer_poll(bContext *C)
+{
+  /* Check background mode as many of these actions use redrawing.
+   * NOTE(@campbellbarton): if it's useful to support undo or animation step this could
+   * be allowed at the moment this seems like a corner case that isn't needed. */
+  return !G.background && WM_operator_winactive(C);
+}
+
 static int redraw_timer_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
@@ -3321,7 +3356,7 @@ static void WM_OT_redraw_timer(wmOperatorType *ot)
 
   ot->invoke = WM_menu_invoke;
   ot->exec = redraw_timer_exec;
-  ot->poll = WM_operator_winactive;
+  ot->poll = redraw_timer_poll;
 
   ot->prop = RNA_def_enum(ot->srna, "type", redraw_timer_type_items, eRTDrawRegion, "Type", "");
   RNA_def_int(
@@ -3609,8 +3644,11 @@ static int doc_view_manual_ui_context_exec(bContext *C, wmOperator *UNUSED(op))
     WM_operator_properties_create(&ptr_props, "WM_OT_doc_view_manual");
     RNA_string_set(&ptr_props, "doc_id", buf);
 
-    retval = WM_operator_name_call_ptr(
-        C, WM_operatortype_find("WM_OT_doc_view_manual", false), WM_OP_EXEC_DEFAULT, &ptr_props);
+    retval = WM_operator_name_call_ptr(C,
+                                       WM_operatortype_find("WM_OT_doc_view_manual", false),
+                                       WM_OP_EXEC_DEFAULT,
+                                       &ptr_props,
+                                       NULL);
 
     WM_operator_properties_free(&ptr_props);
   }
@@ -3865,7 +3903,7 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_box");
-  /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  /* XXX TODO: zoom border should perhaps map right-mouse to zoom out instead of in+cancel. */
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_render_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_view_zoom_border");

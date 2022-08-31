@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edtransform
@@ -688,7 +672,7 @@ static void createTransGPencil_strokes(bContext *C,
   }
 }
 
-void createTransGPencil(bContext *C, TransInfo *t)
+static void createTransGPencil(bContext *C, TransInfo *t)
 {
   if (t->data_container_len == 0) {
     return;
@@ -701,7 +685,7 @@ void createTransGPencil(bContext *C, TransInfo *t)
   bGPdata *gpd = obact->data;
   BLI_assert(gpd != NULL);
 
-  const int cfra_scene = CFRA;
+  const int cfra_scene = scene->r.cfra;
 
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
   const bool use_multiframe_falloff = (ts->gp_sculpt.flag & GP_SCULPT_SETT_FLAG_FRAME_FALLOFF) !=
@@ -753,7 +737,7 @@ void createTransGPencil(bContext *C, TransInfo *t)
   }
 }
 
-void recalcData_gpencil_strokes(TransInfo *t)
+static void recalcData_gpencil_strokes(TransInfo *t)
 {
   TransDataContainer *tc = TRANS_DATA_CONTAINER_FIRST_SINGLE(t);
   GHash *strokes = BLI_ghash_ptr_new(__func__);
@@ -778,3 +762,10 @@ void recalcData_gpencil_strokes(TransInfo *t)
 }
 
 /** \} */
+
+TransConvertTypeInfo TransConvertType_GPencil = {
+    /* flags */ (T_EDIT | T_POINTS),
+    /* createTransData */ createTransGPencil,
+    /* recalcData */ recalcData_gpencil_strokes,
+    /* special_aftertrans_update */ NULL,
+};

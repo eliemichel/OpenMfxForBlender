@@ -23,7 +23,7 @@
 #pragma once
 
 #include "BKE_geometry_set.hh"
-#include "FN_generic_virtual_array.hh"
+#include "BLI_generic_virtual_array.hh"
 
 #include <mfxHost/MfxHost>
 #include <mfxHost/attributes>

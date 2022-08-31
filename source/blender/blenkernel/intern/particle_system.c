@@ -1,24 +1,6 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 by Janne Karhu.
- * All rights reserved.
- * Adaptive time step
- * Classical SPH
- * Copyright 2011-2012 AutoCRC
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 Janne Karhu. All rights reserved.
+ *           2011-2012 AutoCRC (adaptive time step, Classical SPH). */
 
 /** \file
  * \ingroup bke
@@ -65,6 +47,7 @@
 #include "BKE_effect.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
+#include "BKE_mesh_legacy_convert.h"
 #include "BKE_particle.h"
 
 #include "BKE_bvhutils.h"
@@ -116,9 +99,9 @@ float psys_get_current_display_percentage(ParticleSystem *psys, const bool use_r
   ParticleSettings *part = psys->part;
 
   if ((use_render_params &&
-       !particles_are_dynamic(psys)) ||          /* non-dynamic particles can be rendered fully */
-      (part->child_nbr && part->childtype) ||    /* display percentage applies to children */
-      (psys->pointcache->flag & PTCACHE_BAKING)) /* baking is always done with full amount */
+       !particles_are_dynamic(psys)) ||           /* non-dynamic particles can be rendered fully */
+      (part->child_percent && part->childtype) || /* display percentage applies to children */
+      (psys->pointcache->flag & PTCACHE_BAKING))  /* baking is always done with full amount */
   {
     return 1.0f;
   }
@@ -298,20 +281,20 @@ static void realloc_particles(ParticleSimulationData *sim, int new_totpart)
 
 int psys_get_child_number(Scene *scene, ParticleSystem *psys, const bool use_render_params)
 {
-  int nbr;
+  int child_num;
 
   if (!psys->part->childtype) {
     return 0;
   }
 
   if (use_render_params) {
-    nbr = psys->part->ren_child_nbr;
+    child_num = psys->part->child_render_percent;
   }
   else {
-    nbr = psys->part->child_nbr;
+    child_num = psys->part->child_percent;
   }
 
-  return get_render_child_particle_number(&scene->r, nbr, use_render_params);
+  return get_render_child_particle_number(&scene->r, child_num, use_render_params);
 }
 
 int psys_get_tot_child(Scene *scene, ParticleSystem *psys, const bool use_render_params)
@@ -339,8 +322,9 @@ void psys_calc_dmcache(Object *ob, Mesh *mesh_final, Mesh *mesh_original, Partic
   if (!mesh_final->runtime.deformed_only) {
     /* Will use later to speed up subsurf/evaluated mesh. */
     LinkNode *node, *nodedmelem, **nodearray;
-    int totdmelem, totelem, i, *origindex, *origindex_poly = NULL;
-
+    int totdmelem, totelem, i;
+    const int *origindex;
+    const int *origindex_poly = NULL;
     if (psys->part->from == PART_FROM_VERT) {
       totdmelem = mesh_final->totvert;
 
@@ -3138,7 +3122,7 @@ static void collision_check(ParticleSimulationData *sim, int p, float dfra, floa
   col.cfra = cfra;
   col.old_cfra = sim->psys->cfra;
 
-  /* get acceleration (from gravity, forcefields etc. to be re-applied in collision response) */
+  /* Get acceleration (from gravity, force-fields etc. to be re-applied in collision response). */
   sub_v3_v3v3(col.acc, pa->state.vel, pa->prev_state.vel);
   mul_v3_fl(col.acc, 1.0f / col.total_time);
 
@@ -4979,7 +4963,7 @@ void particle_system_update(struct Depsgraph *depsgraph,
   }
 
   /* Save matrix for duplicators,
-   * at rendertime the actual dupliobject's matrix is used so don't update! */
+   * at render-time the actual dupli-object's matrix is used so don't update! */
   invert_m4_m4(psys->imat, ob->obmat);
 
   BKE_particle_batch_cache_dirty_tag(psys, BKE_PARTICLE_BATCH_DIRTY_ALL);

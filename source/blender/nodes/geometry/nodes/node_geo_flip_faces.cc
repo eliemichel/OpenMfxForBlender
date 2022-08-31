@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -63,20 +49,21 @@ static void mesh_flip_faces(MeshComponent &component, const Field<bool> &selecti
     }
   }
 
-  component.attribute_foreach(
+  MutableAttributeAccessor attributes = *component.attributes_for_write();
+  attributes.for_all(
       [&](const bke::AttributeIDRef &attribute_id, const AttributeMetaData &meta_data) {
         if (meta_data.domain == ATTR_DOMAIN_CORNER) {
-          OutputAttribute attribute = component.attribute_try_get_for_output(
-              attribute_id, ATTR_DOMAIN_CORNER, meta_data.data_type, nullptr);
+          GSpanAttributeWriter attribute = attributes.lookup_or_add_for_write_span(
+              attribute_id, ATTR_DOMAIN_CORNER, meta_data.data_type);
           attribute_math::convert_to_static_type(meta_data.data_type, [&](auto dummy) {
             using T = decltype(dummy);
-            MutableSpan<T> dst_span = attribute.as_span<T>();
+            MutableSpan<T> dst_span = attribute.span.typed<T>();
             for (const int j : selection.index_range()) {
               const MPoly &poly = polys[selection[j]];
               dst_span.slice(poly.loopstart + 1, poly.totloop - 1).reverse();
             }
           });
-          attribute.save();
+          attribute.finish();
         }
         return true;
       });

@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "scene/constant_fold.h"
 #include "scene/shader_graph.h"
@@ -43,8 +30,8 @@ bool ConstantFolder::all_inputs_constant() const
 
 void ConstantFolder::make_constant(float value) const
 {
-  VLOG(3) << "Folding " << node->name << "::" << output->name() << " to constant (" << value
-          << ").";
+  VLOG_DEBUG << "Folding " << node->name << "::" << output->name() << " to constant (" << value
+             << ").";
 
   foreach (ShaderInput *sock, output->links) {
     sock->set(value);
@@ -56,7 +43,8 @@ void ConstantFolder::make_constant(float value) const
 
 void ConstantFolder::make_constant(float3 value) const
 {
-  VLOG(3) << "Folding " << node->name << "::" << output->name() << " to constant " << value << ".";
+  VLOG_DEBUG << "Folding " << node->name << "::" << output->name() << " to constant " << value
+             << ".";
 
   foreach (ShaderInput *sock, output->links) {
     sock->set(value);
@@ -112,8 +100,8 @@ void ConstantFolder::bypass(ShaderOutput *new_output) const
 {
   assert(new_output);
 
-  VLOG(3) << "Folding " << node->name << "::" << output->name() << " to socket "
-          << new_output->parent->name << "::" << new_output->name() << ".";
+  VLOG_DEBUG << "Folding " << node->name << "::" << output->name() << " to socket "
+             << new_output->parent->name << "::" << new_output->name() << ".";
 
   /* Remove all outgoing links from socket and connect them to new_output instead.
    * The graph->relink method affects node inputs, so it's not safe to use in constant
@@ -131,7 +119,7 @@ void ConstantFolder::discard() const
 {
   assert(output->type() == SocketType::CLOSURE);
 
-  VLOG(3) << "Discarding closure " << node->name << ".";
+  VLOG_DEBUG << "Discarding closure " << node->name << ".";
 
   graph->disconnect(output);
 }

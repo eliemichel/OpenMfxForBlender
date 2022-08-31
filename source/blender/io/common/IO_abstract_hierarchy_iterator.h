@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2019 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2019 Blender Foundation. All rights reserved. */
 
 /*
  * This file contains the AbstractHierarchyIterator. It is intended for exporters for file
@@ -46,6 +30,7 @@
 struct Depsgraph;
 struct DupliObject;
 struct ID;
+struct Main;
 struct Object;
 struct ParticleSystem;
 
@@ -74,9 +59,8 @@ struct HierarchyContext {
    *
    * The export hierarchy is kept as close to the hierarchy in Blender as possible. As such, an
    * object that serves as a parent for another object, but which should NOT be exported itself, is
-   * exported only as transform (i.e. as empty). This happens with objects that are part of a
-   * holdout collection (which prevents them from being exported) but also parent of an exported
-   * object. */
+   * exported only as transform (i.e. as empty). This happens with objects that are invisible when
+   * exporting with "Visible Only" enabled, for example. */
   bool weak_export;
 
   /* When true, this object should check its parents for animation data when determining whether
@@ -220,12 +204,13 @@ class AbstractHierarchyIterator {
  protected:
   ExportGraph export_graph_;
   ExportPathMap duplisource_export_path_;
+  Main *bmain_;
   Depsgraph *depsgraph_;
   WriterMap writers_;
   ExportSubset export_subset_;
 
  public:
-  explicit AbstractHierarchyIterator(Depsgraph *depsgraph);
+  explicit AbstractHierarchyIterator(Main *bmain, Depsgraph *depsgraph);
   virtual ~AbstractHierarchyIterator();
 
   /* Iterate over the depsgraph, create writers, and tell the writers to write.

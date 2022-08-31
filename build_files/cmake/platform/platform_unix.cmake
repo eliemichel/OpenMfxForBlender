@@ -1,22 +1,5 @@
-# ***** BEGIN GPL LICENSE BLOCK *****
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software Foundation,
-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# The Original Code is Copyright (C) 2016, Blender Foundation
-# All rights reserved.
-# ***** END GPL LICENSE BLOCK *****
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2016 Blender Foundation. All rights reserved.
 
 # Libraries configuration for any *nix system including Linux and Unix (excluding APPLE).
 
@@ -55,13 +38,22 @@ if(EXISTS ${LIBDIR})
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 
   file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+
   # Ignore Mesa software OpenGL libraries, they are not intended to be
   # linked against but to optionally override at runtime.
   list(REMOVE_ITEM LIB_SUBDIRS ${LIBDIR}/mesa)
+
+  # Ignore DPC++ as it contains its own copy of LLVM/CLang which we do
+  # not need to be ever discovered for the Blender linking.
+  list(REMOVE_ITEM LIB_SUBDIRS ${LIBDIR}/dpcpp)
+
   # NOTE: Make sure "proper" compiled zlib comes first before the one
   # which is a part of OpenCollada. They have different ABI, and we
   # do need to use the official one.
   set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
+
+  include(platform_old_libs_update)
+
   set(WITH_STATIC_LIBS ON)
   # OpenMP usually can't be statically linked into shared libraries,
   # due to not being compiled with position independent code.
@@ -210,6 +202,9 @@ if(WITH_CODEC_FFMPEG)
       vpx
       x264
       xvidcore)
+    if(EXISTS ${LIBDIR}/ffmpeg/lib/libaom.a)
+      list(APPEND FFMPEG_FIND_COMPONENTS aom)
+    endif()
   elseif(FFMPEG)
     # Old cache variable used for root dir, convert to new standard.
     set(FFMPEG_ROOT_DIR ${FFMPEG})
@@ -282,6 +277,18 @@ if(WITH_CYCLES AND WITH_CYCLES_OSL)
   else()
     message(STATUS "OSL not found, disabling it from Cycles")
     set(WITH_CYCLES_OSL OFF)
+  endif()
+endif()
+
+if(WITH_CYCLES_DEVICE_ONEAPI)
+  set(CYCLES_LEVEL_ZERO ${LIBDIR}/level-zero CACHE PATH "Path to Level Zero installation")
+  if(EXISTS ${CYCLES_LEVEL_ZERO} AND NOT LEVEL_ZERO_ROOT_DIR)
+    set(LEVEL_ZERO_ROOT_DIR ${CYCLES_LEVEL_ZERO})
+  endif()
+
+  set(CYCLES_SYCL ${LIBDIR}/dpcpp CACHE PATH "Path to DPC++ and SYCL installation")
+  if(EXISTS ${CYCLES_SYCL} AND NOT SYCL_ROOT_DIR)
+    set(SYCL_ROOT_DIR ${CYCLES_SYCL})
   endif()
 endif()
 
@@ -385,6 +392,15 @@ if(WITH_PUGIXML)
   endif()
 endif()
 
+if(WITH_IMAGE_WEBP)
+  set(WEBP_ROOT_DIR ${LIBDIR}/webp)
+  find_package_wrapper(WebP)
+  if(NOT WEBP_FOUND)
+    set(WITH_IMAGE_WEBP OFF)
+    message(WARNING "WebP not found, disabling WITH_IMAGE_WEBP")
+  endif()
+endif()
+
 if(WITH_OPENIMAGEIO)
   find_package_wrapper(OpenImageIO)
   set(OPENIMAGEIO_LIBRARIES
@@ -402,6 +418,9 @@ if(WITH_OPENIMAGEIO)
   endif()
   if(WITH_IMAGE_OPENEXR)
     list(APPEND OPENIMAGEIO_LIBRARIES "${OPENEXR_LIBRARIES}")
+  endif()
+  if(WITH_IMAGE_WEBP)
+    list(APPEND OPENIMAGEIO_LIBRARIES "${WEBP_LIBRARIES}")
   endif()
 
   if(NOT OPENIMAGEIO_FOUND)
@@ -615,17 +634,42 @@ if(WITH_GHOST_WAYLAND)
   pkg_check_modules(wayland-scanner REQUIRED wayland-scanner)
   pkg_check_modules(xkbcommon REQUIRED xkbcommon)
   pkg_check_modules(wayland-cursor REQUIRED wayland-cursor)
-  pkg_check_modules(dbus REQUIRED dbus-1)
 
-  set(WITH_GL_EGL ON)
+  if(WITH_GHOST_WAYLAND_DBUS)
+    pkg_check_modules(dbus REQUIRED dbus-1)
+  endif()
+
+  if(WITH_GHOST_WAYLAND_LIBDECOR)
+    pkg_check_modules(libdecor REQUIRED libdecor-0>=0.1)
+  endif()
 
   list(APPEND PLATFORM_LINKLIBS
-    ${wayland-client_LINK_LIBRARIES}
-    ${wayland-egl_LINK_LIBRARIES}
     ${xkbcommon_LINK_LIBRARIES}
-    ${wayland-cursor_LINK_LIBRARIES}
-    ${dbus_LINK_LIBRARIES}
   )
+
+  if(NOT WITH_GHOST_WAYLAND_DYNLOAD)
+    list(APPEND PLATFORM_LINKLIBS
+      ${wayland-client_LINK_LIBRARIES}
+      ${wayland-egl_LINK_LIBRARIES}
+      ${wayland-cursor_LINK_LIBRARIES}
+    )
+  endif()
+
+  if(WITH_GHOST_WAYLAND_DBUS)
+    list(APPEND PLATFORM_LINKLIBS
+      ${dbus_LINK_LIBRARIES}
+    )
+    add_definitions(-DWITH_GHOST_WAYLAND_DBUS)
+  endif()
+
+  if(WITH_GHOST_WAYLAND_LIBDECOR)
+    if(NOT WITH_GHOST_WAYLAND_DYNLOAD)
+      list(APPEND PLATFORM_LINKLIBS
+        ${libdecor_LIBRARIES}
+      )
+    endif()
+    add_definitions(-DWITH_GHOST_WAYLAND_LIBDECOR)
+  endif()
 endif()
 
 if(WITH_GHOST_X11)
@@ -844,8 +888,9 @@ unset(_IS_LINKER_DEFAULT)
 
 # Avoid conflicts with Mesa llvmpipe, Luxrender, and other plug-ins that may
 # use the same libraries as Blender with a different version or build options.
+set(PLATFORM_SYMBOLS_MAP ${CMAKE_SOURCE_DIR}/source/creator/symbols_unix.map)
 set(PLATFORM_LINKFLAGS
-  "${PLATFORM_LINKFLAGS} -Wl,--version-script='${CMAKE_SOURCE_DIR}/source/creator/blender.map'"
+  "${PLATFORM_LINKFLAGS} -Wl,--version-script='${PLATFORM_SYMBOLS_MAP}'"
 )
 
 # Don't use position independent executable for portable install since file
@@ -875,7 +920,7 @@ endif()
 # If atomic operations are possible without libatomic then linker flags are left as-is.
 function(CONFIGURE_ATOMIC_LIB_IF_NEEDED)
   # Source which is used to enforce situation when software emulation of atomics is required.
-  # Assume that using 64bit integer gives a definitive asnwer (as in, if 64bit atomic operations
+  # Assume that using 64bit integer gives a definitive answer (as in, if 64bit atomic operations
   # are possible using assembly/intrinsics 8, 16, and 32 bit operations will also be possible.
   set(_source
       "#include <atomic>

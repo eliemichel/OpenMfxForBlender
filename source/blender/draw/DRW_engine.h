@@ -1,20 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Copyright 2016, Blender Foundation.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2016 Blender Foundation. */
 
 /** \file
  * \ingroup draw
@@ -38,6 +23,9 @@ struct DrawEngineType;
 struct GHash;
 struct GPUMaterial;
 struct GPUOffScreen;
+struct GPUVertFormat;
+struct CustomDataLayer;
+struct CustomData;
 struct GPUViewport;
 struct ID;
 struct Main;
@@ -52,6 +40,7 @@ struct bContext;
 struct rcti;
 
 void DRW_engines_register(void);
+void DRW_engines_register_experimental(void);
 void DRW_engines_free(void);
 
 bool DRW_engine_render_support(struct DrawEngineType *draw_engine_type);
@@ -232,6 +221,12 @@ void DRW_opengl_context_activate(bool drw_state);
  */
 void DRW_draw_cursor_2d_ex(const struct ARegion *region, const float cursor[2]);
 
+void DRW_cdlayer_attr_aliases_add(struct GPUVertFormat *format,
+                                  const char *base_name,
+                                  const struct CustomData *data,
+                                  const struct CustomDataLayer *cl,
+                                  bool is_active_render,
+                                  bool is_active_layer);
 #ifdef __cplusplus
 }
 #endif

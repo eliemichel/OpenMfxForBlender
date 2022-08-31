@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -682,7 +666,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
   }
 
   if (calc->aux_target) {
-    auxMesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(calc->aux_target, false);
+    auxMesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(calc->aux_target);
     if (!auxMesh) {
       return;
     }
@@ -1413,7 +1397,7 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd,
 
   if (smd->target != NULL) {
     Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, smd->target);
-    calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
+    calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target);
 
     /* TODO: there might be several "bugs" with non-uniform scales matrices
      * because it will no longer be nearest surface, not sphere projection

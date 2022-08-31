@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edscr
@@ -159,6 +143,10 @@ void ED_region_do_listen(wmRegionListenerParams *params)
 
   if (region->type && region->type->listener) {
     region->type->listener(params);
+  }
+
+  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
+    UI_block_views_listen(block, params);
   }
 
   LISTBASE_FOREACH (uiList *, list, &region->ui_lists) {
@@ -1087,6 +1075,7 @@ static void region_azone_scrollbar_init(ScrArea *area,
 {
   rcti scroller_vert = (direction == AZ_SCROLL_VERT) ? region->v2d.vert : region->v2d.hor;
   AZone *az = MEM_callocN(sizeof(*az), __func__);
+  float hide_width;
 
   BLI_addtail(&area->actionzones, az);
   az->type = AZONE_REGION_SCROLL;
@@ -1095,16 +1084,18 @@ static void region_azone_scrollbar_init(ScrArea *area,
 
   if (direction == AZ_SCROLL_VERT) {
     az->region->v2d.alpha_vert = 0;
+    hide_width = V2D_SCROLL_HIDE_HEIGHT;
   }
   else if (direction == AZ_SCROLL_HOR) {
     az->region->v2d.alpha_hor = 0;
+    hide_width = V2D_SCROLL_HIDE_WIDTH;
   }
 
   BLI_rcti_translate(&scroller_vert, region->winrct.xmin, region->winrct.ymin);
-  az->x1 = scroller_vert.xmin - AZONEFADEIN;
-  az->y1 = scroller_vert.ymin - AZONEFADEIN;
-  az->x2 = scroller_vert.xmax + AZONEFADEIN;
-  az->y2 = scroller_vert.ymax + AZONEFADEIN;
+  az->x1 = scroller_vert.xmin - ((direction == AZ_SCROLL_VERT) ? hide_width : 0);
+  az->y1 = scroller_vert.ymin - ((direction == AZ_SCROLL_HOR) ? hide_width : 0);
+  az->x2 = scroller_vert.xmax + ((direction == AZ_SCROLL_VERT) ? hide_width : 0);
+  az->y2 = scroller_vert.ymax + ((direction == AZ_SCROLL_HOR) ? hide_width : 0);
 
   BLI_rcti_init(&az->rect, az->x1, az->x2, az->y1, az->y2);
 }
@@ -1988,6 +1979,7 @@ void ED_area_init(wmWindowManager *wm, wmWindow *win, ScrArea *area)
 
 static void area_offscreen_init(ScrArea *area)
 {
+  area->flag |= AREA_FLAG_OFFSCREEN;
   area->type = BKE_spacetype_from_id(area->spacetype);
 
   if (area->type == NULL) {
@@ -2191,12 +2183,12 @@ struct RegionTypeAlignInfo {
      * Needed for detecting which header displays the space-type switcher.
      */
     bool hidden;
-  } by_type[RGN_TYPE_LEN];
+  } by_type[RGN_TYPE_NUM];
 };
 
 static void region_align_info_from_area(ScrArea *area, struct RegionTypeAlignInfo *r_align_info)
 {
-  for (int index = 0; index < RGN_TYPE_LEN; index++) {
+  for (int index = 0; index < RGN_TYPE_NUM; index++) {
     r_align_info->by_type[index].alignment = -1;
     /* Default to true, when it doesn't exist - it's effectively hidden. */
     r_align_info->by_type[index].hidden = true;
@@ -2204,7 +2196,7 @@ static void region_align_info_from_area(ScrArea *area, struct RegionTypeAlignInf
 
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     const int index = region->regiontype;
-    if ((uint)index < RGN_TYPE_LEN) {
+    if ((uint)index < RGN_TYPE_NUM) {
       r_align_info->by_type[index].alignment = RGN_ALIGN_ENUM_FROM_MASK(region->alignment);
       r_align_info->by_type[index].hidden = (region->flag & RGN_FLAG_HIDDEN) != 0;
     }
@@ -2267,7 +2259,7 @@ static short region_alignment_from_header_and_tool_header_state(
 static void region_align_info_to_area_for_headers(
     const struct RegionTypeAlignInfo *region_align_info_src,
     const struct RegionTypeAlignInfo *region_align_info_dst,
-    ARegion *region_by_type[RGN_TYPE_LEN])
+    ARegion *region_by_type[RGN_TYPE_NUM])
 {
   /* Abbreviate access. */
   const short header_alignment_src = region_align_info_src->by_type[RGN_TYPE_HEADER].alignment;
@@ -2380,12 +2372,12 @@ static void region_align_info_to_area_for_headers(
 }
 
 static void region_align_info_to_area(
-    ScrArea *area, const struct RegionTypeAlignInfo region_align_info_src[RGN_TYPE_LEN])
+    ScrArea *area, const struct RegionTypeAlignInfo region_align_info_src[RGN_TYPE_NUM])
 {
-  ARegion *region_by_type[RGN_TYPE_LEN] = {NULL};
+  ARegion *region_by_type[RGN_TYPE_NUM] = {NULL};
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     const int index = region->regiontype;
-    if ((uint)index < RGN_TYPE_LEN) {
+    if ((uint)index < RGN_TYPE_NUM) {
       region_by_type[index] = region;
     }
   }
@@ -2452,7 +2444,7 @@ void ED_area_newspace(bContext *C, ScrArea *area, int type, const bool skip_regi
      */
 
     bool sync_header_alignment = false;
-    struct RegionTypeAlignInfo region_align_info[RGN_TYPE_LEN];
+    struct RegionTypeAlignInfo region_align_info[RGN_TYPE_NUM];
     if ((slold != NULL) && (slold->link_flag & SPACE_FLAG_TYPE_TEMPORARY) == 0) {
       region_align_info_from_area(area, region_align_info);
       sync_header_alignment = true;
@@ -3136,7 +3128,12 @@ void ED_region_panels_draw(const bContext *C, ARegion *region)
     UI_view2d_mask_from_win(v2d, &mask);
     mask.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
   }
-  UI_view2d_scrollers_draw(v2d, use_mask ? &mask : NULL);
+  bool use_full_hide = false;
+  if (region->overlap) {
+    /* Don't always show scrollbars for transparent regions as it's distracting. */
+    use_full_hide = true;
+  }
+  UI_view2d_scrollers_draw_ex(v2d, use_mask ? &mask : NULL, use_full_hide);
 }
 
 void ED_region_panels_ex(const bContext *C, ARegion *region, const char *contexts[])
@@ -3452,6 +3449,37 @@ int ED_area_global_max_size_y(const ScrArea *area)
 bool ED_area_is_global(const ScrArea *area)
 {
   return area->global != NULL;
+}
+
+ScrArea *ED_area_find_under_cursor(const bContext *C, int spacetype, const int xy[2])
+{
+  bScreen *screen = CTX_wm_screen(C);
+  wmWindow *win = CTX_wm_window(C);
+
+  ScrArea *area = NULL;
+
+  if (win->parent) {
+    /* If active window is a child, check itself first. */
+    area = BKE_screen_find_area_xy(screen, spacetype, xy);
+  }
+
+  if (!area) {
+    /* Check all windows except the active one. */
+    int scr_pos[2];
+    wmWindow *win_other = WM_window_find_under_cursor(win, xy, scr_pos);
+    if (win_other && win_other != win) {
+      win = win_other;
+      screen = WM_window_get_active_screen(win);
+      area = BKE_screen_find_area_xy(screen, spacetype, scr_pos);
+    }
+  }
+
+  if (!area && !win->parent) {
+    /* If active window is a parent window, check itself last. */
+    area = BKE_screen_find_area_xy(screen, spacetype, xy);
+  }
+
+  return area;
 }
 
 ScrArea *ED_screen_areas_iter_first(const wmWindow *win, const bScreen *screen)

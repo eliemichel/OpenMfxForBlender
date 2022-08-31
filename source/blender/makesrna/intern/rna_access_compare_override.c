@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -26,6 +12,7 @@
 
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
+#include "DNA_camera_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_key_types.h"
@@ -51,6 +38,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_path.h"
+#include "RNA_prototypes.h"
 
 #include "rna_access_internal.h"
 #include "rna_internal.h"
@@ -100,7 +89,7 @@ static ID *rna_property_override_property_real_id_owner(Main *bmain,
         owner_id = RNA_find_real_ID_and_path(bmain, id, &rna_path_prefix);
         break;
       default:
-        BLI_assert(0);
+        BLI_assert_unreachable();
     }
   }
 
@@ -155,6 +144,12 @@ bool RNA_property_overridable_get(PointerRNA *ptr, PropertyRNA *prop)
     else if (RNA_struct_is_a(ptr->type, &RNA_NlaTrack)) {
       NlaTrack *nla_track = ptr->data;
       if (nla_track->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) {
+        return true;
+      }
+    }
+    else if (RNA_struct_is_a(ptr->type, &RNA_CameraBackgroundImage)) {
+      CameraBGImage *bgpic = ptr->data;
+      if (bgpic->flag & CAM_BGIMG_FLAG_OVERRIDE_LIBRARY_LOCAL) {
         return true;
       }
     }
@@ -232,7 +227,7 @@ bool RNA_property_copy(
 
   /* IDprops: destination may not exist, if source does and is set, try to create it. */
   /* NOTE: this is sort of quick hack/bandage to fix the issue,
-   * we need to rethink how IDProps are handled in 'diff' RNA code completely, imho... */
+   * we need to rethink how IDProps are handled in 'diff' RNA code completely, IMHO. */
   if (prop_src != NULL && prop_dst == NULL && RNA_property_is_set(fromptr, prop)) {
     BLI_assert(prop_src->magic != RNA_MAGIC);
     IDProperty *idp_dst = RNA_struct_idprops(ptr, true);
@@ -367,7 +362,7 @@ static int rna_property_override_diff(Main *bmain,
 
   if (is_array_a != is_array_b) {
     /* Should probably never happen actually... */
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return is_array_a ? 1 : -1;
   }
 
@@ -413,7 +408,7 @@ static int rna_property_override_diff(Main *bmain,
                rna_path ? rna_path : prop_a->identifier,
                !prop_a->is_idprop,
                !prop_b->is_idprop);
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return 1;
   }
 
@@ -504,7 +499,7 @@ static bool rna_property_override_operation_store(Main *bmain,
                op->rna_path,
                prop_local->magic == RNA_MAGIC,
                prop_reference->magic == RNA_MAGIC);
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return changed;
   }
 
@@ -593,7 +588,7 @@ static bool rna_property_override_operation_apply(Main *bmain,
                                               prop_dst->identifier,
                prop_dst->magic == RNA_MAGIC,
                prop_src->magic == RNA_MAGIC);
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return false;
   }
 
@@ -625,10 +620,6 @@ static bool rna_property_override_operation_apply(Main *bmain,
                                       ptr_item_src,
                                       ptr_item_storage,
                                       opop);
-  if (success) {
-    RNA_property_update_main(bmain, NULL, ptr_dst, prop_dst);
-  }
-
   return success;
 }
 

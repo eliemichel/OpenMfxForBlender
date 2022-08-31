@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "DEG_depsgraph_query.h"
 
@@ -20,6 +6,8 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+
+#include "BKE_curves.hh"
 
 #include "node_geometry_util.hh"
 
@@ -37,12 +25,10 @@ static void node_declare(NodeDeclarationBuilder &b)
 static void set_computed_position_and_offset(GeometryComponent &component,
                                              const VArray<float3> &in_positions,
                                              const VArray<float3> &in_offsets,
-                                             const AttributeDomain domain,
                                              const IndexMask selection)
 {
-
-  OutputAttribute_Typed<float3> positions = component.attribute_try_get_for_output<float3>(
-      "position", domain, {0, 0, 0});
+  MutableAttributeAccessor attributes = *component.attributes_for_write();
+  AttributeWriter<float3> positions = attributes.lookup_for_write<float3>("position");
 
   const int grain_size = 10000;
 
@@ -50,7 +36,7 @@ static void set_computed_position_and_offset(GeometryComponent &component,
     case GEO_COMPONENT_TYPE_MESH: {
       Mesh *mesh = static_cast<MeshComponent &>(component).get_for_write();
       MutableSpan<MVert> mverts{mesh->mvert, mesh->totvert};
-      if (in_positions.is_same(positions.varray())) {
+      if (in_positions.is_same(positions.varray)) {
         devirtualize_varray(in_offsets, [&](const auto in_offsets) {
           threading::parallel_for(
               selection.index_range(), grain_size, [&](const IndexRange range) {
@@ -75,9 +61,46 @@ static void set_computed_position_and_offset(GeometryComponent &component,
       }
       break;
     }
+    case GEO_COMPONENT_TYPE_CURVE: {
+      CurveComponent &curve_component = static_cast<CurveComponent &>(component);
+      Curves &curves_id = *curve_component.get_for_write();
+      bke::CurvesGeometry &curves = bke::CurvesGeometry::wrap(curves_id.geometry);
+      if (attributes.contains("handle_right") && attributes.contains("handle_left")) {
+        SpanAttributeWriter<float3> handle_right_attribute =
+            attributes.lookup_or_add_for_write_span<float3>("handle_right", ATTR_DOMAIN_POINT);
+        SpanAttributeWriter<float3> handle_left_attribute =
+            attributes.lookup_or_add_for_write_span<float3>("handle_left", ATTR_DOMAIN_POINT);
+
+        MutableVArraySpan<float3> out_positions_span = positions.varray;
+        devirtualize_varray2(
+            in_positions, in_offsets, [&](const auto in_positions, const auto in_offsets) {
+              threading::parallel_for(
+                  selection.index_range(), grain_size, [&](const IndexRange range) {
+                    for (const int i : selection.slice(range)) {
+                      const float3 new_position = in_positions[i] + in_offsets[i];
+                      const float3 delta = new_position - out_positions_span[i];
+                      handle_right_attribute.span[i] += delta;
+                      handle_left_attribute.span[i] += delta;
+                      out_positions_span[i] = new_position;
+                    }
+                  });
+            });
+
+        out_positions_span.save();
+        handle_right_attribute.finish();
+        handle_left_attribute.finish();
+
+        /* Automatic Bezier handles must be recalculated based on the new positions. */
+        curves.calculate_bezier_auto_handles();
+        break;
+      }
+      else {
+        ATTR_FALLTHROUGH;
+      }
+    }
     default: {
-      MutableSpan<float3> out_positions_span = positions.as_span();
-      if (in_positions.is_same(positions.varray())) {
+      MutableVArraySpan<float3> out_positions_span = positions.varray;
+      if (in_positions.is_same(positions.varray)) {
         devirtualize_varray(in_offsets, [&](const auto in_offsets) {
           threading::parallel_for(
               selection.index_range(), grain_size, [&](const IndexRange range) {
@@ -98,11 +121,12 @@ static void set_computed_position_and_offset(GeometryComponent &component,
                   });
             });
       }
+      out_positions_span.save();
       break;
     }
   }
 
-  positions.save();
+  positions.finish();
 }
 
 static void set_position_in_component(GeometryComponent &component,
@@ -110,9 +134,8 @@ static void set_position_in_component(GeometryComponent &component,
                                       const Field<float3> &position_field,
                                       const Field<float3> &offset_field)
 {
-  AttributeDomain domain = component.type() == GEO_COMPONENT_TYPE_INSTANCES ?
-                               ATTR_DOMAIN_INSTANCE :
-                               ATTR_DOMAIN_POINT;
+  eAttrDomain domain = component.type() == GEO_COMPONENT_TYPE_INSTANCES ? ATTR_DOMAIN_INSTANCE :
+                                                                          ATTR_DOMAIN_POINT;
   GeometryComponentFieldContext field_context{component, domain};
   const int domain_size = component.attribute_domain_size(domain);
   if (domain_size == 0) {
@@ -126,9 +149,10 @@ static void set_position_in_component(GeometryComponent &component,
   evaluator.evaluate();
 
   const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
-  const VArray<float3> &positions_input = evaluator.get_evaluated<float3>(0);
-  const VArray<float3> &offsets_input = evaluator.get_evaluated<float3>(1);
-  set_computed_position_and_offset(component, positions_input, offsets_input, domain, selection);
+
+  const VArray<float3> positions_input = evaluator.get_evaluated<float3>(0);
+  const VArray<float3> offsets_input = evaluator.get_evaluated<float3>(1);
+  set_computed_position_and_offset(component, positions_input, offsets_input, selection);
 }
 
 static void node_geo_exec(GeoNodeExecParams params)

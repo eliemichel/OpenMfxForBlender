@@ -1,16 +1,5 @@
-# Copyright 2011-2020 Blender Foundation
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2011-2022 Blender Foundation
 
 set(INC
   ..
@@ -37,6 +26,8 @@ set(SRC
   thread.cpp
   time.cpp
   transform.cpp
+  transform_avx2.cpp
+  transform_sse41.cpp
   windows.cpp
 )
 
@@ -74,6 +65,7 @@ set(SRC_HEADERS
   math_float2.h
   math_float3.h
   math_float4.h
+  math_float8.h
   math_int2.h
   math_int3.h
   math_int4.h
@@ -147,6 +139,13 @@ set(SRC_HEADERS
   windows.h
   xml.h
 )
+
+if(CXX_HAS_SSE)
+  set_source_files_properties(transform_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
+endif()
+if(CXX_HAS_AVX2)
+  set_source_files_properties(transform_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
+endif()
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})

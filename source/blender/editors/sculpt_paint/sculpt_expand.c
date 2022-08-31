@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edsculpt
@@ -1144,7 +1128,7 @@ static void sculpt_expand_restore_color_data(SculptSession *ss, ExpandCache *exp
     PBVHNode *node = nodes[n];
     PBVHVertexIter vd;
     BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
-      copy_v4_v4(vd.col, expand_cache->original_colors[vd.index]);
+      SCULPT_vertex_color_set(ss, vd.index, expand_cache->original_colors[vd.index]);
     }
     BKE_pbvh_vertex_iter_end;
     BKE_pbvh_node_mark_redraw(node);
@@ -1208,7 +1192,7 @@ static void sculpt_expand_cancel(bContext *C, wmOperator *UNUSED(op))
 
   sculpt_expand_restore_original_state(C, ob, ss->expand_cache);
 
-  SCULPT_undo_push_end();
+  SCULPT_undo_push_end(ob);
   sculpt_expand_cache_free(ss);
 }
 
@@ -1252,9 +1236,6 @@ static void sculpt_expand_mask_update_task_cb(void *__restrict userdata,
 
     *vd.mask = clamp_f(new_mask, 0.0f, 1.0f);
     any_changed = true;
-    if (vd.mvert) {
-      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
-    }
   }
   BKE_pbvh_vertex_iter_end;
   if (any_changed) {
@@ -1303,7 +1284,7 @@ static void sculpt_expand_colors_update_task_cb(void *__restrict userdata,
   PBVHVertexIter vd;
   BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_ALL) {
     float initial_color[4];
-    copy_v4_v4(initial_color, vd.col);
+    SCULPT_vertex_color_get(ss, vd.index, initial_color);
 
     const bool enabled = sculpt_expand_state_get(ss, expand_cache, vd.index);
     float fade;
@@ -1330,11 +1311,9 @@ static void sculpt_expand_colors_update_task_cb(void *__restrict userdata,
       continue;
     }
 
-    copy_v4_v4(vd.col, final_color);
+    SCULPT_vertex_color_set(ss, vd.index, final_color);
+
     any_changed = true;
-    if (vd.mvert) {
-      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
-    }
   }
   BKE_pbvh_vertex_iter_end;
   if (any_changed) {
@@ -1386,7 +1365,7 @@ static void sculpt_expand_original_state_store(Object *ob, ExpandCache *expand_c
   if (expand_cache->target == SCULPT_EXPAND_TARGET_COLORS) {
     expand_cache->original_colors = MEM_malloc_arrayN(totvert, sizeof(float[4]), "initial colors");
     for (int i = 0; i < totvert; i++) {
-      copy_v4_v4(expand_cache->original_colors[i], SCULPT_vertex_color_get(ss, i));
+      SCULPT_vertex_color_get(ss, i, expand_cache->original_colors[i]);
     }
   }
 }
@@ -1465,13 +1444,11 @@ static void sculpt_expand_update_for_vertex(bContext *C, Object *ob, const int v
  * Updates the #SculptSession cursor data and gets the active vertex
  * if the cursor is over the mesh.
  */
-static int sculpt_expand_target_vertex_update_and_get(bContext *C,
-                                                      Object *ob,
-                                                      const float mouse[2])
+static int sculpt_expand_target_vertex_update_and_get(bContext *C, Object *ob, const float mval[2])
 {
   SculptSession *ss = ob->sculpt;
   SculptCursorGeometryInfo sgi;
-  if (SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false)) {
+  if (SCULPT_cursor_geometry_info_update(C, &sgi, mval, false)) {
     return SCULPT_active_vertex_get(ss);
   }
   return SCULPT_EXPAND_VERTEX_NONE;
@@ -1542,7 +1519,7 @@ static void sculpt_expand_finish(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  SCULPT_undo_push_end();
+  SCULPT_undo_push_end(ob);
 
   /* Tag all nodes to redraw to avoid artifacts after the fast partial updates. */
   PBVHNode **nodes;
@@ -1603,16 +1580,16 @@ static void sculpt_expand_find_active_connected_components_from_vert(Object *ob,
 static void sculpt_expand_set_initial_components_for_mouse(bContext *C,
                                                            Object *ob,
                                                            ExpandCache *expand_cache,
-                                                           const float mouse[2])
+                                                           const float mval[2])
 {
   SculptSession *ss = ob->sculpt;
-  int initial_vertex = sculpt_expand_target_vertex_update_and_get(C, ob, mouse);
+  int initial_vertex = sculpt_expand_target_vertex_update_and_get(C, ob, mval);
   if (initial_vertex == SCULPT_EXPAND_VERTEX_NONE) {
     /* Cursor not over the mesh, for creating valid initial falloffs, fallback to the last active
      * vertex in the sculpt session. */
     initial_vertex = SCULPT_active_vertex_get(ss);
   }
-  copy_v2_v2(ss->expand_cache->initial_mouse, mouse);
+  copy_v2_v2(ss->expand_cache->initial_mouse, mval);
   expand_cache->initial_active_vertex = initial_vertex;
   expand_cache->initial_active_face_set = SCULPT_active_face_set_get(ss);
 
@@ -1644,14 +1621,14 @@ static void sculpt_expand_move_propagation_origin(bContext *C,
 {
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
 
-  const float mouse[2] = {event->mval[0], event->mval[1]};
+  const float mval_fl[2] = {UNPACK2(event->mval)};
   float move_disp[2];
-  sub_v2_v2v2(move_disp, mouse, expand_cache->initial_mouse_move);
+  sub_v2_v2v2(move_disp, mval_fl, expand_cache->initial_mouse_move);
 
-  float new_mouse[2];
-  add_v2_v2v2(new_mouse, move_disp, expand_cache->original_mouse_move);
+  float new_mval[2];
+  add_v2_v2v2(new_mval, move_disp, expand_cache->original_mouse_move);
 
-  sculpt_expand_set_initial_components_for_mouse(C, ob, expand_cache, new_mouse);
+  sculpt_expand_set_initial_components_for_mouse(C, ob, expand_cache, new_mval);
   sculpt_expand_falloff_factors_from_vertex_and_symm_create(
       expand_cache,
       sd,
@@ -1712,8 +1689,8 @@ static int sculpt_expand_modal(bContext *C, wmOperator *op, const wmEvent *event
   sculpt_expand_ensure_sculptsession_data(ob);
 
   /* Update and get the active vertex (and face) from the cursor. */
-  const float mouse[2] = {event->mval[0], event->mval[1]};
-  const int target_expand_vertex = sculpt_expand_target_vertex_update_and_get(C, ob, mouse);
+  const float mval_fl[2] = {UNPACK2(event->mval)};
+  const int target_expand_vertex = sculpt_expand_target_vertex_update_and_get(C, ob, mval_fl);
 
   /* Handle the modal keymap state changes. */
   ExpandCache *expand_cache = ss->expand_cache;
@@ -1771,7 +1748,7 @@ static int sculpt_expand_modal(bContext *C, wmOperator *op, const wmEvent *event
         }
         expand_cache->move = true;
         expand_cache->move_original_falloff_type = expand_cache->falloff_type;
-        copy_v2_v2(expand_cache->initial_mouse_move, mouse);
+        copy_v2_v2(expand_cache->initial_mouse_move, mval_fl);
         copy_v2_v2(expand_cache->original_mouse_move, expand_cache->initial_mouse);
         if (expand_cache->falloff_type == SCULPT_EXPAND_FALLOFF_GEODESIC &&
             SCULPT_vertex_count_get(ss) > expand_cache->max_geodesic_move_preview) {
@@ -1881,10 +1858,8 @@ static int sculpt_expand_modal(bContext *C, wmOperator *op, const wmEvent *event
   /* Add new Face Sets IDs to the snapping gset if enabled. */
   if (expand_cache->snap) {
     const int active_face_set_id = sculpt_expand_active_face_set_id_get(ss, expand_cache);
-    if (!BLI_gset_haskey(expand_cache->snap_enabled_face_sets,
-                         POINTER_FROM_INT(active_face_set_id))) {
-      BLI_gset_add(expand_cache->snap_enabled_face_sets, POINTER_FROM_INT(active_face_set_id));
-    }
+    /* The key may exist, in that case this does nothing. */
+    BLI_gset_add(expand_cache->snap_enabled_face_sets, POINTER_FROM_INT(active_face_set_id));
   }
 
   /* Update the sculpt data with the current state of the #ExpandCache. */
@@ -2016,7 +1991,7 @@ static void sculpt_expand_cache_initial_config_set(bContext *C,
   BKE_curvemapping_init(expand_cache->brush->curve);
   copy_v4_fl(expand_cache->fill_color, 1.0f);
   copy_v3_v3(expand_cache->fill_color, BKE_brush_color_get(ss->scene, expand_cache->brush));
-  IMB_colormanagement_srgb_to_scene_linear_v3(expand_cache->fill_color);
+  IMB_colormanagement_srgb_to_scene_linear_v3(expand_cache->fill_color, expand_cache->fill_color);
 
   expand_cache->scene = CTX_data_scene(C);
   expand_cache->mtex = &expand_cache->brush->mtex;

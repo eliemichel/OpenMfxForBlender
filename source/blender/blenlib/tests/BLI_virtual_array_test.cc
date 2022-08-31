@@ -1,6 +1,7 @@
-/* Apache License, Version 2.0 */
+/* SPDX-License-Identifier: Apache-2.0 */
 
 #include "BLI_array.hh"
+#include "BLI_generic_virtual_array.hh"
 #include "BLI_strict_flags.h"
 #include "BLI_vector.hh"
 #include "BLI_vector_set.hh"
@@ -109,7 +110,7 @@ TEST(virtual_array, AsSpan)
 {
   auto func = [](int64_t index) { return (int)(10 * index); };
   VArray<int> func_varray = VArray<int>::ForFunc(10, func);
-  VArray_Span span_varray{func_varray};
+  VArraySpan span_varray{func_varray};
   EXPECT_EQ(span_varray.size(), 10);
   Span<int> span = span_varray;
   EXPECT_EQ(span.size(), 10);
@@ -177,6 +178,80 @@ TEST(virtual_array, MutableToImmutable)
     EXPECT_TRUE(varray.is_span());
     EXPECT_EQ(varray.size(), 4);
     EXPECT_EQ(varray[1], 2);
+  }
+}
+
+TEST(virtual_array, MaterializeCompressed)
+{
+  {
+    std::array<int, 10> array = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    VArray<int> varray = VArray<int>::ForSpan(array);
+    std::array<int, 3> compressed_array;
+    varray.materialize_compressed({3, 6, 7}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 30);
+    EXPECT_EQ(compressed_array[1], 60);
+    EXPECT_EQ(compressed_array[2], 70);
+    varray.materialize_compressed_to_uninitialized({2, 8, 9}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 20);
+    EXPECT_EQ(compressed_array[1], 80);
+    EXPECT_EQ(compressed_array[2], 90);
+  }
+  {
+    VArray<int> varray = VArray<int>::ForSingle(4, 10);
+    std::array<int, 3> compressed_array;
+    varray.materialize_compressed({2, 6, 7}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 4);
+    EXPECT_EQ(compressed_array[1], 4);
+    EXPECT_EQ(compressed_array[2], 4);
+    compressed_array.fill(0);
+    varray.materialize_compressed_to_uninitialized({0, 1, 2}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 4);
+    EXPECT_EQ(compressed_array[1], 4);
+    EXPECT_EQ(compressed_array[2], 4);
+  }
+  {
+    VArray<int> varray = VArray<int>::ForFunc(10, [](const int64_t i) { return (int)(i * i); });
+    std::array<int, 3> compressed_array;
+    varray.materialize_compressed({5, 7, 8}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 25);
+    EXPECT_EQ(compressed_array[1], 49);
+    EXPECT_EQ(compressed_array[2], 64);
+    varray.materialize_compressed_to_uninitialized({1, 2, 3}, compressed_array);
+    EXPECT_EQ(compressed_array[0], 1);
+    EXPECT_EQ(compressed_array[1], 4);
+    EXPECT_EQ(compressed_array[2], 9);
+  }
+}
+
+TEST(virtual_array, EmptySpanWrapper)
+{
+  {
+    VArray<int> varray;
+    VArraySpan<int> span1 = varray;
+    EXPECT_TRUE(span1.is_empty());
+    VArraySpan<int> span2 = std::move(span1);
+    EXPECT_TRUE(span2.is_empty());
+  }
+  {
+    VMutableArray<int> varray;
+    MutableVArraySpan<int> span1 = varray;
+    EXPECT_TRUE(span1.is_empty());
+    MutableVArraySpan<int> span2 = std::move(span1);
+    EXPECT_TRUE(span2.is_empty());
+  }
+  {
+    GVArray varray;
+    GVArraySpan span1 = varray;
+    EXPECT_TRUE(span1.is_empty());
+    GVArraySpan span2 = std::move(span1);
+    EXPECT_TRUE(span2.is_empty());
+  }
+  {
+    GVMutableArray varray;
+    GMutableVArraySpan span1 = varray;
+    EXPECT_TRUE(span1.is_empty());
+    GMutableVArraySpan span2 = std::move(span1);
+    EXPECT_TRUE(span2.is_empty());
   }
 }
 

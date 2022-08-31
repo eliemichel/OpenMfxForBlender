@@ -1,33 +1,20 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include "BLI_bounds.hh"
 #include "BLI_map.hh"
 #include "BLI_task.hh"
 
 #include "BLT_translation.h"
 
 #include "BKE_attribute.h"
-#include "BKE_attribute_access.hh"
+#include "BKE_curves.hh"
+#include "BKE_geometry_fields.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_pointcloud.h"
-#include "BKE_spline.hh"
 #include "BKE_volume.h"
 
 #include "DNA_collection_types.h"
@@ -66,9 +53,32 @@ GeometryComponent *GeometryComponent::create(GeometryComponentType component_typ
       return new VolumeComponent();
     case GEO_COMPONENT_TYPE_CURVE:
       return new CurveComponent();
+    case GEO_COMPONENT_TYPE_EDIT:
+      return new GeometryComponentEditData();
   }
   BLI_assert_unreachable();
   return nullptr;
+}
+
+int GeometryComponent::attribute_domain_size(const eAttrDomain domain) const
+{
+  if (this->is_empty()) {
+    return 0;
+  }
+  const std::optional<blender::bke::AttributeAccessor> attributes = this->attributes();
+  if (attributes.has_value()) {
+    return attributes->domain_size(domain);
+  }
+  return 0;
+}
+
+std::optional<blender::bke::AttributeAccessor> GeometryComponent::attributes() const
+{
+  return std::nullopt;
+};
+std::optional<blender::bke::MutableAttributeAccessor> GeometryComponent::attributes_for_write()
+{
+  return std::nullopt;
 }
 
 void GeometryComponent::user_add() const
@@ -167,6 +177,20 @@ void GeometrySet::keep_only(const blender::Span<GeometryComponentType> component
   }
 }
 
+void GeometrySet::keep_only_during_modify(
+    const blender::Span<GeometryComponentType> component_types)
+{
+  Vector<GeometryComponentType> extended_types = component_types;
+  extended_types.append_non_duplicates(GEO_COMPONENT_TYPE_INSTANCES);
+  extended_types.append_non_duplicates(GEO_COMPONENT_TYPE_EDIT);
+  this->keep_only(extended_types);
+}
+
+void GeometrySet::remove_geometry_during_modify()
+{
+  this->keep_only_during_modify({});
+}
+
 void GeometrySet::add(const GeometryComponent &component)
 {
   BLI_assert(!components_[component.type()]);
@@ -187,23 +211,27 @@ Vector<const GeometryComponent *> GeometrySet::get_components_for_read() const
 
 bool GeometrySet::compute_boundbox_without_instances(float3 *r_min, float3 *r_max) const
 {
+  using namespace blender;
   bool have_minmax = false;
-  const PointCloud *pointcloud = this->get_pointcloud_for_read();
-  if (pointcloud != nullptr) {
+  if (const PointCloud *pointcloud = this->get_pointcloud_for_read()) {
     have_minmax |= BKE_pointcloud_minmax(pointcloud, *r_min, *r_max);
   }
-  const Mesh *mesh = this->get_mesh_for_read();
-  if (mesh != nullptr) {
+  if (const Mesh *mesh = this->get_mesh_for_read()) {
     have_minmax |= BKE_mesh_wrapper_minmax(mesh, *r_min, *r_max);
   }
-  const Volume *volume = this->get_volume_for_read();
-  if (volume != nullptr) {
+  if (const Volume *volume = this->get_volume_for_read()) {
     have_minmax |= BKE_volume_min_max(volume, *r_min, *r_max);
   }
-  const CurveEval *curve = this->get_curve_for_read();
-  if (curve != nullptr) {
+  if (const Curves *curves_id = this->get_curves_for_read()) {
+    const bke::CurvesGeometry &curves = bke::CurvesGeometry::wrap(curves_id->geometry);
     /* Using the evaluated positions is somewhat arbitrary, but it is probably expected. */
-    have_minmax |= curve->bounds_min_max(*r_min, *r_max, true);
+    std::optional<bounds::MinMaxResult<float3>> min_max = bounds::min_max(
+        curves.evaluated_positions());
+    if (min_max) {
+      have_minmax = true;
+      *r_min = math::min(*r_min, min_max->min);
+      *r_max = math::max(*r_max, min_max->max);
+    }
   }
   return have_minmax;
 }
@@ -272,10 +300,17 @@ const Volume *GeometrySet::get_volume_for_read() const
   return (component == nullptr) ? nullptr : component->get_for_read();
 }
 
-const CurveEval *GeometrySet::get_curve_for_read() const
+const Curves *GeometrySet::get_curves_for_read() const
 {
   const CurveComponent *component = this->get_component_for_read<CurveComponent>();
   return (component == nullptr) ? nullptr : component->get_for_read();
+}
+
+const blender::bke::CurvesEditHints *GeometrySet::get_curve_edit_hints_for_read() const
+{
+  const GeometryComponentEditData *component =
+      this->get_component_for_read<GeometryComponentEditData>();
+  return (component == nullptr) ? nullptr : component->curves_edit_hints_.get();
 }
 
 bool GeometrySet::has_pointcloud() const
@@ -287,7 +322,7 @@ bool GeometrySet::has_pointcloud() const
 bool GeometrySet::has_instances() const
 {
   const InstancesComponent *component = this->get_component_for_read<InstancesComponent>();
-  return component != nullptr && component->instances_amount() >= 1;
+  return component != nullptr && component->instances_num() >= 1;
 }
 
 bool GeometrySet::has_volume() const
@@ -296,10 +331,10 @@ bool GeometrySet::has_volume() const
   return component != nullptr && component->has_volume();
 }
 
-bool GeometrySet::has_curve() const
+bool GeometrySet::has_curves() const
 {
   const CurveComponent *component = this->get_component_for_read<CurveComponent>();
-  return component != nullptr && component->has_curve();
+  return component != nullptr && component->has_curves();
 }
 
 bool GeometrySet::has_realized_data() const
@@ -316,8 +351,8 @@ bool GeometrySet::has_realized_data() const
 
 bool GeometrySet::is_empty() const
 {
-  return !(this->has_mesh() || this->has_curve() || this->has_pointcloud() || this->has_volume() ||
-           this->has_instances());
+  return !(this->has_mesh() || this->has_curves() || this->has_pointcloud() ||
+           this->has_volume() || this->has_instances());
 }
 
 GeometrySet GeometrySet::create_with_mesh(Mesh *mesh, GeometryOwnershipType ownership)
@@ -326,6 +361,16 @@ GeometrySet GeometrySet::create_with_mesh(Mesh *mesh, GeometryOwnershipType owne
   if (mesh != nullptr) {
     MeshComponent &component = geometry_set.get_component_for_write<MeshComponent>();
     component.replace(mesh, ownership);
+  }
+  return geometry_set;
+}
+
+GeometrySet GeometrySet::create_with_volume(Volume *volume, GeometryOwnershipType ownership)
+{
+  GeometrySet geometry_set;
+  if (volume != nullptr) {
+    VolumeComponent &component = geometry_set.get_component_for_write<VolumeComponent>();
+    component.replace(volume, ownership);
   }
   return geometry_set;
 }
@@ -341,12 +386,12 @@ GeometrySet GeometrySet::create_with_pointcloud(PointCloud *pointcloud,
   return geometry_set;
 }
 
-GeometrySet GeometrySet::create_with_curve(CurveEval *curve, GeometryOwnershipType ownership)
+GeometrySet GeometrySet::create_with_curves(Curves *curves, GeometryOwnershipType ownership)
 {
   GeometrySet geometry_set;
-  if (curve != nullptr) {
+  if (curves != nullptr) {
     CurveComponent &component = geometry_set.get_component_for_write<CurveComponent>();
-    component.replace(curve, ownership);
+    component.replace(curves, ownership);
   }
   return geometry_set;
 }
@@ -365,18 +410,18 @@ void GeometrySet::replace_mesh(Mesh *mesh, GeometryOwnershipType ownership)
   component.replace(mesh, ownership);
 }
 
-void GeometrySet::replace_curve(CurveEval *curve, GeometryOwnershipType ownership)
+void GeometrySet::replace_curves(Curves *curves, GeometryOwnershipType ownership)
 {
-  if (curve == nullptr) {
+  if (curves == nullptr) {
     this->remove<CurveComponent>();
     return;
   }
-  if (curve == this->get_curve_for_read()) {
+  if (curves == this->get_curves_for_read()) {
     return;
   }
   this->remove<CurveComponent>();
   CurveComponent &component = this->get_component_for_write<CurveComponent>();
-  component.replace(curve, ownership);
+  component.replace(curves, ownership);
 }
 
 void GeometrySet::replace_pointcloud(PointCloud *pointcloud, GeometryOwnershipType ownership)
@@ -425,10 +470,20 @@ Volume *GeometrySet::get_volume_for_write()
   return component == nullptr ? nullptr : component->get_for_write();
 }
 
-CurveEval *GeometrySet::get_curve_for_write()
+Curves *GeometrySet::get_curves_for_write()
 {
   CurveComponent *component = this->get_component_ptr<CurveComponent>();
   return component == nullptr ? nullptr : component->get_for_write();
+}
+
+blender::bke::CurvesEditHints *GeometrySet::get_curve_edit_hints_for_write()
+{
+  if (!this->has<GeometryComponentEditData>()) {
+    return nullptr;
+  }
+  GeometryComponentEditData &component =
+      this->get_component_for_write<GeometryComponentEditData>();
+  return component.curves_edit_hints_.get();
 }
 
 void GeometrySet::attribute_foreach(const Span<GeometryComponentType> component_types,
@@ -442,11 +497,14 @@ void GeometrySet::attribute_foreach(const Span<GeometryComponentType> component_
       continue;
     }
     const GeometryComponent &component = *this->get_component_for_read(component_type);
-    component.attribute_foreach(
-        [&](const AttributeIDRef &attribute_id, const AttributeMetaData &meta_data) {
-          callback(attribute_id, meta_data, component);
-          return true;
-        });
+    const std::optional<AttributeAccessor> attributes = component.attributes();
+    if (attributes.has_value()) {
+      attributes->for_all(
+          [&](const AttributeIDRef &attribute_id, const AttributeMetaData &meta_data) {
+            callback(attribute_id, meta_data, component);
+            return true;
+          });
+    }
   }
   if (include_instances && this->has_instances()) {
     const InstancesComponent &instances = *this->get_component_for_read<InstancesComponent>();
@@ -460,7 +518,7 @@ void GeometrySet::gather_attributes_for_propagation(
     const Span<GeometryComponentType> component_types,
     const GeometryComponentType dst_component_type,
     bool include_instances,
-    blender::Map<blender::bke::AttributeIDRef, AttributeKind> &r_attributes) const
+    blender::Map<blender::bke::AttributeIDRef, blender::bke::AttributeKind> &r_attributes) const
 {
   using namespace blender;
   using namespace blender::bke;
@@ -473,8 +531,8 @@ void GeometrySet::gather_attributes_for_propagation(
       [&](const AttributeIDRef &attribute_id,
           const AttributeMetaData &meta_data,
           const GeometryComponent &component) {
-        if (component.attribute_is_builtin(attribute_id)) {
-          if (!dummy_component->attribute_is_builtin(attribute_id)) {
+        if (component.attributes()->is_builtin(attribute_id)) {
+          if (!dummy_component->attributes()->is_builtin(attribute_id)) {
             /* Don't propagate built-in attributes that are not built-in on the destination
              * component. */
             return;
@@ -485,7 +543,7 @@ void GeometrySet::gather_attributes_for_propagation(
           return;
         }
 
-        AttributeDomain domain = meta_data.domain;
+        eAttrDomain domain = meta_data.domain;
         if (dst_component_type != GEO_COMPONENT_TYPE_INSTANCES && domain == ATTR_DOMAIN_INSTANCE) {
           domain = ATTR_DOMAIN_POINT;
         }
@@ -563,8 +621,14 @@ void GeometrySet::modify_geometry_sets(ForeachSubGeometryCallback callback)
 {
   Vector<GeometrySet *> geometry_sets;
   gather_mutable_geometry_sets(*this, geometry_sets);
-  blender::threading::parallel_for_each(
-      geometry_sets, [&](GeometrySet *geometry_set) { callback(*geometry_set); });
+  if (geometry_sets.size() == 1) {
+    /* Avoid possible overhead and a large call stack when multithreading is pointless. */
+    callback(*geometry_sets.first());
+  }
+  else {
+    blender::threading::parallel_for_each(
+        geometry_sets, [&](GeometrySet *geometry_set) { callback(*geometry_set); });
+  }
 }
 
 /** \} */
@@ -576,7 +640,7 @@ void GeometrySet::modify_geometry_sets(ForeachSubGeometryCallback callback)
 namespace blender::bke {
 
 GVArray NormalFieldInput::get_varray_for_context(const GeometryComponent &component,
-                                                 const AttributeDomain domain,
+                                                 const eAttrDomain domain,
                                                  IndexMask mask) const
 {
   if (component.type() == GEO_COMPONENT_TYPE_MESH) {
@@ -646,7 +710,9 @@ bool BKE_object_has_geometry_set_instances(const Object *ob)
         is_instance = ob->type != OB_VOLUME;
         break;
       case GEO_COMPONENT_TYPE_CURVE:
-        is_instance = !ELEM(ob->type, OB_CURVE, OB_FONT);
+        is_instance = !ELEM(ob->type, OB_CURVES_LEGACY, OB_FONT);
+        break;
+      case GEO_COMPONENT_TYPE_EDIT:
         break;
     }
     if (is_instance) {

@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -282,7 +268,7 @@ static struct bUnitCollection buImperialAclCollection = {buImperialAclDef, 0, 0,
 /* Time. */
 static struct bUnitDef buNaturalTimeDef[] = {
   /* Weeks? - probably not needed for Blender. */
-  {"day",         "days",         "d",   NULL, "Days",         "DAYS",     90000.0,      0.0, B_UNIT_DEF_NONE},
+  {"day",         "days",         "d",   NULL, "Days",         "DAYS",     86400.0,      0.0, B_UNIT_DEF_NONE},
   {"hour",        "hours",        "hr",  "h",  "Hours",        "HOURS",     3600.0,      0.0, B_UNIT_DEF_NONE},
   {"minute",      "minutes",      "min", "m",  "Minutes",      "MINUTES",     60.0,      0.0, B_UNIT_DEF_NONE},
   {"second",      "seconds",      "sec", "s",  "Seconds",      "SECONDS",      1.0,      0.0, B_UNIT_DEF_NONE}, /* Base unit. */
@@ -474,11 +460,20 @@ static size_t unit_as_string(char *str,
   }
 
   double value_conv = (value / unit->scalar) - unit->bias;
+  bool strip_skip = false;
+
+  /* Negative precision is used to disable stripping of zeroes.
+   * This reduces text jumping when changing values. */
+  if (prec < 0) {
+    strip_skip = true;
+    prec *= -1;
+  }
 
   /* Adjust precision to expected number of significant digits.
    * Note that here, we shall not have to worry about very big/small numbers, units are expected
    * to replace 'scientific notation' in those cases. */
   prec -= integer_digits_d(value_conv);
+
   CLAMP(prec, 0, 6);
 
   /* Convert to a string. */
@@ -492,12 +487,14 @@ static size_t unit_as_string(char *str,
   size_t i = len - 1;
 
   if (prec > 0) {
-    while (i > 0 && str[i] == '0') { /* 4.300 -> 4.3 */
-      str[i--] = pad;
-    }
+    if (!strip_skip) {
+      while (i > 0 && str[i] == '0') { /* 4.300 -> 4.3 */
+        str[i--] = pad;
+      }
 
-    if (i > 0 && str[i] == '.') { /* 10. -> 10 */
-      str[i--] = pad;
+      if (i > 0 && str[i] == '.') { /* 10. -> 10 */
+        str[i--] = pad;
+      }
     }
   }
 

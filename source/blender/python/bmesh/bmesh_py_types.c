@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2012 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2012 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup pybmesh
@@ -1077,8 +1061,9 @@ PyDoc_STRVAR(bpy_bmesh_from_object_doc,
              "   :arg cage: Get the mesh as a deformed cage.\n"
              "   :type cage: boolean\n"
              "   :arg face_normals: Calculate face normals.\n"
+             "   :type face_normals: boolean\n"
              "   :arg vertex_normals: Calculate vertex normals.\n"
-             "   :type face_normals: boolean\n");
+             "   :type vertex_normals: boolean\n");
 static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject *kw)
 {
   static const char *kwlist[] = {
@@ -1099,7 +1084,7 @@ static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kw,
-                                   "OO|$O&O&:from_object",
+                                   "OO|$O&O&O&:from_object",
                                    (char **)kwlist,
                                    &py_object,
                                    &py_depsgraph,
@@ -1206,7 +1191,7 @@ static PyObject *bpy_bmesh_from_mesh(BPy_BMesh *self, PyObject *args, PyObject *
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kw,
-                                   "O|$O&O&i:from_mesh",
+                                   "O|$O&O&O&i:from_mesh",
                                    (char **)kwlist,
                                    &py_mesh,
                                    PyC_ParseBool,
@@ -1274,10 +1259,16 @@ static PyObject *bpy_bmesh_select_flush(BPy_BMesh *self, PyObject *value)
   Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(bpy_bmesh_normal_update_doc,
-             ".. method:: normal_update()\n"
-             "\n"
-             "   Update mesh normals.\n");
+PyDoc_STRVAR(
+    bpy_bmesh_normal_update_doc,
+    ".. method:: normal_update()\n"
+    "\n"
+    "   Update normals of mesh faces and verts.\n"
+    "\n"
+    "   .. note::\n"
+    "\n"
+    "      The normal of any vertex where :attr:`is_wire` is True will be a zero vector.\n");
+
 static PyObject *bpy_bmesh_normal_update(BPy_BMesh *self)
 {
   BPY_BM_CHECK_OBJ(self);
@@ -1325,7 +1316,7 @@ static PyObject *bpy_bmesh_transform(BPy_BMElem *self, PyObject *args, PyObject 
   if (BaseMath_ReadCallback(mat) == -1) {
     return NULL;
   }
-  if (mat->num_col != 4 || mat->num_row != 4) {
+  if (mat->col_num != 4 || mat->row_num != 4) {
     PyErr_SetString(PyExc_ValueError, "expected a 4x4 matrix");
     return NULL;
   }
@@ -1626,7 +1617,12 @@ static PyObject *bpy_bmvert_calc_shell_factor(BPy_BMVert *self)
 PyDoc_STRVAR(bpy_bmvert_normal_update_doc,
              ".. method:: normal_update()\n"
              "\n"
-             "   Update vertex normal.\n");
+             "   Update vertex normal.\n"
+             "   This does not update the normals of adjoining faces.\n"
+             "\n"
+             "   .. note::\n"
+             "\n"
+             "      The vertex normal will be a zero vector if vertex :attr:`is_wire` is True.\n");
 static PyObject *bpy_bmvert_normal_update(BPy_BMVert *self)
 {
   BPY_BM_CHECK_OBJ(self);
@@ -1788,10 +1784,15 @@ static PyObject *bpy_bmedge_other_vert(BPy_BMEdge *self, BPy_BMVert *value)
   Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(bpy_bmedge_normal_update_doc,
-             ".. method:: normal_update()\n"
-             "\n"
-             "   Update edges vertex normals.\n");
+PyDoc_STRVAR(
+    bpy_bmedge_normal_update_doc,
+    ".. method:: normal_update()\n"
+    "\n"
+    "   Update normals of all connected faces and the edge verts.\n"
+    "\n"
+    "   .. note::\n"
+    "\n"
+    "      The normal of edge vertex will be a zero vector if vertex :attr:`is_wire` is True.\n");
 static PyObject *bpy_bmedge_normal_update(BPy_BMEdge *self)
 {
   BPY_BM_CHECK_OBJ(self);
@@ -2027,7 +2028,8 @@ static PyObject *bpy_bmface_calc_center_bounds(BPy_BMFace *self)
 PyDoc_STRVAR(bpy_bmface_normal_update_doc,
              ".. method:: normal_update()\n"
              "\n"
-             "   Update face's normal.\n");
+             "   Update face normal based on the positions of the face verts.\n"
+             "   This does not update the normals of face verts.\n");
 static PyObject *bpy_bmface_normal_update(BPy_BMFace *self)
 {
   BPY_BM_CHECK_OBJ(self);
@@ -3650,8 +3652,8 @@ void BPy_BM_init_types(void)
   BPy_BMLoopSeq_Type.tp_methods = bpy_bmloopseq_methods;
   BPy_BMIter_Type.tp_methods = NULL;
 
-  /*BPy_BMElem_Check() uses bpy_bm_elem_hash() to check types.
-   * if this changes update the macro */
+  /* #BPy_BMElem_Check() uses #bpy_bm_elem_hash() to check types.
+   * if this changes update the macro. */
   BPy_BMesh_Type.tp_hash = bpy_bm_hash;
   BPy_BMVert_Type.tp_hash = bpy_bm_elem_hash;
   BPy_BMEdge_Type.tp_hash = bpy_bm_elem_hash;

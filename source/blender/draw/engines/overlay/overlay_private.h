@@ -1,20 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Copyright 2019, Blender Foundation.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2019 Blender Foundation. */
 
 /** \file
  * \ingroup DNA
@@ -23,6 +8,8 @@
 #pragma once
 
 #include "DRW_render.h"
+
+#include "overlay_shader_shared.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,6 +74,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *edit_mesh_edges_ps[2];
   DRWPass *edit_mesh_faces_ps[2];
   DRWPass *edit_mesh_faces_cage_ps[2];
+  DRWPass *edit_curves_points_ps[2];
   DRWPass *edit_mesh_analysis_ps;
   DRWPass *edit_mesh_normals_ps;
   DRWPass *edit_particle_ps;
@@ -128,24 +116,15 @@ typedef struct OVERLAY_PassList {
   DRWPass *particle_ps;
   DRWPass *pointcloud_ps;
   DRWPass *sculpt_mask_ps;
+  DRWPass *sculpt_curves_selection_ps;
   DRWPass *volume_ps;
   DRWPass *wireframe_ps;
   DRWPass *wireframe_xray_ps;
   DRWPass *xray_fade_ps;
 } OVERLAY_PassList;
 
-/* Data used by GLSL shader. To be used as UBO. */
+/* Data used by GLSL shader. */
 typedef struct OVERLAY_ShadingData {
-  /** Grid */
-  float grid_axes[3], grid_distance;
-  float zplane_axes[3], grid_size[3];
-  float grid_steps[SI_GRID_STEPS_LEN];
-  float inv_viewport_size[2];
-  float grid_line_size;
-  float zoom_factor; /* Only for UV editor */
-  int grid_flag;
-  int zpos_flag;
-  int zneg_flag;
   /** Wireframe */
   float wire_step_param;
   float wire_opacity;
@@ -281,6 +260,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *edit_uv_faces_grp;
   DRWShadingGroup *edit_uv_face_dots_grp;
   DRWShadingGroup *edit_uv_stretching_grp;
+  DRWShadingGroup *edit_curves_points_grp[2];
   DRWShadingGroup *extra_grid_grp;
   DRWShadingGroup *facing_grp[2];
   DRWShadingGroup *fade_grp[2];
@@ -288,6 +268,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *motion_path_lines_grp;
   DRWShadingGroup *motion_path_points_grp;
   DRWShadingGroup *outlines_grp;
+  DRWShadingGroup *outlines_curves_grp;
   DRWShadingGroup *outlines_ptcloud_grp;
   DRWShadingGroup *outlines_gpencil_grp;
   DRWShadingGroup *paint_depth_grp;
@@ -300,6 +281,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *particle_shapes_grp;
   DRWShadingGroup *pointcloud_dots_grp;
   DRWShadingGroup *sculpt_mask_grp;
+  DRWShadingGroup *sculpt_curves_selection_grp;
   DRWShadingGroup *volume_selection_surface_grp;
   DRWShadingGroup *wires_grp[2][2];      /* With and without coloring. */
   DRWShadingGroup *wires_all_grp[2][2];  /* With and without coloring. */
@@ -314,9 +296,9 @@ typedef struct OVERLAY_PrivateData {
   DRWView *view_edit_verts;
   DRWView *view_edit_text;
   DRWView *view_reference_images;
+  DRWView *view_edit_curves_points;
 
   /** TODO: get rid of this. */
-  ListBase smoke_domains;
   ListBase bg_movie_clips;
 
   /** Two instances for in_front option and without. */
@@ -339,7 +321,13 @@ typedef struct OVERLAY_PrivateData {
   int cfra;
   DRWState clipping_state;
   OVERLAY_ShadingData shdata;
+  OVERLAY_GridData grid_data;
 
+  struct {
+    float grid_axes[3];
+    float zplane_axes[3];
+    OVERLAY_GridBits zneg_flag, zpos_flag, grid_flag;
+  } grid;
   struct {
     bool enabled;
     bool do_depth_copy;
@@ -362,6 +350,9 @@ typedef struct OVERLAY_PrivateData {
     int flag; /** Copy of #v3d->overlay.edit_flag. */
   } edit_mesh;
   struct {
+    bool do_zbufclip;
+  } edit_curves;
+  struct {
     bool use_weight;
     int select_mode;
   } edit_particle;
@@ -374,6 +365,7 @@ typedef struct OVERLAY_PrivateData {
     bool do_stencil_overlay;
     bool do_mask_overlay;
 
+    bool do_verts;
     bool do_faces;
     bool do_face_dots;
 
@@ -392,7 +384,6 @@ typedef struct OVERLAY_PrivateData {
     eSpaceImage_UVDT_Stretch draw_type;
     ListBase totals;
     float total_area_ratio;
-    float total_area_ratio_inv;
 
     /* stencil overlay */
     struct Image *stencil_image;
@@ -427,12 +418,18 @@ typedef struct OVERLAY_StorageList {
   struct OVERLAY_PrivateData *pd;
 } OVERLAY_StorageList;
 
+typedef struct OVERLAY_Instance {
+  GPUUniformBuf *grid_ubo;
+} OVERLAY_Instance;
+
 typedef struct OVERLAY_Data {
   void *engine_type;
   OVERLAY_FramebufferList *fbl;
   OVERLAY_TextureList *txl;
   OVERLAY_PassList *psl;
   OVERLAY_StorageList *stl;
+
+  OVERLAY_Instance *instance;
 } OVERLAY_Data;
 
 typedef struct OVERLAY_DupliData {
@@ -674,6 +671,10 @@ void OVERLAY_sculpt_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_sculpt_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_sculpt_draw(OVERLAY_Data *vedata);
 
+void OVERLAY_sculpt_curves_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_sculpt_curves_cache_populate(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_sculpt_curves_draw(OVERLAY_Data *vedata);
+
 void OVERLAY_wireframe_init(OVERLAY_Data *vedata);
 void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
@@ -683,7 +684,11 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
 void OVERLAY_wireframe_draw(OVERLAY_Data *vedata);
 void OVERLAY_wireframe_in_front_draw(OVERLAY_Data *vedata);
 
-void OVERLAY_shader_library_ensure(void);
+void OVERLAY_edit_curves_init(OVERLAY_Data *vedata);
+void OVERLAY_edit_curves_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_edit_curves_cache_populate(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_edit_curves_draw(OVERLAY_Data *vedata);
+
 GPUShader *OVERLAY_shader_antialiasing(void);
 GPUShader *OVERLAY_shader_armature_degrees_of_freedom_wire(void);
 GPUShader *OVERLAY_shader_armature_degrees_of_freedom_solid(void);
@@ -714,6 +719,7 @@ GPUShader *OVERLAY_shader_edit_mesh_vert(void);
 GPUShader *OVERLAY_shader_edit_particle_strand(void);
 GPUShader *OVERLAY_shader_edit_particle_point(void);
 GPUShader *OVERLAY_shader_edit_uv_edges_get(void);
+GPUShader *OVERLAY_shader_edit_uv_edges_for_edge_select_get(void);
 GPUShader *OVERLAY_shader_edit_uv_face_get(void);
 GPUShader *OVERLAY_shader_edit_uv_face_dots_get(void);
 GPUShader *OVERLAY_shader_edit_uv_verts_get(void);
@@ -737,6 +743,7 @@ GPUShader *OVERLAY_shader_motion_path_line(void);
 GPUShader *OVERLAY_shader_motion_path_vert(void);
 GPUShader *OVERLAY_shader_uniform_color(void);
 GPUShader *OVERLAY_shader_outline_prepass(bool use_wire);
+GPUShader *OVERLAY_shader_outline_prepass_curves(void);
 GPUShader *OVERLAY_shader_outline_prepass_gpencil(void);
 GPUShader *OVERLAY_shader_outline_prepass_pointcloud(void);
 GPUShader *OVERLAY_shader_extra_grid(void);
@@ -750,6 +757,7 @@ GPUShader *OVERLAY_shader_paint_wire(void);
 GPUShader *OVERLAY_shader_particle_dot(void);
 GPUShader *OVERLAY_shader_particle_shape(void);
 GPUShader *OVERLAY_shader_sculpt_mask(void);
+GPUShader *OVERLAY_shader_sculpt_curves_selection(void);
 GPUShader *OVERLAY_shader_volume_velocity(bool use_needle, bool use_mac);
 GPUShader *OVERLAY_shader_volume_gridlines(bool color_with_flags, bool color_range);
 GPUShader *OVERLAY_shader_wireframe(bool custom_bias);

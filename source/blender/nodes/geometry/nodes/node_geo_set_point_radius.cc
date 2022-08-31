@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "node_geometry_util.hh"
 
@@ -34,21 +20,22 @@ static void set_radius_in_component(GeometryComponent &component,
                                     const Field<bool> &selection_field,
                                     const Field<float> &radius_field)
 {
-  GeometryComponentFieldContext field_context{component, ATTR_DOMAIN_POINT};
   const int domain_size = component.attribute_domain_size(ATTR_DOMAIN_POINT);
   if (domain_size == 0) {
     return;
   }
+  MutableAttributeAccessor attributes = *component.attributes_for_write();
+  GeometryComponentFieldContext field_context{component, ATTR_DOMAIN_POINT};
 
-  OutputAttribute_Typed<float> radii = component.attribute_try_get_for_output_only<float>(
-      "radius", ATTR_DOMAIN_POINT);
+  AttributeWriter<float> radii = attributes.lookup_or_add_for_write<float>("radius",
+                                                                           ATTR_DOMAIN_POINT);
 
   fn::FieldEvaluator evaluator{field_context, domain_size};
   evaluator.set_selection(selection_field);
-  evaluator.add_with_destination(radius_field, radii.varray());
+  evaluator.add_with_destination(radius_field, radii.varray);
   evaluator.evaluate();
 
-  radii.save();
+  radii.finish();
 }
 
 static void node_geo_exec(GeoNodeExecParams params)

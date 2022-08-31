@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup bke
@@ -75,7 +61,7 @@ static CLG_LogRef LOG = {"bke.appdir"};
 
 static struct {
   /** Full path to program executable. */
-  char program_filename[FILE_MAX];
+  char program_filepath[FILE_MAX];
   /** Full path to directory in which executable is located. */
   char program_dirname[FILE_MAX];
   /** Persistent temporary directory (defined by the preferences or OS). */
@@ -874,14 +860,14 @@ static void where_am_i(char *fullname, const size_t maxlen, const char *name)
 
 void BKE_appdir_program_path_init(const char *argv0)
 {
-  where_am_i(g_app.program_filename, sizeof(g_app.program_filename), argv0);
-  BLI_split_dir_part(g_app.program_filename, g_app.program_dirname, sizeof(g_app.program_dirname));
+  where_am_i(g_app.program_filepath, sizeof(g_app.program_filepath), argv0);
+  BLI_split_dir_part(g_app.program_filepath, g_app.program_dirname, sizeof(g_app.program_dirname));
 }
 
 const char *BKE_appdir_program_path(void)
 {
-  BLI_assert(g_app.program_filename[0]);
-  return g_app.program_filename;
+  BLI_assert(g_app.program_filepath[0]);
+  return g_app.program_filepath;
 }
 
 const char *BKE_appdir_program_dir(void)
@@ -1036,16 +1022,16 @@ void BKE_appdir_app_templates(ListBase *templates)
       continue;
     }
 
-    struct direntry *dir;
-    uint totfile = BLI_filelist_dir_contents(subdir, &dir);
-    for (int f = 0; f < totfile; f++) {
-      if (!FILENAME_IS_CURRPAR(dir[f].relname) && S_ISDIR(dir[f].type)) {
-        char *template = BLI_strdup(dir[f].relname);
+    struct direntry *dirs;
+    const uint dir_num = BLI_filelist_dir_contents(subdir, &dirs);
+    for (int f = 0; f < dir_num; f++) {
+      if (!FILENAME_IS_CURRPAR(dirs[f].relname) && S_ISDIR(dirs[f].type)) {
+        char *template = BLI_strdup(dirs[f].relname);
         BLI_addtail(templates, BLI_genericNodeN(template));
       }
     }
 
-    BLI_filelist_free(dir, totfile);
+    BLI_filelist_free(dirs, dir_num);
   }
 }
 

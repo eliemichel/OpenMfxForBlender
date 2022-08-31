@@ -1,20 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2014, Blender Foundation
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2014 Blender Foundation. */
 
 /** \file
  * \ingroup edgpencil
@@ -72,6 +57,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_prototypes.h"
 
 #include "UI_resources.h"
 #include "UI_view2d.h"
@@ -402,6 +388,17 @@ const EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(bContext *C,
 
   /* Create new layer */
   /* TODO: have some way of specifying that we don't want this? */
+  {
+    /* "New Layer" entry */
+    item_tmp.identifier = "__CREATE__";
+    item_tmp.name = "New Layer";
+    item_tmp.value = -1;
+    item_tmp.icon = ICON_ADD;
+    RNA_enum_item_add(&item, &totitem, &item_tmp);
+
+    /* separator */
+    RNA_enum_item_add_separator(&item, &totitem);
+  }
 
   const int tot = BLI_listbase_count(&gpd->layers);
   /* Existing layers */
@@ -417,17 +414,6 @@ const EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(bContext *C,
       item_tmp.icon = ICON_NONE;
     }
 
-    RNA_enum_item_add(&item, &totitem, &item_tmp);
-  }
-  {
-    /* separator */
-    RNA_enum_item_add_separator(&item, &totitem);
-
-    /* "New Layer" entry */
-    item_tmp.identifier = "__CREATE__";
-    item_tmp.name = "New Layer";
-    item_tmp.value = -1;
-    item_tmp.icon = ICON_ADD;
     RNA_enum_item_add(&item, &totitem, &item_tmp);
   }
 
@@ -539,7 +525,7 @@ bool ED_gpencil_stroke_can_use_direct(const ScrArea *area, const bGPDstroke *gps
     return (area->spacetype == SPACE_IMAGE);
   }
   if (gps->flag & GP_STROKE_2DSPACE) {
-    /* 2D strokes (dataspace) - for any 2D view (i.e. everything other than 3D view) */
+    /* 2D strokes (data-space) - for any 2D view (i.e. everything other than 3D view). */
     return (area->spacetype != SPACE_VIEW3D);
   }
   /* view aligned - anything goes */
@@ -837,17 +823,16 @@ bool gpencil_point_xy_to_3d(const GP_SpaceConversion *gsc,
 
   ED_gpencil_drawing_reference_get(scene, gsc->ob, scene->toolsettings->gpencil_v3d_align, rvec);
 
-  float zfac = ED_view3d_calc_zfac(rv3d, rvec, NULL);
+  float zfac = ED_view3d_calc_zfac(rv3d, rvec);
 
-  float mval_f[2], mval_prj[2];
-  float dvec[3];
-
-  copy_v2_v2(mval_f, screen_co);
+  float mval_prj[2];
 
   if (ED_view3d_project_float_global(gsc->region, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
       V3D_PROJ_RET_OK) {
-    sub_v2_v2v2(mval_f, mval_prj, mval_f);
-    ED_view3d_win_to_delta(gsc->region, mval_f, dvec, zfac);
+    float dvec[3];
+    float xy_delta[2];
+    sub_v2_v2v2(xy_delta, mval_prj, screen_co);
+    ED_view3d_win_to_delta(gsc->region, xy_delta, zfac, dvec);
     sub_v3_v3v3(r_out, rvec, dvec);
 
     return true;
@@ -878,21 +863,21 @@ void gpencil_stroke_convertcoords_tpoint(Scene *scene,
      */
   }
   else {
-    float mval_f[2] = {UNPACK2(point2D->m_xy)};
     float mval_prj[2];
-    float rvec[3], dvec[3];
-    float zfac;
+    float rvec[3];
 
     /* Current method just converts each point in screen-coordinates to
      * 3D-coordinates using the 3D-cursor as reference.
      */
     ED_gpencil_drawing_reference_get(scene, ob, ts->gpencil_v3d_align, rvec);
-    zfac = ED_view3d_calc_zfac(region->regiondata, rvec, NULL);
+    const float zfac = ED_view3d_calc_zfac(region->regiondata, rvec);
 
     if (ED_view3d_project_float_global(region, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
         V3D_PROJ_RET_OK) {
-      sub_v2_v2v2(mval_f, mval_prj, mval_f);
-      ED_view3d_win_to_delta(region, mval_f, dvec, zfac);
+      float dvec[3];
+      float xy_delta[2];
+      sub_v2_v2v2(xy_delta, mval_prj, point2D->m_xy);
+      ED_view3d_win_to_delta(region, xy_delta, zfac, dvec);
       sub_v3_v3v3(r_out, rvec, dvec);
     }
     else {
@@ -1164,7 +1149,7 @@ void ED_gpencil_stroke_reproject(Depsgraph *depsgraph,
                                                depsgraph,
                                                v3d,
                                                &(const struct SnapObjectParams){
-                                                   .snap_select = SNAP_ALL,
+                                                   .snap_target_select = SCE_SNAP_TARGET_ALL,
                                                },
                                                &ray_start[0],
                                                &ray_normal[0],
@@ -1438,7 +1423,7 @@ void ED_gpencil_add_defaults(bContext *C, Object *ob)
   /* ensure a color exists and is assigned to object */
   BKE_gpencil_object_material_ensure_from_active_input_toolsettings(bmain, ob, ts);
 
-  /* ensure multiframe falloff curve */
+  /* Ensure multi-frame falloff curve. */
   if (ts->gp_sculpt.cur_falloff == NULL) {
     ts->gp_sculpt.cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
     CurveMapping *gp_falloff_curve = ts->gp_sculpt.cur_falloff;
@@ -1762,7 +1747,7 @@ static void gpencil_brush_cursor_draw(bContext *C, int x, int y, void *customdat
   float darkcolor[3];
   float radius = 3.0f;
 
-  int mval_i[2] = {x, y};
+  const int mval_i[2] = {x, y};
   /* Check if cursor is in drawing region and has valid data-block. */
   if ((!gpencil_check_cursor_region(C, mval_i)) || (gpd == NULL)) {
     return;
@@ -2020,19 +2005,19 @@ static void gpencil_stroke_convertcoords(ARegion *region,
                                          const float origin[3],
                                          float out[3])
 {
-  float mval_f[2] = {UNPACK2(point2D->m_xy)};
   float mval_prj[2];
-  float rvec[3], dvec[3];
-  float zfac;
+  float rvec[3];
 
   copy_v3_v3(rvec, origin);
 
-  zfac = ED_view3d_calc_zfac(region->regiondata, rvec, NULL);
+  const float zfac = ED_view3d_calc_zfac(region->regiondata, rvec);
 
   if (ED_view3d_project_float_global(region, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
       V3D_PROJ_RET_OK) {
-    sub_v2_v2v2(mval_f, mval_prj, mval_f);
-    ED_view3d_win_to_delta(region, mval_f, dvec, zfac);
+    float dvec[3];
+    float xy_delta[2];
+    sub_v2_v2v2(xy_delta, mval_prj, point2D->m_xy);
+    ED_view3d_win_to_delta(region, xy_delta, zfac, dvec);
     sub_v3_v3v3(out, rvec, dvec);
   }
   else {
@@ -2977,7 +2962,7 @@ void ED_gpencil_projected_2d_bound_box(const GP_SpaceConversion *gsc,
 
 bool ED_gpencil_stroke_check_collision(const GP_SpaceConversion *gsc,
                                        bGPDstroke *gps,
-                                       const float mouse[2],
+                                       const float mval[2],
                                        const int radius,
                                        const float diff_mat[4][4])
 {
@@ -2995,7 +2980,7 @@ bool ED_gpencil_stroke_check_collision(const GP_SpaceConversion *gsc,
   rcti rect_stroke = {boundbox_min[0], boundbox_max[0], boundbox_min[1], boundbox_max[1]};
 
   /* For mouse, add a small offset to avoid false negative in corners. */
-  rcti rect_mouse = {mouse[0] - offset, mouse[0] + offset, mouse[1] - offset, mouse[1] + offset};
+  rcti rect_mouse = {mval[0] - offset, mval[0] + offset, mval[1] - offset, mval[1] + offset};
 
   /* Check collision between both rectangles. */
   return BLI_rcti_isect(&rect_stroke, &rect_mouse, NULL);
@@ -3003,7 +2988,7 @@ bool ED_gpencil_stroke_check_collision(const GP_SpaceConversion *gsc,
 
 bool ED_gpencil_stroke_point_is_inside(const bGPDstroke *gps,
                                        const GP_SpaceConversion *gsc,
-                                       const int mouse[2],
+                                       const int mval[2],
                                        const float diff_mat[4][4])
 {
   bool hit = false;
@@ -3029,9 +3014,8 @@ bool ED_gpencil_stroke_point_is_inside(const bGPDstroke *gps,
   BLI_lasso_boundbox(&rect, mcoords, len);
 
   /* Test if point inside stroke. */
-  hit = ((!ELEM(V2D_IS_CLIPPED, mouse[0], mouse[1])) &&
-         BLI_rcti_isect_pt(&rect, mouse[0], mouse[1]) &&
-         BLI_lasso_is_point_inside(mcoords, len, mouse[0], mouse[1], INT_MAX));
+  hit = ((!ELEM(V2D_IS_CLIPPED, mval[0], mval[1])) && BLI_rcti_isect_pt(&rect, mval[0], mval[1]) &&
+         BLI_lasso_is_point_inside(mcoords, len, mval[0], mval[1], INT_MAX));
 
   /* Free memory. */
   MEM_SAFE_FREE(mcoords);
@@ -3089,6 +3073,11 @@ bGPDstroke *ED_gpencil_stroke_nearest_to_ends(bContext *C,
   LISTBASE_FOREACH (bGPDstroke *, gps_target, &gpf->strokes) {
     /* Check if the color is editable. */
     if ((gps_target == gps) || (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false)) {
+      continue;
+    }
+
+    /* Check that stroke is not closed. Closed strokes must not be included in the merge. */
+    if (gps_target->flag & GP_STROKE_CYCLIC) {
       continue;
     }
 

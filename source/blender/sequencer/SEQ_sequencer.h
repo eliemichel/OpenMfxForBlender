@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -86,27 +70,24 @@ void SEQ_seqbase_active_set(struct Editing *ed, struct ListBase *seqbase);
 struct Sequence *SEQ_sequence_alloc(ListBase *lb, int timeline_frame, int machine, int type);
 void SEQ_sequence_free(struct Scene *scene, struct Sequence *seq);
 /**
- * Create and initialize #MetaStack, append it to `ed->metastack` ListBase
- *
- * \param ed: sequence editor data
- * \param seq_meta: meta strip
- * \return pointer to created meta stack
- */
-struct MetaStack *SEQ_meta_stack_alloc(struct Editing *ed, struct Sequence *seq_meta);
-/**
  * Get #MetaStack that corresponds to current level that is being viewed
  *
- * \param ed: sequence editor data
  * \return pointer to meta stack
  */
 struct MetaStack *SEQ_meta_stack_active_get(const struct Editing *ed);
 /**
- * Free #MetaStack and remove it from `ed->metastack` ListBase.
+ * Open Meta strip content for editing.
  *
  * \param ed: sequence editor data
- * \param ms: meta stack
+ * \param seqm: meta sequence or NULL for top level view
  */
-void SEQ_meta_stack_free(struct Editing *ed, struct MetaStack *ms);
+void SEQ_meta_stack_set(const struct Scene *scene, struct Sequence *dst_seq);
+/**
+ * Close last Meta strip open for editing.
+ *
+ * \param ed: sequence editor data
+ */
+struct Sequence *SEQ_meta_stack_pop(struct Editing *ed);
 struct Sequence *SEQ_sequence_dupli_recursive(const struct Scene *scene_src,
                                               struct Scene *scene_dst,
                                               struct ListBase *new_seq_list,
@@ -159,7 +140,8 @@ typedef enum eSequenceLookupTag {
  *
  * \return pointer to Sequence
  */
-struct Sequence *SEQ_sequence_lookup_by_name(const struct Scene *scene, const char *key);
+struct Sequence *SEQ_sequence_lookup_seq_by_name(const struct Scene *scene, const char *key);
+
 /**
  * Free lookup hash data.
  *

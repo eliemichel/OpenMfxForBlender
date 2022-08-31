@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2007 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2007 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup wm
@@ -97,6 +81,8 @@ static void window_manager_foreach_id(ID *id, LibraryForeachIDData *data)
       if (BKE_lib_query_foreachid_iter_stop(data)) {
         return;
       }
+
+      BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, win->unpinned_scene, IDWALK_CB_NOP);
     }
 
     if (BKE_lib_query_foreachid_process_flags_get(data) & IDWALK_INCLUDE_UI) {
@@ -171,8 +157,8 @@ static void window_manager_blend_read_data(BlendDataReader *reader, ID *id)
     win->ghostwin = NULL;
     win->gpuctx = NULL;
     win->eventstate = NULL;
+    win->event_last_handled = NULL;
     win->cursor_keymap_status = NULL;
-    win->tweak = NULL;
 #if defined(WIN32) || defined(__APPLE__)
     win->ime_data = NULL;
 #endif
@@ -240,6 +226,7 @@ static void lib_link_workspace_instance_hook(BlendLibReader *reader,
 {
   WorkSpace *workspace = BKE_workspace_active_get(hook);
   BLO_read_id_address(reader, id->lib, &workspace);
+
   BKE_workspace_active_set(hook, workspace);
 }
 
@@ -255,6 +242,11 @@ static void window_manager_blend_read_lib(BlendLibReader *reader, ID *id)
     /* deprecated, but needed for versioning (will be NULL'ed then) */
     BLO_read_id_address(reader, NULL, &win->screen);
 
+    /* The unpinned scene is a UI->Scene-data pointer, and should be NULL'ed on linking (like
+     * WorkSpace.pin_scene). But the WindowManager ID (owning the window) is never linked. */
+    BLI_assert(!ID_IS_LINKED(id));
+    BLO_read_id_address(reader, id->lib, &win->unpinned_scene);
+
     LISTBASE_FOREACH (ScrArea *, area, &win->global_areas.areabase) {
       BKE_screen_area_blend_read_lib(reader, &wm->id, area);
     }
@@ -265,7 +257,7 @@ static void window_manager_blend_read_lib(BlendLibReader *reader, ID *id)
 
 IDTypeInfo IDType_ID_WM = {
     .id_code = ID_WM,
-    .id_filter = 0,
+    .id_filter = FILTER_ID_WM,
     .main_listbase_index = INDEX_ID_WM,
     .struct_size = sizeof(wmWindowManager),
     .name = "WindowManager",
@@ -498,17 +490,17 @@ void WM_check(bContext *C)
   }
 
   if (!G.background) {
-    /* Case: fileread. */
+    /* Case: file-read. */
     if ((wm->initialized & WM_WINDOW_IS_INIT) == 0) {
       WM_keyconfig_init(C);
-      WM_autosave_init(wm);
+      WM_file_autosave_init(wm);
     }
 
     /* Case: no open windows at all, for old file reads. */
     wm_window_ghostwindows_ensure(wm);
   }
 
-  /* Case: fileread. */
+  /* Case: file-read. */
   /* NOTE: this runs in background mode to set the screen context cb. */
   if ((wm->initialized & WM_WINDOW_IS_INIT) == 0) {
     ED_screens_init(bmain, wm);
@@ -618,7 +610,10 @@ void wm_close_and_free_all(bContext *C, ListBase *wmlist)
   while ((wm = wmlist->first)) {
     wm_close_and_free(C, wm);
     BLI_remlink(wmlist, wm);
-    BKE_libblock_free_data(&wm->id, true);
+    /* Don't handle user counts as this is only ever called once #G_MAIN has already been freed via
+     * #BKE_main_free so any ID's referenced by the window-manager (from ID properties) will crash.
+     * See: T100703. */
+    BKE_libblock_free_data(&wm->id, false);
     BKE_libblock_free_data_py(&wm->id);
     MEM_freeN(wm);
   }

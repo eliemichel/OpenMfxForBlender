@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2006-2007 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2006-2007 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -188,7 +172,7 @@ bool BKE_previewimg_id_supports_jobs(const struct ID *id);
 /**
  * Trigger deferred loading of a custom image file into the preview buffer.
  */
-void BKE_previewimg_id_custom_set(struct ID *id, const char *path);
+void BKE_previewimg_id_custom_set(struct ID *id, const char *filepath);
 
 /**
  * Free the preview image belonging to the id.
@@ -239,11 +223,12 @@ struct PreviewImage *BKE_previewimg_cached_get(const char *name);
 struct PreviewImage *BKE_previewimg_cached_ensure(const char *name);
 
 /**
- * Generate a #PreviewImage from given file path, using thumbnails management, if not yet existing.
- * Does not actually generate the preview, #BKE_previewimg_ensure() must be called for that.
+ * Generate a #PreviewImage from given `filepath`, using thumbnails management, if not yet
+ * existing. Does not actually generate the preview, #BKE_previewimg_ensure() must be called for
+ * that.
  */
 struct PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
-                                                          const char *path,
+                                                          const char *filepath,
                                                           int source,
                                                           bool force_update);
 

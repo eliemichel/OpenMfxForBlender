@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 #pragma once
 
@@ -147,6 +131,9 @@ bool SEQ_collection_remove_strip(struct Sequence *seq, SeqCollection *collection
  * \param collection: collection to be freed
  */
 void SEQ_collection_free(SeqCollection *collection);
+/** Quiet compiler warning for free function. */
+#define SEQ_collection_free_void_p ((GHashValFreeFP)SEQ_collection_free)
+
 /**
  * Move strips from collection_src to collection_dst. Source collection will be freed.
  *
@@ -170,9 +157,11 @@ void SEQ_collection_exclude(SeqCollection *collection, SeqCollection *exclude_el
  * \param collection: SeqCollection to be expanded
  * \param seq_query_func: query function callback
  */
-void SEQ_collection_expand(struct ListBase *seqbase,
+void SEQ_collection_expand(const struct Scene *scene,
+                           struct ListBase *seqbase,
                            SeqCollection *collection,
-                           void seq_query_func(struct Sequence *seq_reference,
+                           void seq_query_func(const struct Scene *scene,
+                                               struct Sequence *seq_reference,
                                                struct ListBase *seqbase,
                                                SeqCollection *collection));
 /**
@@ -184,8 +173,10 @@ void SEQ_collection_expand(struct ListBase *seqbase,
  * \return strip collection
  */
 SeqCollection *SEQ_query_by_reference(struct Sequence *seq_reference,
+                                      const struct Scene *scene,
                                       struct ListBase *seqbase,
-                                      void seq_query_func(struct Sequence *seq_reference,
+                                      void seq_query_func(const struct Scene *scene,
+                                                          struct Sequence *seq_reference,
                                                           struct ListBase *seqbase,
                                                           SeqCollection *collection));
 /**
@@ -224,7 +215,9 @@ SeqCollection *SEQ_query_all_strips_recursive(ListBase *seqbase);
  * \param displayed_channel: viewed channel. when set to 0, no channel filter is applied
  * \return strip collection
  */
-SeqCollection *SEQ_query_rendered_strips(ListBase *seqbase,
+SeqCollection *SEQ_query_rendered_strips(const struct Scene *scene,
+                                         ListBase *channels,
+                                         ListBase *seqbase,
                                          int timeline_frame,
                                          int displayed_channel);
 /**
@@ -236,7 +229,8 @@ SeqCollection *SEQ_query_rendered_strips(ListBase *seqbase,
  * \param seqbase: ListBase in which strips are queried
  * \param collection: collection to be filled
  */
-void SEQ_query_strip_effect_chain(struct Sequence *seq_reference,
+void SEQ_query_strip_effect_chain(const struct Scene *scene,
+                                  struct Sequence *seq_reference,
                                   struct ListBase *seqbase,
                                   SeqCollection *collection);
 void SEQ_filter_selected_strips(SeqCollection *collection);

@@ -1,27 +1,10 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 by the Blender Foundation.
- * All rights reserved.
- * Modifier stack implementation.
- *
- * BKE_modifier.h contains the function prototypes for this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
+ * Modifier stack implementation.
+ * BKE_modifier.h contains the function prototypes for this file.
  */
 
 /* Allow using deprecated functionality for .blend file I/O. */
@@ -148,7 +131,7 @@ void BKE_modifier_panel_expand(ModifierData *md)
 
 /***/
 
-ModifierData *BKE_modifier_new(int type)
+static ModifierData *modifier_allocate_and_init(int type)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(type);
   ModifierData *md = MEM_callocN(mti->structSize, mti->structName);
@@ -168,6 +151,13 @@ ModifierData *BKE_modifier_new(int type)
   if (mti->initData) {
     mti->initData(md);
   }
+
+  return md;
+}
+
+ModifierData *BKE_modifier_new(int type)
+{
+  ModifierData *md = modifier_allocate_and_init(type);
 
   BKE_modifier_session_uuid_generate(md);
 
@@ -243,11 +233,11 @@ bool BKE_modifier_unique_name(ListBase *modifiers, ModifierData *md)
   return false;
 }
 
-bool BKE_modifier_depends_ontime(Scene *scene, ModifierData *md, const int dag_eval_mode)
+bool BKE_modifier_depends_ontime(Scene *scene, ModifierData *md)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-  return mti->dependsOnTime && mti->dependsOnTime(scene, md, dag_eval_mode);
+  return mti->dependsOnTime && mti->dependsOnTime(scene, md);
 }
 
 bool BKE_modifier_supports_mapping(ModifierData *md)
@@ -332,6 +322,16 @@ void BKE_modifiers_foreach_tex_link(Object *ob, TexWalkFunc walk, void *userData
   }
 }
 
+ModifierData *BKE_modifier_copy_ex(const ModifierData *md, int flag)
+{
+  ModifierData *md_dst = modifier_allocate_and_init(md->type);
+
+  BLI_strncpy(md_dst->name, md->name, sizeof(md_dst->name));
+  BKE_modifier_copydata_ex(md, md_dst, flag);
+
+  return md_dst;
+}
+
 void BKE_modifier_copydata_generic(const ModifierData *md_src,
                                    ModifierData *md_dst,
                                    const int UNUSED(flag))
@@ -365,7 +365,7 @@ static void modifier_copy_data_id_us_cb(void *UNUSED(userData),
   }
 }
 
-void BKE_modifier_copydata_ex(ModifierData *md, ModifierData *target, const int flag)
+void BKE_modifier_copydata_ex(const ModifierData *md, ModifierData *target, const int flag)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
@@ -395,7 +395,7 @@ void BKE_modifier_copydata_ex(ModifierData *md, ModifierData *target, const int 
   }
 }
 
-void BKE_modifier_copydata(ModifierData *md, ModifierData *target)
+void BKE_modifier_copydata(const ModifierData *md, ModifierData *target)
 {
   BKE_modifier_copydata_ex(md, target, 0);
 }
@@ -454,6 +454,40 @@ void BKE_modifier_set_error(const Object *ob, ModifierData *md, const char *_for
 #endif
 
   CLOG_ERROR(&LOG, "Object: \"%s\", Modifier: \"%s\", %s", NULL == ob ? "?" : ob->id.name + 2, md->name, md->error);
+}
+
+void BKE_modifier_set_warning(const struct Object *ob,
+                              struct ModifierData *md,
+                              const char *_format,
+                              ...)
+{
+  char buffer[512];
+  va_list ap;
+  const char *format = TIP_(_format);
+
+  va_start(ap, _format);
+  vsnprintf(buffer, sizeof(buffer), format, ap);
+  va_end(ap);
+  buffer[sizeof(buffer) - 1] = '\0';
+
+  /* Store the warning in the same field as the error.
+   * It is not expected to have both error and warning and having a single place to store the
+   * message simplifies interface code. */
+
+  if (md->error) {
+    MEM_freeN(md->error);
+  }
+
+  md->error = BLI_strdup(buffer);
+
+#ifndef NDEBUG
+  if ((md->mode & eModifierMode_Virtual) == 0) {
+    /* Ensure correct object is passed in. */
+    BLI_assert(BKE_modifier_get_original(ob, md) != NULL);
+  }
+#endif
+
+  UNUSED_VARS_NDEBUG(ob);
 }
 
 int BKE_modifiers_get_cage_index(const Scene *scene,
@@ -668,7 +702,7 @@ ModifierData *BKE_modifiers_get_virtual_modifierlist(const Object *ob,
       virtualModifierData->amd.deformflag = ((bArmature *)(ob->parent->data))->deformflag;
       md = &virtualModifierData->amd.modifier;
     }
-    else if (ob->parent->type == OB_CURVE && ob->partype == PARSKEL) {
+    else if (ob->parent->type == OB_CURVES_LEGACY && ob->partype == PARSKEL) {
       virtualModifierData->cmd.object = ob->parent;
       virtualModifierData->cmd.defaxis = ob->trackflag + 1;
       virtualModifierData->cmd.modifier.next = md;
@@ -682,7 +716,7 @@ ModifierData *BKE_modifiers_get_virtual_modifierlist(const Object *ob,
   }
 
   /* shape key modifier, not yet for curves */
-  if (ELEM(ob->type, OB_MESH, OB_LATTICE) && BKE_key_from_object(ob)) {
+  if (ELEM(ob->type, OB_MESH, OB_LATTICE) && BKE_key_from_object((Object *)ob)) {
     if (ob->type == OB_MESH && (ob->shapeflag & OB_SHAPE_EDIT_MODE)) {
       virtualModifierData->smd.modifier.mode |= eModifierMode_Editmode | eModifierMode_OnCage;
     }
@@ -845,41 +879,6 @@ bool BKE_modifiers_uses_armature(Object *ob, bArmature *arm)
   return false;
 }
 
-bool BKE_modifiers_uses_subsurf_facedots(const struct Scene *scene, Object *ob)
-{
-  /* Search (backward) in the modifier stack to find if we have a subsurf modifier (enabled) before
-   * the last modifier displayed on cage (or if the subsurf is the last). */
-  VirtualModifierData virtualModifierData;
-  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
-  int cage_index = BKE_modifiers_get_cage_index(scene, ob, NULL, 1);
-  if (cage_index == -1) {
-    return false;
-  }
-  /* Find first modifier enabled on cage. */
-  for (int i = 0; md && i < cage_index; i++) {
-    md = md->next;
-  }
-  /* Now from this point, search for subsurf modifier. */
-  for (; md; md = md->prev) {
-    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
-    if (md->type == eModifierType_Subsurf) {
-      ModifierMode mode = eModifierMode_Realtime | eModifierMode_Editmode;
-      if (BKE_modifier_is_enabled(scene, md, mode)) {
-        return true;
-      }
-    }
-    else if (mti->type == eModifierTypeType_OnlyDeform) {
-      /* These modifiers do not reset the subdiv flag nor change the topology.
-       * We can still search for a subsurf modifier. */
-    }
-    else {
-      /* Other modifiers may reset the subdiv facedot flag or create. */
-      return false;
-    }
-  }
-  return false;
-}
-
 bool BKE_modifier_is_correctable_deformed(ModifierData *md)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
@@ -979,8 +978,10 @@ static void modwrap_dependsOnNormals(Mesh *me)
       break;
     }
     case ME_WRAPPER_TYPE_SUBD:
+      /* Not an expected case. */
+      break;
     case ME_WRAPPER_TYPE_MDATA:
-      BKE_mesh_calc_normals(me);
+      /* Normals are calculated lazily. */
       break;
   }
 }
@@ -1027,15 +1028,14 @@ void BKE_modifier_deform_vertsEM(ModifierData *md,
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
   if (me && mti->dependsOnNormals && mti->dependsOnNormals(md)) {
-    BKE_mesh_calc_normals(me);
+    modwrap_dependsOnNormals(me);
   }
   mti->deformVertsEM(md, ctx, em, me, vertexCos, numVerts);
 }
 
 /* end modifier callback wrappers */
 
-Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
-                                                            const bool get_cage_mesh)
+Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval)
 {
   Mesh *me = NULL;
 
@@ -1044,17 +1044,11 @@ Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
     BMEditMesh *em = BKE_editmesh_from_object(ob_eval);
     /* 'em' might not exist yet in some cases, just after loading a .blend file, see T57878. */
     if (em != NULL) {
-      Mesh *editmesh_eval_final = BKE_object_get_editmesh_eval_final(ob_eval);
-      Mesh *editmesh_eval_cage = BKE_object_get_editmesh_eval_cage(ob_eval);
-
-      me = (get_cage_mesh && editmesh_eval_cage != NULL) ? editmesh_eval_cage :
-                                                           editmesh_eval_final;
+      me = BKE_object_get_editmesh_eval_final(ob_eval);
     }
   }
   if (me == NULL) {
-    me = (get_cage_mesh && ob_eval->runtime.mesh_deform_eval != NULL) ?
-             ob_eval->runtime.mesh_deform_eval :
-             BKE_object_get_evaluated_mesh(ob_eval);
+    me = BKE_object_get_evaluated_mesh(ob_eval);
   }
 
   return me;
@@ -1100,7 +1094,7 @@ void BKE_modifier_check_uuids_unique_and_report(const Object *object)
   BLI_gset_free(used_uuids, NULL);
 }
 
-void BKE_modifier_blend_write(BlendWriter *writer, ListBase *modbase)
+void BKE_modifier_blend_write(BlendWriter *writer, const ID *id_owner, ListBase *modbase)
 {
   if (modbase == NULL) {
     return;
@@ -1109,7 +1103,13 @@ void BKE_modifier_blend_write(BlendWriter *writer, ListBase *modbase)
   LISTBASE_FOREACH (ModifierData *, md, modbase) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
     if (mti == NULL) {
-      return;
+      continue;
+    }
+
+    /* If the blendWrite callback is defined, it should handle the whole writing process. */
+    if (mti->blendWrite != NULL) {
+      mti->blendWrite(writer, id_owner, md);
+      continue;
     }
 
     BLO_write_struct_by_name(writer, mti->structName, md);
@@ -1188,16 +1188,12 @@ void BKE_modifier_blend_write(BlendWriter *writer, ListBase *modbase)
 
 #if 0
       CollisionModifierData *collmd = (CollisionModifierData *)md;
-      // TODO: CollisionModifier should use pointcache
-      // + have proper reset events before enabling this
+      /* TODO: CollisionModifier should use pointcache
+       * + have proper reset events before enabling this. */
       writestruct(wd, DATA, MVert, collmd->numverts, collmd->x);
       writestruct(wd, DATA, MVert, collmd->numverts, collmd->xnew);
       writestruct(wd, DATA, MFace, collmd->numfaces, collmd->mfaces);
 #endif
-    }
-
-    if (mti->blendWrite != NULL) {
-      mti->blendWrite(writer, md);
     }
   }
 }

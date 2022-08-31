@@ -1,20 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
-
-#include "BKE_spline.hh"
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "node_geometry_util.hh"
 
@@ -42,7 +26,7 @@ class HandlePositionFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask mask) const final
   {
     if (component.type() != GEO_COMPONENT_TYPE_CURVE) {
@@ -53,13 +37,15 @@ class HandlePositionFieldInput final : public GeometryFieldInput {
     fn::FieldEvaluator evaluator(field_context, &mask);
     evaluator.add(relative_);
     evaluator.evaluate();
-    const VArray<bool> &relative = evaluator.get_evaluated<bool>(0);
+    const VArray<bool> relative = evaluator.get_evaluated<bool>(0);
 
-    VArray<float3> positions = component.attribute_get_for_read<float3>(
+    const AttributeAccessor attributes = *component.attributes();
+
+    VArray<float3> positions = attributes.lookup_or_default<float3>(
         "position", ATTR_DOMAIN_POINT, {0, 0, 0});
 
     StringRef side = left_ ? "handle_left" : "handle_right";
-    VArray<float3> handles = component.attribute_get_for_read<float3>(
+    VArray<float3> handles = attributes.lookup_or_default<float3>(
         side, ATTR_DOMAIN_POINT, {0, 0, 0});
 
     if (relative.is_single()) {
@@ -68,10 +54,10 @@ class HandlePositionFieldInput final : public GeometryFieldInput {
         for (const int i : positions.index_range()) {
           output[i] = handles[i] - positions[i];
         }
-        return component.attribute_try_adapt_domain<float3>(
+        return attributes.adapt_domain<float3>(
             VArray<float3>::ForContainer(std::move(output)), ATTR_DOMAIN_POINT, domain);
       }
-      return component.attribute_try_adapt_domain<float3>(handles, ATTR_DOMAIN_POINT, domain);
+      return attributes.adapt_domain<float3>(handles, ATTR_DOMAIN_POINT, domain);
     }
 
     Array<float3> output(positions.size());
@@ -83,7 +69,7 @@ class HandlePositionFieldInput final : public GeometryFieldInput {
         output[i] = handles[i];
       }
     }
-    return component.attribute_try_adapt_domain<float3>(
+    return component.attributes()->adapt_domain<float3>(
         VArray<float3>::ForContainer(std::move(output)), ATTR_DOMAIN_POINT, domain);
   }
 

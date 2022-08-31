@@ -33,10 +33,6 @@
  * the 'runtime' field of the ModifierData.
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "../host/mfxParamType.h"
 
 #include "DNA_meshdata_types.h"
@@ -50,6 +46,10 @@ extern "C" {
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Callback types required by mfxHost
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain

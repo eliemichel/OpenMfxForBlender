@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -112,22 +98,22 @@ const EnumPropertyItem rna_enum_texture_type_items[] = {
 #ifndef RNA_RUNTIME
 static const EnumPropertyItem blend_type_items[] = {
     {MTEX_BLEND, "MIX", 0, "Mix", ""},
-    {0, "", ICON_NONE, NULL, NULL},
+    RNA_ENUM_ITEM_SEPR,
     {MTEX_DARK, "DARKEN", 0, "Darken", ""},
     {MTEX_MUL, "MULTIPLY", 0, "Multiply", ""},
-    {0, "", ICON_NONE, NULL, NULL},
+    RNA_ENUM_ITEM_SEPR,
     {MTEX_LIGHT, "LIGHTEN", 0, "Lighten", ""},
     {MTEX_SCREEN, "SCREEN", 0, "Screen", ""},
     {MTEX_ADD, "ADD", 0, "Add", ""},
-    {0, "", ICON_NONE, NULL, NULL},
+    RNA_ENUM_ITEM_SEPR,
     {MTEX_OVERLAY, "OVERLAY", 0, "Overlay", ""},
     {MTEX_SOFT_LIGHT, "SOFT_LIGHT", 0, "Soft Light", ""},
     {MTEX_LIN_LIGHT, "LINEAR_LIGHT", 0, "Linear Light", ""},
-    {0, "", ICON_NONE, NULL, NULL},
+    RNA_ENUM_ITEM_SEPR,
     {MTEX_DIFF, "DIFFERENCE", 0, "Difference", ""},
     {MTEX_SUB, "SUBTRACT", 0, "Subtract", ""},
     {MTEX_DIV, "DIVIDE", 0, "Divide", ""},
-    {0, "", ICON_NONE, NULL, NULL},
+    RNA_ENUM_ITEM_SEPR,
     {MTEX_BLEND_HUE, "HUE", 0, "Hue", ""},
     {MTEX_BLEND_SAT, "SATURATION", 0, "Saturation", ""},
     {MTEX_BLEND_COLOR, "COLOR", 0, "Color", ""},
@@ -305,7 +291,7 @@ void rna_TextureSlot_update(bContext *C, PointerRNA *ptr)
   }
 }
 
-char *rna_TextureSlot_path(PointerRNA *ptr)
+char *rna_TextureSlot_path(const PointerRNA *ptr)
 {
   MTex *mtex = ptr->data;
 
@@ -1570,7 +1556,7 @@ static void rna_def_texture(BlenderRNA *brna)
   RNA_def_struct_refine_func(srna, "rna_Texture_refine");
 
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
-  /*RNA_def_property_clear_flag(prop, PROP_EDITABLE); */
+  // RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_enum_sdna(prop, NULL, "type");
   RNA_def_property_enum_items(prop, rna_enum_texture_type_items);
   RNA_def_property_enum_funcs(prop, NULL, "rna_Texture_type_set", NULL);

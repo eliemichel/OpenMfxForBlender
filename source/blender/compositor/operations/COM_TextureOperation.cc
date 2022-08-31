@@ -1,26 +1,12 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Copyright 2011, Blender Foundation.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2011 Blender Foundation. */
 
 #include "COM_TextureOperation.h"
 #include "COM_WorkScheduler.h"
 
 #include "BKE_image.h"
 #include "BKE_node.h"
+#include "BKE_scene.h"
 
 #include "NOD_texture.h"
 
@@ -74,8 +60,8 @@ void TextureBaseOperation::determine_canvas(const rcti &preferred_area, rcti &r_
 {
   r_area = preferred_area;
   if (BLI_rcti_is_empty(&preferred_area)) {
-    int width = rd_->xsch * rd_->size / 100;
-    int height = rd_->ysch * rd_->size / 100;
+    int width, height;
+    BKE_render_resolution(rd_, false, &width, &height);
     r_area.xmax = preferred_area.xmin + width;
     r_area.ymax = preferred_area.ymin + height;
   }

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2018 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2018 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -311,16 +295,16 @@ static void init_functions(OpenSubdiv_Converter *converter)
 
 static void initialize_manifold_index_array(const BLI_bitmap *used_map,
                                             const int num_elements,
-                                            int **indices_r,
-                                            int **indices_reverse_r,
-                                            int *num_manifold_elements_r)
+                                            int **r_indices,
+                                            int **r_indices_reverse,
+                                            int *r_num_manifold_elements)
 {
   int *indices = NULL;
-  if (indices_r != NULL) {
+  if (r_indices != NULL) {
     indices = MEM_malloc_arrayN(num_elements, sizeof(int), "manifold indices");
   }
   int *indices_reverse = NULL;
-  if (indices_reverse_r != NULL) {
+  if (r_indices_reverse != NULL) {
     indices_reverse = MEM_malloc_arrayN(num_elements, sizeof(int), "manifold indices reverse");
   }
   int offset = 0;
@@ -340,13 +324,13 @@ static void initialize_manifold_index_array(const BLI_bitmap *used_map,
       offset++;
     }
   }
-  if (indices_r != NULL) {
-    *indices_r = indices;
+  if (r_indices != NULL) {
+    *r_indices = indices;
   }
-  if (indices_reverse_r != NULL) {
-    *indices_reverse_r = indices_reverse;
+  if (r_indices_reverse != NULL) {
+    *r_indices_reverse = indices_reverse;
   }
-  *num_manifold_elements_r = num_elements - offset;
+  *r_num_manifold_elements = num_elements - offset;
 }
 
 static void initialize_manifold_indices(ConverterStorage *storage)

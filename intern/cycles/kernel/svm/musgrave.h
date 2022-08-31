@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -132,13 +119,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_1d(
 {
   float p = co;
   float pwHL = powf(lacunarity, -H);
-  float pwr = pwHL;
 
-  float value = snoise_1d(p) + offset;
-  float weight = gain * value;
-  p *= lacunarity;
+  float pwr = 1.0f;
+  float value = 0.0f;
+  float weight = 1.0f;
 
-  for (int i = 1; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
+  for (int i = 0; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
     if (weight > 1.0f) {
       weight = 1.0f;
     }
@@ -151,8 +137,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_1d(
   }
 
   float rmd = octaves - floorf(octaves);
-  if (rmd != 0.0f) {
-    value += rmd * ((snoise_1d(p) + offset) * pwr);
+  if ((rmd != 0.0f) && (weight > 0.001f)) {
+    if (weight > 1.0f) {
+      weight = 1.0f;
+    }
+    float signal = (snoise_1d(p) + offset) * pwr;
+    value += rmd * weight * signal;
   }
 
   return value;
@@ -303,13 +293,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_2d(
 {
   float2 p = co;
   float pwHL = powf(lacunarity, -H);
-  float pwr = pwHL;
 
-  float value = snoise_2d(p) + offset;
-  float weight = gain * value;
-  p *= lacunarity;
+  float pwr = 1.0f;
+  float value = 0.0f;
+  float weight = 1.0f;
 
-  for (int i = 1; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
+  for (int i = 0; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
     if (weight > 1.0f) {
       weight = 1.0f;
     }
@@ -322,8 +311,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_2d(
   }
 
   float rmd = octaves - floorf(octaves);
-  if (rmd != 0.0f) {
-    value += rmd * ((snoise_2d(p) + offset) * pwr);
+  if ((rmd != 0.0f) && (weight > 0.001f)) {
+    if (weight > 1.0f) {
+      weight = 1.0f;
+    }
+    float signal = (snoise_2d(p) + offset) * pwr;
+    value += rmd * weight * signal;
   }
 
   return value;
@@ -474,13 +467,13 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_3d(
 {
   float3 p = co;
   float pwHL = powf(lacunarity, -H);
-  float pwr = pwHL;
 
-  float value = snoise_3d(p) + offset;
-  float weight = gain * value;
-  p *= lacunarity;
+  float pwr = 1.0f;
+  float value = 0.0f;
+  float weight = 1.0f;
 
-  for (int i = 1; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
+
+  for (int i = 0; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
     if (weight > 1.0f) {
       weight = 1.0f;
     }
@@ -493,8 +486,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_3d(
   }
 
   float rmd = octaves - floorf(octaves);
-  if (rmd != 0.0f) {
-    value += rmd * ((snoise_3d(p) + offset) * pwr);
+  if ((rmd != 0.0f) && (weight > 0.001f)){
+    if (weight > 1.0f) {
+      weight = 1.0f;
+    }
+    float signal = (snoise_3d(p) + offset) * pwr;
+    value += rmd * weight * signal;
   }
 
   return value;
@@ -645,13 +642,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_4d(
 {
   float4 p = co;
   float pwHL = powf(lacunarity, -H);
-  float pwr = pwHL;
 
-  float value = snoise_4d(p) + offset;
-  float weight = gain * value;
-  p *= lacunarity;
+  float pwr = 1.0f;
+  float value = 0.0f;
+  float weight = 1.0f;
 
-  for (int i = 1; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
+  for (int i = 0; (weight > 0.001f) && (i < float_to_int(octaves)); i++) {
     if (weight > 1.0f) {
       weight = 1.0f;
     }
@@ -664,8 +660,12 @@ ccl_device_noinline_cpu float noise_musgrave_hybrid_multi_fractal_4d(
   }
 
   float rmd = octaves - floorf(octaves);
-  if (rmd != 0.0f) {
-    value += rmd * ((snoise_4d(p) + offset) * pwr);
+  if ((rmd != 0.0f) && (weight > 0.001f)) {
+    if (weight > 1.0f) {
+      weight = 1.0f;
+    }
+    float signal = (snoise_4d(p) + offset) * pwr;
+    value += rmd * weight * signal;
   }
 
   return value;

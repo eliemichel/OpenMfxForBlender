@@ -1,25 +1,9 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- * .blend file reading entry point
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup blenloader
+ * `.blend` file reading entry point.
  */
 
 #include <stddef.h>
@@ -404,7 +388,7 @@ BlendFileData *BLO_read_from_memory(const void *mem,
 }
 
 BlendFileData *BLO_read_from_memfile(Main *oldmain,
-                                     const char *filename,
+                                     const char *filepath,
                                      MemFile *memfile,
                                      const struct BlendFileReadParams *params,
                                      ReportList *reports)
@@ -417,10 +401,7 @@ BlendFileData *BLO_read_from_memfile(Main *oldmain,
   fd = blo_filedata_from_memfile(memfile, params, &bf_reports);
   if (fd) {
     fd->skip_flags = params->skip_flags;
-    BLI_strncpy(fd->relabase, filename, sizeof(fd->relabase));
-
-    /* clear ob->proxy_from pointers in old main */
-    blo_clear_proxy_pointers_from_lib(oldmain);
+    BLI_strncpy(fd->relabase, filepath, sizeof(fd->relabase));
 
     /* separate libraries from old main */
     blo_split_main(&old_mainlist, oldmain);
@@ -439,7 +420,7 @@ BlendFileData *BLO_read_from_memfile(Main *oldmain,
      * read IDs whenever possible. */
     blo_cache_storage_init(fd, oldmain);
 
-    bfd = blo_read_file_internal(fd, filename);
+    bfd = blo_read_file_internal(fd, filepath);
 
     /* Ensure relinked caches are not freed together with their old IDs. */
     blo_cache_storage_old_bmain_clear(fd, oldmain);

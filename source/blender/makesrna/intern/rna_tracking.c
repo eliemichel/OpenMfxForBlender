@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -55,7 +41,7 @@
 
 #  include "WM_api.h"
 
-static char *rna_tracking_path(PointerRNA *UNUSED(ptr))
+static char *rna_tracking_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("tracking");
 }
@@ -86,7 +72,7 @@ static void rna_tracking_defaultSettings_searchUpdate(Main *UNUSED(bmain),
   }
 }
 
-static char *rna_trackingTrack_path(PointerRNA *ptr)
+static char *rna_trackingTrack_path(const PointerRNA *ptr)
 {
   MovieClip *clip = (MovieClip *)ptr->owner_id;
   MovieTrackingTrack *track = (MovieTrackingTrack *)ptr->data;
@@ -269,7 +255,7 @@ static void rna_trackingPlaneMarker_frame_set(PointerRNA *ptr, int value)
   }
 }
 
-static char *rna_trackingPlaneTrack_path(PointerRNA *ptr)
+static char *rna_trackingPlaneTrack_path(const PointerRNA *ptr)
 {
   MovieClip *clip = (MovieClip *)ptr->owner_id;
   MovieTrackingPlaneTrack *plane_track = (MovieTrackingPlaneTrack *)ptr->data;
@@ -303,7 +289,7 @@ static void rna_trackingPlaneTrack_name_set(PointerRNA *ptr, const char *value)
   }
 }
 
-static char *rna_trackingCamera_path(PointerRNA *UNUSED(ptr))
+static char *rna_trackingCamera_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("tracking.camera");
 }
@@ -335,7 +321,7 @@ static void rna_trackingCamera_focal_mm_set(PointerRNA *ptr, float value)
   }
 }
 
-static char *rna_trackingStabilization_path(PointerRNA *UNUSED(ptr))
+static char *rna_trackingStabilization_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("tracking.stabilization");
 }
@@ -571,7 +557,7 @@ static void rna_tracking_markerPattern_update(Main *UNUSED(bmain),
 {
   MovieTrackingMarker *marker = (MovieTrackingMarker *)ptr->data;
 
-  BKE_tracking_marker_clamp(marker, CLAMP_PAT_DIM);
+  BKE_tracking_marker_clamp_search_size(marker);
 }
 
 static void rna_tracking_markerSearch_update(Main *UNUSED(bmain),
@@ -580,7 +566,7 @@ static void rna_tracking_markerSearch_update(Main *UNUSED(bmain),
 {
   MovieTrackingMarker *marker = (MovieTrackingMarker *)ptr->data;
 
-  BKE_tracking_marker_clamp(marker, CLAMP_SEARCH_DIM);
+  BKE_tracking_marker_clamp_search_size(marker);
 }
 
 static void rna_tracking_markerPattern_boundbox_get(PointerRNA *ptr, float *values)

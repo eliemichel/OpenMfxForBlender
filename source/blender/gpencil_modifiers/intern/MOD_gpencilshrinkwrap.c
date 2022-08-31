@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2017, Blender Foundation
- * This is a new part of Blender
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2017 Blender Foundation. */
 
 /** \file
  * \ingroup modifiers
@@ -25,7 +9,7 @@
 #include <string.h> /* For #MEMCPY_STRUCT_AFTER. */
 
 #include "BLI_listbase.h"
-#include "BLI_math.h"
+#include "BLI_math_vector.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -34,7 +18,6 @@
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -123,15 +106,13 @@ static void deformStroke(GpencilModifierData *md,
   pt = gps->points;
   for (i = 0; i < gps->totpoints; i++, pt++) {
     copy_v3_v3(&pt->x, vert_coords[i]);
-    /* Smooth stroke. */
-    if (mmd->smooth_factor > 0.0f) {
-      for (int r = 0; r < mmd->smooth_step; r++) {
-        BKE_gpencil_stroke_smooth_point(gps, i, mmd->smooth_factor, true);
-      }
-    }
   }
 
   MEM_freeN(vert_coords);
+
+  /* Smooth stroke. */
+  BKE_gpencil_stroke_smooth(
+      gps, mmd->smooth_factor, mmd->smooth_step, true, false, false, false, true, NULL);
 
   /* Calc geometry data. */
   BKE_gpencil_stroke_geometry_update(gpd, gps);
@@ -154,7 +135,7 @@ static void bakeModifier(Main *UNUSED(bmain),
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
       /* Apply shrinkwrap effects on this frame. */
-      CFRA = gpf->framenum;
+      scene->r.cfra = gpf->framenum;
       BKE_scene_graph_update_for_newframe(depsgraph);
 
       /* Recalculate shrinkwrap data. */
@@ -163,7 +144,7 @@ static void bakeModifier(Main *UNUSED(bmain),
         MEM_SAFE_FREE(mmd->cache_data);
       }
       Object *ob_target = DEG_get_evaluated_object(depsgraph, mmd->target);
-      Mesh *target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
+      Mesh *target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target);
       mmd->cache_data = MEM_callocN(sizeof(ShrinkwrapTreeData), __func__);
       if (BKE_shrinkwrap_init_tree(
               mmd->cache_data, target, mmd->shrink_type, mmd->shrink_mode, false)) {
@@ -182,7 +163,7 @@ static void bakeModifier(Main *UNUSED(bmain),
   }
 
   /* Return frame state and DB to original state. */
-  CFRA = oldframe;
+  scene->r.cfra = oldframe;
   BKE_scene_graph_update_for_newframe(depsgraph);
 }
 
@@ -326,7 +307,7 @@ static void panelRegister(ARegionType *region_type)
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Shrinkwrap = {
-    /* name */ "Shrinkwrap",
+    /* name */ N_("Shrinkwrap"),
     /* structName */ "ShrinkwrapGpencilModifierData",
     /* structSize */ sizeof(ShrinkwrapGpencilModifierData),
     /* type */ eGpencilModifierTypeType_Gpencil,

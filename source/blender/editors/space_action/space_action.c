@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spaction
@@ -106,7 +90,6 @@ static SpaceLink *action_create(const ScrArea *area, const Scene *scene)
   BLI_addtail(&saction->regionbase, region);
   region->regiontype = RGN_TYPE_UI;
   region->alignment = RGN_ALIGN_RIGHT;
-  region->flag = RGN_FLAG_HIDDEN;
 
   /* main region */
   region = MEM_callocN(sizeof(ARegion), "main region for action");
@@ -114,9 +97,9 @@ static SpaceLink *action_create(const ScrArea *area, const Scene *scene)
   BLI_addtail(&saction->regionbase, region);
   region->regiontype = RGN_TYPE_WINDOW;
 
-  region->v2d.tot.xmin = (float)(SFRA - 10);
+  region->v2d.tot.xmin = (float)(scene->r.sfra - 10);
   region->v2d.tot.ymin = (float)(-area->winy) / 3.0f;
-  region->v2d.tot.xmax = (float)(EFRA + 10);
+  region->v2d.tot.xmax = (float)(scene->r.efra + 10);
   region->v2d.tot.ymax = 0.0f;
 
   region->v2d.cur = region->v2d.tot;
@@ -186,12 +169,8 @@ static void action_main_region_draw(const bContext *C, ARegion *region)
   bAnimContext ac;
   View2D *v2d = &region->v2d;
   short marker_flag = 0;
-  short cfra_flag = 0;
 
   UI_view2d_view_ortho(v2d);
-  if (saction->flag & SACTION_DRAWTIME) {
-    cfra_flag |= DRAWCFRA_UNIT_SECONDS;
-  }
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
@@ -244,6 +223,9 @@ static void action_main_region_draw(const bContext *C, ARegion *region)
 
   /* reset view matrix */
   UI_view2d_view_restore(C);
+
+  /* gizmos */
+  WM_gizmomap_draw(region->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
 
   /* scrubbing region */
   ED_time_scrub_draw(region, scene, saction->flag & SACTION_DRAWTIME, true);
@@ -494,12 +476,6 @@ static void saction_main_region_message_subscribe(const wmRegionMessageSubscribe
   /* Timeline depends on scene properties. */
   {
     bool use_preview = (scene->r.flag & SCER_PRV_RANGE);
-    extern PropertyRNA rna_Scene_frame_start;
-    extern PropertyRNA rna_Scene_frame_end;
-    extern PropertyRNA rna_Scene_frame_preview_start;
-    extern PropertyRNA rna_Scene_frame_preview_end;
-    extern PropertyRNA rna_Scene_use_preview_range;
-    extern PropertyRNA rna_Scene_frame_current;
     const PropertyRNA *props[] = {
         use_preview ? &rna_Scene_frame_preview_start : &rna_Scene_frame_start,
         use_preview ? &rna_Scene_frame_preview_end : &rna_Scene_frame_end,
@@ -529,8 +505,8 @@ static void action_listener(const wmSpaceTypeListenerParams *params)
   /* context changes */
   switch (wmn->category) {
     case NC_GPENCIL:
-      /* only handle these events in GPencil mode for performance considerations */
-      if (saction->mode == SACTCONT_GPENCIL) {
+      /* only handle these events for containers in which GPencil frames are displayed */
+      if (ELEM(saction->mode, SACTCONT_GPENCIL, SACTCONT_DOPESHEET, SACTCONT_TIMELINE)) {
         if (wmn->action == NA_EDITED) {
           ED_area_tag_redraw(area);
         }
@@ -584,8 +560,8 @@ static void action_listener(const wmSpaceTypeListenerParams *params)
           LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
             if (region->regiontype == RGN_TYPE_WINDOW) {
               Scene *scene = wmn->reference;
-              region->v2d.tot.xmin = (float)(SFRA - 4);
-              region->v2d.tot.xmax = (float)(EFRA + 4);
+              region->v2d.tot.xmin = (float)(scene->r.sfra - 4);
+              region->v2d.tot.xmax = (float)(scene->r.efra + 4);
               break;
             }
           }
@@ -887,7 +863,7 @@ void ED_spacetype_action(void)
   art->draw_overlay = action_main_region_draw_overlay;
   art->listener = action_main_region_listener;
   art->message_subscribe = saction_main_region_message_subscribe;
-  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
+  art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_VIEW2D | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
 
   BLI_addhead(&st->regiontypes, art);
 

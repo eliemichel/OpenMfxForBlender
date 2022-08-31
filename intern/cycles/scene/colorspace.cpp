@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #include "scene/colorspace.h"
 
@@ -68,8 +55,8 @@ ColorSpaceProcessor *ColorSpaceManager::get_processor(ustring colorspace)
     }
     catch (OCIO::Exception &exception) {
       cached_processors[colorspace] = OCIO::ConstProcessorRcPtr();
-      VLOG(1) << "Colorspace " << colorspace.c_str()
-              << " can't be converted to scene_linear: " << exception.what();
+      VLOG_WARNING << "Colorspace " << colorspace.c_str()
+                   << " can't be converted to scene_linear: " << exception.what();
     }
   }
 
@@ -145,12 +132,12 @@ ustring ColorSpaceManager::detect_known_colorspace(ustring colorspace,
 
     thread_scoped_lock cache_lock(cache_colorspaces_mutex);
     if (is_scene_linear) {
-      VLOG(1) << "Colorspace " << colorspace.string() << " is no-op";
+      VLOG_INFO << "Colorspace " << colorspace.string() << " is no-op";
       cached_colorspaces[colorspace] = u_colorspace_raw;
       return u_colorspace_raw;
     }
     else if (is_srgb) {
-      VLOG(1) << "Colorspace " << colorspace.string() << " is sRGB";
+      VLOG_INFO << "Colorspace " << colorspace.string() << " is sRGB";
       cached_colorspaces[colorspace] = u_colorspace_srgb;
       return u_colorspace_srgb;
     }
@@ -159,22 +146,23 @@ ustring ColorSpaceManager::detect_known_colorspace(ustring colorspace,
     if (!get_processor(colorspace)) {
       OCIO::ConstConfigRcPtr config = OCIO::GetCurrentConfig();
       if (!config || !config->getColorSpace(colorspace.c_str())) {
-        VLOG(1) << "Colorspace " << colorspace.c_str() << " not found, using raw instead";
+        VLOG_WARNING << "Colorspace " << colorspace.c_str() << " not found, using raw instead";
       }
       else {
-        VLOG(1) << "Colorspace " << colorspace.c_str()
-                << " can't be converted to scene_linear, using raw instead";
+        VLOG_WARNING << "Colorspace " << colorspace.c_str()
+                     << " can't be converted to scene_linear, using raw instead";
       }
       cached_colorspaces[colorspace] = u_colorspace_raw;
       return u_colorspace_raw;
     }
 
     /* Convert to/from colorspace with OpenColorIO. */
-    VLOG(1) << "Colorspace " << colorspace.string() << " handled through OpenColorIO";
+    VLOG_INFO << "Colorspace " << colorspace.string() << " handled through OpenColorIO";
     cached_colorspaces[colorspace] = colorspace;
     return colorspace;
 #else
-    VLOG(1) << "Colorspace " << colorspace.c_str() << " not available, built without OpenColorIO";
+    VLOG_WARNING << "Colorspace " << colorspace.c_str()
+                 << " not available, built without OpenColorIO";
     return u_colorspace_raw;
 #endif
   }
@@ -391,6 +379,7 @@ void ColorSpaceManager::to_scene_linear(
   (void)colorspace;
   (void)pixels;
   (void)num_pixels;
+  (void)is_rgba;
   (void)compress_as_srgb;
 #endif
 }

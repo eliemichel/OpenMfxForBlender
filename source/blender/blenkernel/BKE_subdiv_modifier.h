@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -23,11 +7,17 @@
 
 #pragma once
 
+#include "BKE_subdiv.h"
+
 #include "BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Hardcoded for until GPU shaders are automatically generated, then we will have a more
+ * programmatic way of detecting this. */
+#define MAX_GPU_SUBDIV_SSBOS 12
 
 struct Mesh;
 struct Object;
@@ -36,9 +26,30 @@ struct Subdiv;
 struct SubdivSettings;
 struct SubsurfModifierData;
 
-void BKE_subsurf_modifier_subdiv_settings_init(struct SubdivSettings *settings,
-                                               const struct SubsurfModifierData *smd,
-                                               bool use_render_params);
+/* Runtime subsurf modifier data, cached in modifier on evaluated meshes. */
+typedef struct SubsurfRuntimeData {
+  /* Subdivision settings, exists before descriptor or mesh wrapper is created. */
+  SubdivSettings settings;
+
+  /* Cached subdivision surface descriptor, with topology and settings. */
+  struct Subdiv *subdiv;
+  bool set_by_draw_code;
+
+  /* Cached mesh wrapper data, to be used for GPU subdiv or lazy evaluation on CPU. */
+  bool has_gpu_subdiv;
+  int resolution;
+  bool use_optimal_display;
+  bool calc_loop_normals;
+  bool use_loop_normals;
+
+  /* Cached from the draw code for stats display. */
+  int stats_totvert;
+  int stats_totedge;
+  int stats_totpoly;
+  int stats_totloop;
+} SubsurfRuntimeData;
+
+bool BKE_subsurf_modifier_runtime_init(struct SubsurfModifierData *smd, bool use_render_params);
 
 bool BKE_subsurf_modifier_use_custom_loop_normals(const struct SubsurfModifierData *smd,
                                                   const struct Mesh *mesh);
@@ -54,17 +65,13 @@ bool BKE_subsurf_modifier_force_disable_gpu_evaluation_for_mesh(
  * \param skip_check_is_last: When true, we assume that the modifier passed is the last enabled
  * modifier in the stack.
  */
-bool BKE_subsurf_modifier_can_do_gpu_subdiv_ex(const struct Scene *scene,
-                                               const struct Object *ob,
-                                               const struct Mesh *mesh,
-                                               const struct SubsurfModifierData *smd,
-                                               int required_mode,
-                                               bool skip_check_is_last);
-
 bool BKE_subsurf_modifier_can_do_gpu_subdiv(const struct Scene *scene,
                                             const struct Object *ob,
                                             const struct Mesh *mesh,
+                                            const struct SubsurfModifierData *smd,
                                             int required_mode);
+
+bool BKE_subsurf_modifier_has_gpu_subdiv(const struct Mesh *mesh);
 
 extern void (*BKE_subsurf_modifier_free_gpu_cache_cb)(struct Subdiv *subdiv);
 
@@ -73,12 +80,7 @@ extern void (*BKE_subsurf_modifier_free_gpu_cache_cb)(struct Subdiv *subdiv);
  * which matches settings and topology.
  */
 struct Subdiv *BKE_subsurf_modifier_subdiv_descriptor_ensure(
-    const struct SubsurfModifierData *smd,
-    const struct SubdivSettings *subdiv_settings,
-    const struct Mesh *mesh,
-    bool for_draw_code);
-
-struct SubsurfRuntimeData *BKE_subsurf_modifier_ensure_runtime(struct SubsurfModifierData *smd);
+    struct SubsurfRuntimeData *runtime_data, const struct Mesh *mesh, bool for_draw_code);
 
 /**
  * Return the #ModifierMode required for the evaluation of the subsurf modifier,

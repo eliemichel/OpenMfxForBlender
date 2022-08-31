@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup DNA
@@ -70,6 +54,7 @@ typedef struct CameraBGImage {
 typedef struct CameraDOFSettings {
   /** Focal distance for depth of field. */
   struct Object *focus_object;
+  char focus_subtarget[64];
   float focus_distance;
   float aperture_fstop;
   float aperture_rotation;
@@ -210,6 +195,9 @@ enum {
   /* Axis flip options */
   CAM_BGIMG_FLAG_FLIP_X = (1 << 7),
   CAM_BGIMG_FLAG_FLIP_Y = (1 << 8),
+
+  /* That background image has been inserted in local override (i.e. it can be fully edited!). */
+  CAM_BGIMG_FLAG_OVERRIDE_LIBRARY_LOCAL = (1 << 9),
 };
 
 /* CameraBGImage->source */

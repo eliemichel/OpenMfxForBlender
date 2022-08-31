@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2016 by Mike Erwin.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2016 by Mike Erwin. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -55,9 +39,9 @@ class ShaderInterface {
   /* TODO(fclem): should be protected. */
  public:
   /** Flat array. In this order: Attributes, Ubos, Uniforms. */
-  ShaderInput *inputs_ = NULL;
+  ShaderInput *inputs_ = nullptr;
   /** Buffer containing all inputs names separated by '\0'. */
-  char *name_buffer_ = NULL;
+  char *name_buffer_ = nullptr;
   /** Input counts inside input array. */
   uint attr_len_ = 0;
   uint ubo_len_ = 0;
@@ -68,6 +52,7 @@ class ShaderInterface {
   uint16_t enabled_ubo_mask_ = 0;
   uint8_t enabled_ima_mask_ = 0;
   uint64_t enabled_tex_mask_ = 0;
+  uint16_t enabled_ssbo_mask_ = 0;
   /** Location of builtin uniforms. Fast access, no lookup needed. */
   int32_t builtins_[GPU_NUM_UNIFORMS];
   int32_t builtin_blocks_[GPU_NUM_UNIFORM_BLOCKS];
@@ -202,7 +187,7 @@ inline const char *ShaderInterface::builtin_uniform_name(GPUUniformBuiltin u)
       return "srgbTarget";
 
     default:
-      return NULL;
+      return nullptr;
   }
 }
 
@@ -223,7 +208,7 @@ inline const char *ShaderInterface::builtin_uniform_block_name(GPUUniformBlockBu
     case GPU_UNIFORM_BLOCK_DRW_INFOS:
       return "drw_infos";
     default:
-      return NULL;
+      return nullptr;
   }
 }
 
@@ -273,7 +258,7 @@ inline const ShaderInput *ShaderInterface::input_lookup(const ShaderInput *const
             return inputs + i; /* not found */
           }
         }
-        return NULL; /* not found */
+        return nullptr; /* not found */
       }
 
       /* This is a bit dangerous since we could have a hash collision.
@@ -283,7 +268,7 @@ inline const ShaderInput *ShaderInterface::input_lookup(const ShaderInput *const
       return inputs + i;
     }
   }
-  return NULL; /* not found */
+  return nullptr; /* not found */
 }
 
 inline const ShaderInput *ShaderInterface::input_lookup(const ShaderInput *const inputs,
@@ -296,7 +281,7 @@ inline const ShaderInput *ShaderInterface::input_lookup(const ShaderInput *const
       return inputs + i;
     }
   }
-  return NULL; /* not found */
+  return nullptr; /* not found */
 }
 
 }  // namespace blender::gpu

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edmesh
@@ -24,6 +8,10 @@
 /* Internal for editmesh_xxxx.c functions */
 
 #pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMEditMesh;
 struct BMElem;
@@ -186,8 +174,7 @@ void MESH_OT_knife_project(struct wmOperatorType *ot);
 /**
  * \param use_tag: When set, tag all faces inside the polylines.
  */
-void EDBM_mesh_knife(struct bContext *C,
-                     struct ViewContext *vc,
+void EDBM_mesh_knife(struct ViewContext *vc,
                      struct LinkNode *polys,
                      bool use_tag,
                      bool cut_through);
@@ -317,7 +304,7 @@ void MESH_OT_mark_freestyle_edge(struct wmOperatorType *ot);
 void MESH_OT_mark_freestyle_face(struct wmOperatorType *ot);
 #endif
 
-/* *** mesh_data.c *** */
+/* *** mesh_data.cc *** */
 
 void MESH_OT_uv_texture_add(struct wmOperatorType *ot);
 void MESH_OT_uv_texture_remove(struct wmOperatorType *ot);
@@ -330,3 +317,7 @@ void MESH_OT_customdata_skin_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(struct wmOperatorType *ot);
+
+#ifdef __cplusplus
+}
+#endif

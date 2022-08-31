@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 #pragma once
 
 /** \file
@@ -84,6 +68,11 @@ void *BKE_libblock_alloc(struct Main *bmain, short type, const char *name, int f
  * ID is assumed to be just calloc'ed.
  */
 void BKE_libblock_init_empty(struct ID *id) ATTR_NONNULL(1);
+
+/**
+ * Reset the runtime counters used by ID remapping.
+ */
+void BKE_libblock_runtime_reset_remapping_status(struct ID *id) ATTR_NONNULL(1);
 
 /* *** ID's session_uuid management. *** */
 
@@ -161,11 +150,11 @@ enum {
   LIB_ID_COPY_NO_PREVIEW = 1 << 17,
   /** Copy runtime data caches. */
   LIB_ID_COPY_CACHES = 1 << 18,
-  /** Don't copy id->adt, used by ID datablock localization routines. */
+  /** Don't copy id->adt, used by ID data-block localization routines. */
   LIB_ID_COPY_NO_ANIMDATA = 1 << 19,
   /** Mesh: Reference CD data layers instead of doing real copy - USE WITH CAUTION! */
   LIB_ID_COPY_CD_REFERENCE = 1 << 20,
-  /** Do not copy id->override_library, used by ID datablock override routines. */
+  /** Do not copy id->override_library, used by ID data-block override routines. */
   LIB_ID_COPY_NO_LIB_OVERRIDE = 1 << 21,
   /** When copying local sub-data (like constraints or modifiers), do not set their "library
    * override local data" flag. */
@@ -173,11 +162,11 @@ enum {
 
   /* *** XXX Hackish/not-so-nice specific behaviors needed for some corner cases. *** */
   /* *** Ideally we should not have those, but we need them for now... *** */
-  /** EXCEPTION! Deep-copy actions used by animdata of copied ID. */
+  /** EXCEPTION! Deep-copy actions used by animation-data of copied ID. */
   LIB_ID_COPY_ACTIONS = 1 << 24,
-  /** Keep the library pointer when copying datablock outside of bmain. */
+  /** Keep the library pointer when copying data-block outside of bmain. */
   LIB_ID_COPY_KEEP_LIB = 1 << 25,
-  /** EXCEPTION! Deep-copy shapekeys used by copied obdata ID. */
+  /** EXCEPTION! Deep-copy shape-keys used by copied obdata ID. */
   LIB_ID_COPY_SHAPEKEY = 1 << 26,
   /** EXCEPTION! Specific deep-copy of node trees used e.g. for rendering purposes. */
   LIB_ID_COPY_NODETREE_LOCALIZE = 1 << 27,
@@ -188,7 +177,7 @@ enum {
   LIB_ID_COPY_RIGID_BODY_NO_COLLECTION_HANDLING = 1 << 28,
 
   /* *** Helper 'defines' gathering most common flag sets. *** */
-  /** Shapekeys are not real ID's, more like local data to geometry IDs... */
+  /** Shape-keys are not real ID's, more like local data to geometry IDs. */
   LIB_ID_COPY_DEFAULT = LIB_ID_COPY_SHAPEKEY,
 
   /** Create a local, outside of bmain, data-block to work on. */
@@ -265,6 +254,8 @@ enum {
   LIB_ID_FREE_NO_DEG_TAG = 1 << 8,
   /** Do not attempt to remove freed ID from UI data/notifiers/... */
   LIB_ID_FREE_NO_UI_USER = 1 << 9,
+  /** Do not remove freed ID's name from a potential runtime namemap. */
+  LIB_ID_FREE_NO_NAMEMAP_REMOVE = 1 << 10,
 };
 
 void BKE_libblock_free_datablock(struct ID *id, int flag) ATTR_NONNULL();
@@ -376,10 +367,6 @@ enum {
   /** Clear asset data (in case the ID can actually be made local, in copy case asset data is never
    * copied over). */
   LIB_ID_MAKELOCAL_ASSET_DATA_CLEAR = 1 << 3,
-
-  /* Special type-specific options. */
-  /** For Objects, do not clear the proxy pointers while making the data-block local. */
-  LIB_ID_MAKELOCAL_OBJECT_NO_PROXY_CLEARING = 1 << 16,
 };
 
 /**
@@ -413,12 +400,9 @@ bool id_single_user(struct bContext *C,
                     struct ID *id,
                     struct PointerRNA *ptr,
                     struct PropertyRNA *prop);
+
+/** Test whether given `id` can be copied or not. */
 bool BKE_id_copy_is_allowed(const struct ID *id);
-/**
- * Invokes the appropriate copy method for the block and returns the result in
- * #ID.newid, unless test. Returns true if the block can be copied.
- */
-struct ID *BKE_id_copy(struct Main *bmain, const struct ID *id);
 /**
  * Generic entry point for copying a data-block (new API).
  *
@@ -427,7 +411,7 @@ struct ID *BKE_id_copy(struct Main *bmain, const struct ID *id);
  *
  * There are exceptions though:
  * - Embedded IDs (root node trees and master collections) are always copied with their owner.
- * - If #LIB_ID_COPY_ACTIONS is defined, actions used by animdata will be duplicated.
+ * - If #LIB_ID_COPY_ACTIONS is defined, actions used by anim-data will be duplicated.
  * - If #LIB_ID_COPY_SHAPEKEY is defined, shape-keys will be duplicated.
  * - If #LIB_ID_CREATE_LOCAL is defined, root node trees will be deep-duplicated recursively.
  *
@@ -443,8 +427,26 @@ struct ID *BKE_id_copy(struct Main *bmain, const struct ID *id);
  */
 struct ID *BKE_id_copy_ex(struct Main *bmain, const struct ID *id, struct ID **r_newid, int flag);
 /**
- * Invokes the appropriate copy method for the block and returns the result in
- * newid, unless test. Returns true if the block can be copied.
+ * Invoke the appropriate copy method for the block and return the new id as result.
+ *
+ * See #BKE_id_copy_ex for details.
+ */
+struct ID *BKE_id_copy(struct Main *bmain, const struct ID *id);
+
+/**
+ * Invoke the appropriate copy method for the block and return the new id as result.
+ *
+ * Unlike #BKE_id_copy, it does set the #ID.newid pointer of the given `id` to the copied one.
+ *
+ * It is designed as a basic common helper for the higher-level 'duplicate' operations (aka 'deep
+ * copy' of data-blocks and some of their dependency ones), see e.g. #BKE_object_duplicate.
+ *
+ * Currently, it only handles the given ID, and their shape keys and actions if any, according to
+ * the given `duplicate_flags`.
+ *
+ * \param duplicate_flags is of type #eDupli_ID_Flags, see #UserDef.dupflag. Currently only
+ * `USER_DUP_LINKED_ID` and `USER_DUP_ACT` have an effect here.
+ * \param copy_flags flags passed to #BKE_id_copy_ex.
  */
 struct ID *BKE_id_copy_for_duplicate(struct Main *bmain,
                                      struct ID *id,
@@ -493,10 +495,12 @@ void BKE_lib_id_expand_local(struct Main *bmain, struct ID *id, int flags);
  *
  * \return true if a new name had to be created.
  */
-bool BKE_id_new_name_validate(struct ListBase *lb,
+bool BKE_id_new_name_validate(struct Main *bmain,
+                              struct ListBase *lb,
                               struct ID *id,
                               const char *name,
-                              bool do_linked_data) ATTR_NONNULL(1, 2);
+                              bool do_linked_data) ATTR_NONNULL(1, 2, 3);
+
 /**
  * Pull an ID out of a library (make it local). Only call this for IDs that
  * don't have other library users.
@@ -530,7 +534,7 @@ void BKE_main_id_flag_listbase(struct ListBase *lb, int flag, bool value);
 void BKE_main_id_flag_all(struct Main *bmain, int flag, bool value);
 
 /**
- * Next to indirect usage in `readfile.c/writefile.c` also in `editobject.c`, `scene.c`.
+ * Next to indirect usage in `readfile.c/writefile.c` also in `editobject.c`, `scene.cc`.
  */
 void BKE_main_id_newptr_and_tag_clear(struct Main *bmain);
 
@@ -541,7 +545,7 @@ void BKE_main_lib_objects_recalc_all(struct Main *bmain);
 /**
  * Only for repairing files via versioning, avoid for general use.
  */
-void BKE_main_id_repair_duplicate_names_listbase(struct ListBase *lb);
+void BKE_main_id_repair_duplicate_names_listbase(struct Main *bmain, struct ListBase *lb);
 
 #define MAX_ID_FULL_NAME (64 + 64 + 3 + 1)         /* 64 is MAX_ID_NAME - 2 */
 #define MAX_ID_FULL_NAME_UI (MAX_ID_FULL_NAME + 3) /* Adds 'keycode' two letters at beginning. */
@@ -608,6 +612,17 @@ void BKE_id_tag_clear_atomic(struct ID *id, int tag);
 bool BKE_id_is_in_global_main(struct ID *id);
 
 bool BKE_id_can_be_asset(const struct ID *id);
+
+/** Check if that ID can be considered as editable from a high-level (editor) perspective.
+ *
+ * NOTE: This used to be done with a check on whether ID was linked or not, but now with system
+ * overrides this is not enough anymore.
+ *
+ * NOTE: Execution of this function can be somewhat expensive currently. If this becomes an issue,
+ * we should either cache that status info also in virtual override IDs, or address the
+ * long-standing TODO of getting an efficient 'owner_id' access for all embedded ID types.
+ */
+bool BKE_id_is_editable(const struct Main *bmain, const struct ID *id);
 
 /**
  * Returns ordered list of data-blocks for display in the UI.

@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2018 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2018 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -24,7 +8,6 @@
 #pragma once
 
 #include "BKE_DerivedMesh.h"
-#include "BKE_customdata.h"
 #include "BLI_bitmap.h"
 #include "BLI_sys_types.h"
 
@@ -37,6 +20,8 @@ struct CCGFace;
 struct CCGKey;
 struct DMFlagMat;
 struct Mesh;
+struct MPoly;
+struct MLoop;
 struct Subdiv;
 
 /* --------------------------------------------------------------------
@@ -325,8 +310,8 @@ typedef enum SubdivCCGAdjacencyType {
  * adjacent to a vertex, r_v1 and r_v2 will be the index of that vertex. */
 SubdivCCGAdjacencyType BKE_subdiv_ccg_coarse_mesh_adjacency_info_get(const SubdivCCG *subdiv_ccg,
                                                                      const SubdivCCGCoord *coord,
-                                                                     const MLoop *mloop,
-                                                                     const MPoly *mpoly,
+                                                                     const struct MLoop *mloop,
+                                                                     const struct MPoly *mpoly,
                                                                      int *r_v1,
                                                                      int *r_v2);
 

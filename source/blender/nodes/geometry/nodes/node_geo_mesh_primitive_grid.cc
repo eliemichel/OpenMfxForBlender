@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BLI_task.hh"
 
@@ -32,23 +18,22 @@ namespace blender::nodes {
 static void calculate_uvs(
     Mesh *mesh, Span<MVert> verts, Span<MLoop> loops, const float size_x, const float size_y)
 {
-  MeshComponent mesh_component;
-  mesh_component.replace(mesh, GeometryOwnershipType::Editable);
-  OutputAttribute_Typed<float2> uv_attribute =
-      mesh_component.attribute_try_get_for_output_only<float2>("uv_map", ATTR_DOMAIN_CORNER);
-  MutableSpan<float2> uvs = uv_attribute.as_span();
+  MutableAttributeAccessor attributes = bke::mesh_attributes_for_write(*mesh);
+
+  SpanAttributeWriter<float2> uv_attribute = attributes.lookup_or_add_for_write_only_span<float2>(
+      "uv_map", ATTR_DOMAIN_CORNER);
 
   const float dx = (size_x == 0.0f) ? 0.0f : 1.0f / size_x;
   const float dy = (size_y == 0.0f) ? 0.0f : 1.0f / size_y;
   threading::parallel_for(loops.index_range(), 1024, [&](IndexRange range) {
     for (const int i : range) {
       const float3 &co = verts[loops[i].v].co;
-      uvs[i].x = (co.x + size_x * 0.5f) * dx;
-      uvs[i].y = (co.y + size_y * 0.5f) * dy;
+      uv_attribute.span[i].x = (co.x + size_x * 0.5f) * dx;
+      uv_attribute.span[i].y = (co.y + size_y * 0.5f) * dy;
     }
   });
 
-  uv_attribute.save();
+  uv_attribute.finish();
 }
 
 Mesh *create_grid_mesh(const int verts_x,

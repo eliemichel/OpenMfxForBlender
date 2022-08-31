@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -62,7 +49,8 @@ ccl_device const float2 bake_offset_towards_center(KernelGlobals kg,
   const float3 to_center = center - P;
 
   const float3 offset_P = P + normalize(to_center) *
-                                  min(len(to_center), max(max3(fabs(P)), 1.0f) * position_offset);
+                                  min(len(to_center),
+                                      max(reduce_max(fabs(P)), 1.0f) * position_offset);
 
   /* Compute barycentric coordinates at new position. */
   const float3 v1 = tri_verts[1] - tri_verts[0];
@@ -115,7 +103,7 @@ ccl_device bool integrator_init_from_bake(KernelGlobals kg,
   /* Setup render buffers. */
   const int index = INTEGRATOR_STATE(state, path, render_pixel_index);
   const int pass_stride = kernel_data.film.pass_stride;
-  ccl_global float *buffer = render_buffer + index * pass_stride;
+  ccl_global float *buffer = render_buffer + (uint64_t)index * pass_stride;
 
   ccl_global float *primitive = buffer + kernel_data.film.pass_bake_primitive;
   ccl_global float *differential = buffer + kernel_data.film.pass_bake_differential;
@@ -167,13 +155,18 @@ ccl_device bool integrator_init_from_bake(KernelGlobals kg,
                                  1.0f - u);
   }
 
+  /* Convert from Blender to Cycles/Embree/OptiX barycentric convention. */
+  const float tmp = u;
+  u = v;
+  v = 1.0f - tmp - v;
+
   /* Position and normal on triangle. */
   const int object = kernel_data.bake.object_index;
   float3 P, Ng;
   int shader;
   triangle_point_normal(kg, object, prim, u, v, &P, &Ng, &shader);
 
-  const int object_flag = kernel_tex_fetch(__object_flag, object);
+  const int object_flag = kernel_data_fetch(object_flag, object);
   if (!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
     Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
     P = transform_point_auto(&tfm, P);
@@ -186,14 +179,15 @@ ccl_device bool integrator_init_from_bake(KernelGlobals kg,
     Ray ray ccl_optional_struct_init;
     ray.P = zero_float3();
     ray.D = normalize(P);
-    ray.t = FLT_MAX;
+    ray.tmin = 0.0f;
+    ray.tmax = FLT_MAX;
     ray.time = 0.5f;
     ray.dP = differential_zero_compact();
     ray.dD = differential_zero_compact();
     integrator_state_write_ray(kg, state, &ray);
 
     /* Setup next kernel to execute. */
-    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
+    integrator_path_init(kg, state, DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
   }
   else {
     /* Surface baking. */
@@ -205,11 +199,25 @@ ccl_device bool integrator_init_from_bake(KernelGlobals kg,
       Ng = normalize(transform_direction_transposed(&itfm, Ng));
     }
 
+    const int shader_index = shader & SHADER_MASK;
+    const int shader_flags = kernel_data_fetch(shaders, shader_index).flags;
+
+    /* Fast path for position and normal passes not affected by shaders. */
+    if (kernel_data.film.pass_position != PASS_UNUSED) {
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_position, P);
+      return true;
+    }
+    else if (kernel_data.film.pass_normal != PASS_UNUSED && !(shader_flags & SD_HAS_BUMP)) {
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_normal, N);
+      return true;
+    }
+
     /* Setup ray. */
     Ray ray ccl_optional_struct_init;
     ray.P = P + N;
     ray.D = -N;
-    ray.t = FLT_MAX;
+    ray.tmin = 0.0f;
+    ray.tmax = FLT_MAX;
     ray.time = 0.5f;
 
     /* Setup differentials. */
@@ -241,13 +249,20 @@ ccl_device bool integrator_init_from_bake(KernelGlobals kg,
     integrator_state_write_isect(kg, state, &isect);
 
     /* Setup next kernel to execute. */
-    const int shader_index = shader & SHADER_MASK;
-    const int shader_flags = kernel_tex_fetch(__shaders, shader_index).flags;
-    if (shader_flags & SD_HAS_RAYTRACE) {
-      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader_index);
+    const bool use_caustics = kernel_data.integrator.use_caustics &&
+                              (object_flag & SD_OBJECT_CAUSTICS);
+    const bool use_raytrace_kernel = (shader_flags & SD_HAS_RAYTRACE);
+
+    if (use_caustics) {
+      integrator_path_init_sorted(
+          kg, state, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_MNEE, shader_index);
+    }
+    else if (use_raytrace_kernel) {
+      integrator_path_init_sorted(
+          kg, state, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader_index);
     }
     else {
-      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader_index);
+      integrator_path_init_sorted(kg, state, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader_index);
     }
   }
 

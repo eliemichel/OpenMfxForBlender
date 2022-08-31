@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -73,6 +59,10 @@ void BM_data_interp_face_vert_edge(
 void BM_data_layer_add(BMesh *bm, CustomData *data, int type);
 void BM_data_layer_add_named(BMesh *bm, CustomData *data, int type, const char *name);
 void BM_data_layer_free(BMesh *bm, CustomData *data, int type);
+/**
+ * Remove a named custom data layer, if it existed. Return true if the layer was removed.
+ */
+bool BM_data_layer_free_named(BMesh *bm, CustomData *data, const char *name);
 void BM_data_layer_free_n(BMesh *bm, CustomData *data, int type, int n);
 void BM_data_layer_copy(BMesh *bm, CustomData *data, int type, int src_n, int dst_n);
 

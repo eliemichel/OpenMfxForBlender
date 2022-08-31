@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -23,7 +7,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_blenlib.h"
 #include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 
@@ -34,7 +17,6 @@
 
 #include "gpu_backend.hh"
 #include "gpu_context_private.hh"
-#include "gpu_private.h"
 #include "gpu_texture_private.hh"
 
 #include "gpu_framebuffer_private.hh"
@@ -142,6 +124,43 @@ void FrameBuffer::attachment_remove(GPUAttachmentType type)
   dirty_attachments_ = true;
 }
 
+void FrameBuffer::load_store_config_array(const GPULoadStore *load_store_actions, uint actions_len)
+{
+  /* Follows attachment structure of GPU_framebuffer_config_array/GPU_framebuffer_ensure_config */
+  const GPULoadStore &depth_action = load_store_actions[0];
+  Span<GPULoadStore> color_attachments(load_store_actions + 1, actions_len - 1);
+
+  if (this->attachments_[GPU_FB_DEPTH_STENCIL_ATTACHMENT].tex) {
+    this->attachment_set_loadstore_op(
+        GPU_FB_DEPTH_STENCIL_ATTACHMENT, depth_action.load_action, depth_action.store_action);
+  }
+  if (this->attachments_[GPU_FB_DEPTH_ATTACHMENT].tex) {
+    this->attachment_set_loadstore_op(
+        GPU_FB_DEPTH_ATTACHMENT, depth_action.load_action, depth_action.store_action);
+  }
+
+  GPUAttachmentType type = GPU_FB_COLOR_ATTACHMENT0;
+  for (const GPULoadStore &actions : color_attachments) {
+    if (this->attachments_[type].tex) {
+      this->attachment_set_loadstore_op(type, actions.load_action, actions.store_action);
+    }
+    ++type;
+  }
+}
+
+unsigned int FrameBuffer::get_bits_per_pixel()
+{
+  unsigned int total_bits = 0;
+  for (GPUAttachment &attachment : attachments_) {
+    Texture *tex = reinterpret_cast<Texture *>(attachment.tex);
+    if (tex != nullptr) {
+      int bits = to_bytesize(tex->format_get()) * to_component_len(tex->format_get());
+      total_bits += bits;
+    }
+  }
+  return total_bits;
+}
+
 void FrameBuffer::recursive_downsample(int max_lvl,
                                        void (*callback)(void *userData, int level),
                                        void *userData)
@@ -167,9 +186,20 @@ void FrameBuffer::recursive_downsample(int max_lvl,
         attachment.mip = mip_lvl;
       }
     }
+
     /* Update the internal attachments and viewport size. */
     dirty_attachments_ = true;
     this->bind(true);
+
+    /* Optimize load-store state. */
+    GPUAttachmentType type = GPU_FB_DEPTH_ATTACHMENT;
+    for (GPUAttachment &attachment : attachments_) {
+      Texture *tex = reinterpret_cast<Texture *>(attachment.tex);
+      if (tex != nullptr) {
+        this->attachment_set_loadstore_op(type, GPU_LOADACTION_DONT_CARE, GPU_STOREACTION_STORE);
+      }
+      ++type;
+    }
 
     callback(userData, mip_lvl);
   }
@@ -214,6 +244,18 @@ void GPU_framebuffer_bind(GPUFrameBuffer *gpu_fb)
 {
   const bool enable_srgb = true;
   unwrap(gpu_fb)->bind(enable_srgb);
+}
+
+void GPU_framebuffer_bind_loadstore(GPUFrameBuffer *gpu_fb,
+                                    const GPULoadStore *load_store_actions,
+                                    uint actions_len)
+{
+  /* Bind */
+  GPU_framebuffer_bind(gpu_fb);
+
+  /* Update load store */
+  FrameBuffer *fb = unwrap(gpu_fb);
+  fb->load_store_config_array(load_store_actions, actions_len);
 }
 
 void GPU_framebuffer_bind_no_srgb(GPUFrameBuffer *gpu_fb)
@@ -437,7 +479,7 @@ void GPU_framebuffer_blit(GPUFrameBuffer *gpufb_read,
 
   fb_read->blit_to(blit_buffers, read_slot, fb_write, write_slot, 0, 0);
 
-  /* FIXME(fclem) sRGB is not saved. */
+  /* FIXME(@fclem): sRGB is not saved. */
   prev_fb->bind(true);
 }
 

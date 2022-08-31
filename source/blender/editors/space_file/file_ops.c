@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spfile
@@ -1809,7 +1793,7 @@ static bool file_execute(bContext *C, SpaceFile *sfile)
     }
     ED_file_change_dir(C);
   }
-  /* opening file - sends events now, so things get handled on windowqueue level */
+  /* Opening file, sends events now, so things get handled on window-queue level. */
   else if (sfile->op) {
     wmOperator *op = sfile->op;
     char filepath[FILE_MAX];
@@ -2237,7 +2221,7 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
   RNA_int_set(&op_ptr, "deltax", deltax);
   RNA_int_set(&op_ptr, "deltay", deltay);
 
-  WM_operator_name_call(C, "VIEW2D_OT_pan", WM_OP_EXEC_DEFAULT, &op_ptr);
+  WM_operator_name_call(C, "VIEW2D_OT_pan", WM_OP_EXEC_DEFAULT, &op_ptr, event);
   WM_operator_properties_free(&op_ptr);
 
   ED_region_tag_redraw(region);
@@ -2596,7 +2580,7 @@ void file_directory_enter_handle(bContext *C, void *UNUSED(arg_unused), void *UN
           BLI_strncpy(params->dir, lastdir, sizeof(params->dir));
         }
 
-        WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+        WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr, NULL);
         WM_operator_properties_free(&ptr);
       }
     }
@@ -2930,9 +2914,9 @@ void FILE_OT_delete(struct wmOperatorType *ot)
 
 static int file_start_filter_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  ScrArea *area = CTX_wm_area(C);
-  SpaceFile *sfile = CTX_wm_space_file(C);
-  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+  const ScrArea *area = CTX_wm_area(C);
+  const SpaceFile *sfile = CTX_wm_space_file(C);
+  const FileSelectParams *params = ED_fileselect_get_active_params(sfile);
 
   ARegion *region_ctx = CTX_wm_region(C);
 
@@ -2960,6 +2944,46 @@ void FILE_OT_start_filter(struct wmOperatorType *ot)
   /* api callbacks */
   ot->exec = file_start_filter_exec;
   /* Operator works for file or asset browsing */
+  ot->poll = ED_operator_file_active;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Directory Path Operator
+ * \{ */
+
+static int file_edit_directory_path_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  const ScrArea *area = CTX_wm_area(C);
+  const SpaceFile *sfile = CTX_wm_space_file(C);
+  const FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+
+  ARegion *region_ctx = CTX_wm_region(C);
+
+  if (area) {
+    LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+      CTX_wm_region_set(C, region);
+      if (UI_textbutton_activate_rna(C, region, params, "directory")) {
+        break;
+      }
+    }
+  }
+
+  CTX_wm_region_set(C, region_ctx);
+
+  return OPERATOR_FINISHED;
+}
+
+void FILE_OT_edit_directory_path(struct wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Edit Directory Path";
+  ot->description = "Start editing directory field";
+  ot->idname = "FILE_OT_edit_directory_path";
+
+  /* api callbacks */
+  ot->exec = file_edit_directory_path_exec;
   ot->poll = ED_operator_file_active;
 }
 

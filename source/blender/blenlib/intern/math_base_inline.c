@@ -1,23 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * The Original Code is: some of this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bli
@@ -113,10 +95,10 @@ MINLINE float saacos(float fac)
 MINLINE float saasin(float fac)
 {
   if (UNLIKELY(fac <= -1.0f)) {
-    return (float)-M_PI / 2.0f;
+    return (float)-M_PI_2;
   }
   else if (UNLIKELY(fac >= 1.0f)) {
-    return (float)M_PI / 2.0f;
+    return (float)M_PI_2;
   }
   else {
     return asinf(fac);
@@ -149,10 +131,10 @@ MINLINE float saacosf(float fac)
 MINLINE float saasinf(float fac)
 {
   if (UNLIKELY(fac <= -1.0f)) {
-    return (float)-M_PI / 2.0f;
+    return (float)-M_PI_2;
   }
   else if (UNLIKELY(fac >= 1.0f)) {
-    return (float)M_PI / 2.0f;
+    return (float)M_PI_2;
   }
   else {
     return asinf(fac);
@@ -388,6 +370,24 @@ MINLINE uint divide_ceil_u(uint a, uint b)
   return (a + b - 1) / b;
 }
 
+MINLINE uint64_t divide_ceil_ul(uint64_t a, uint64_t b)
+{
+  return (a + b - 1) / b;
+}
+
+/**
+ * Returns \a a if it is a multiple of \a b or the next multiple or \a b after \b a .
+ */
+MINLINE uint ceil_to_multiple_u(uint a, uint b)
+{
+  return divide_ceil_u(a, b) * b;
+}
+
+MINLINE uint64_t ceil_to_multiple_ul(uint64_t a, uint64_t b)
+{
+  return divide_ceil_ul(a, b) * b;
+}
+
 MINLINE int mod_i(int i, int n)
 {
   return (i % n + n) % n;
@@ -538,6 +538,15 @@ MINLINE uint min_uu(uint a, uint b)
   return (a < b) ? a : b;
 }
 MINLINE uint max_uu(uint a, uint b)
+{
+  return (b < a) ? a : b;
+}
+
+MINLINE unsigned long long min_ulul(unsigned long long a, unsigned long long b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE unsigned long long max_ulul(unsigned long long a, unsigned long long b)
 {
   return (b < a) ? a : b;
 }
@@ -776,6 +785,20 @@ MALWAYS_INLINE __m128 _bli_math_fastpow24(const __m128 arg)
   return _mm_mul_ps(x, _mm_mul_ps(x, x));
 }
 
+MALWAYS_INLINE __m128 _bli_math_rsqrt(__m128 in)
+{
+  __m128 r = _mm_rsqrt_ps(in);
+  /* Only do additional Newton-Raphson iterations when using actual SSE
+   * code path. When we are emulating SSE on NEON via sse2neon, the
+   * additional NR iterations are already done inside _mm_rsqrt_ps
+   * emulation. */
+#  if defined(__SSE2__)
+  r = _mm_add_ps(_mm_mul_ps(_mm_set1_ps(1.5f), r),
+                 _mm_mul_ps(_mm_mul_ps(_mm_mul_ps(in, _mm_set1_ps(-0.5f)), r), _mm_mul_ps(r, r)));
+#  endif
+  return r;
+}
+
 /* Calculate powf(x, 1.0f / 2.4) */
 MALWAYS_INLINE __m128 _bli_math_fastpow512(const __m128 arg)
 {
@@ -785,14 +808,14 @@ MALWAYS_INLINE __m128 _bli_math_fastpow512(const __m128 arg)
    */
   __m128 xf = _bli_math_fastpow(0x3f2aaaab, 0x5eb504f3, arg);
   __m128 xover = _mm_mul_ps(arg, xf);
-  __m128 xfm1 = _mm_rsqrt_ps(xf);
+  __m128 xfm1 = _bli_math_rsqrt(xf);
   __m128 x2 = _mm_mul_ps(arg, arg);
   __m128 xunder = _mm_mul_ps(x2, xfm1);
   /* sqrt2 * over + 2 * sqrt2 * under */
   __m128 xavg = _mm_mul_ps(_mm_set1_ps(1.0f / (3.0f * 0.629960524947437f) * 0.999852f),
                            _mm_add_ps(xover, xunder));
-  xavg = _mm_mul_ps(xavg, _mm_rsqrt_ps(xavg));
-  xavg = _mm_mul_ps(xavg, _mm_rsqrt_ps(xavg));
+  xavg = _mm_mul_ps(xavg, _bli_math_rsqrt(xavg));
+  xavg = _mm_mul_ps(xavg, _bli_math_rsqrt(xavg));
   return xavg;
 }
 

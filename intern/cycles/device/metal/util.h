@@ -1,18 +1,5 @@
-/*
- * Copyright 2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2021-2022 Blender Foundation */
 
 #pragma once
 
@@ -27,6 +14,8 @@
 
 #  include "util/thread.h"
 
+#  define metal_printf VLOG(4) << string_printf
+
 CCL_NAMESPACE_BEGIN
 
 enum MetalGPUVendor {
@@ -36,10 +25,20 @@ enum MetalGPUVendor {
   METAL_GPU_INTEL = 3,
 };
 
+enum AppleGPUArchitecture {
+  APPLE_UNKNOWN,
+  APPLE_M1,
+  APPLE_M2,
+};
+
 /* Contains static Metal helper functions. */
 struct MetalInfo {
   static vector<id<MTLDevice>> const &get_usable_devices();
-  static MetalGPUVendor get_vendor_from_device_name(string const &device_name);
+  static int get_apple_gpu_core_count(id<MTLDevice> device);
+  static MetalGPUVendor get_device_vendor(id<MTLDevice> device);
+  static AppleGPUArchitecture get_apple_gpu_architecture(id<MTLDevice> device);
+  static int optimal_sort_partition_elements(id<MTLDevice> device);
+  static string get_device_name(id<MTLDevice> device);
 };
 
 /* Pool of MTLBuffers whose lifetime is linked to a single MTLCommandBuffer */

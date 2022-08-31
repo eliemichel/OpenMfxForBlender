@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2006-2007 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2006-2007 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -130,32 +114,35 @@ static void icon_free(void *val)
 
 static void icon_free_data(int icon_id, Icon *icon)
 {
-  if (icon->obj_type == ICON_DATA_ID) {
-    ((ID *)(icon->obj))->icon_id = 0;
-  }
-  else if (icon->obj_type == ICON_DATA_IMBUF) {
-    ImBuf *imbuf = (ImBuf *)icon->obj;
-    if (imbuf) {
-      IMB_freeImBuf(imbuf);
+  switch (icon->obj_type) {
+    case ICON_DATA_ID:
+      ((ID *)(icon->obj))->icon_id = 0;
+      break;
+    case ICON_DATA_IMBUF: {
+      ImBuf *imbuf = (ImBuf *)icon->obj;
+      if (imbuf) {
+        IMB_freeImBuf(imbuf);
+      }
+      break;
     }
-  }
-  else if (icon->obj_type == ICON_DATA_PREVIEW) {
-    ((PreviewImage *)(icon->obj))->icon_id = 0;
-  }
-  else if (icon->obj_type == ICON_DATA_GPLAYER) {
-    ((bGPDlayer *)(icon->obj))->runtime.icon_id = 0;
-  }
-  else if (icon->obj_type == ICON_DATA_GEOM) {
-    ((struct Icon_Geom *)(icon->obj))->icon_id = 0;
-  }
-  else if (icon->obj_type == ICON_DATA_STUDIOLIGHT) {
-    StudioLight *sl = (StudioLight *)icon->obj;
-    if (sl != nullptr) {
-      BKE_studiolight_unset_icon_id(sl, icon_id);
+    case ICON_DATA_PREVIEW:
+      ((PreviewImage *)(icon->obj))->icon_id = 0;
+      break;
+    case ICON_DATA_GPLAYER:
+      ((bGPDlayer *)(icon->obj))->runtime.icon_id = 0;
+      break;
+    case ICON_DATA_GEOM:
+      ((struct Icon_Geom *)(icon->obj))->icon_id = 0;
+      break;
+    case ICON_DATA_STUDIOLIGHT: {
+      StudioLight *sl = (StudioLight *)icon->obj;
+      if (sl != nullptr) {
+        BKE_studiolight_unset_icon_id(sl, icon_id);
+      }
+      break;
     }
-  }
-  else {
-    BLI_assert(0);
+    default:
+      BLI_assert_unreachable();
   }
 }
 
@@ -257,16 +244,16 @@ static PreviewImage *previewimg_create_ex(size_t deferred_data_size)
   return prv_img;
 }
 
-static PreviewImage *previewimg_deferred_create(const char *path, int source)
+static PreviewImage *previewimg_deferred_create(const char *filepath, int source)
 {
-  /* We pack needed data for lazy loading (source type, in a single char, and path). */
-  const size_t deferred_data_size = strlen(path) + 2;
+  /* We pack needed data for lazy loading (source type, in a single char, and filepath). */
+  const size_t deferred_data_size = strlen(filepath) + 2;
   char *deferred_data;
 
   PreviewImage *prv = previewimg_create_ex(deferred_data_size);
   deferred_data = (char *)PRV_DEFERRED_DATA(prv);
   deferred_data[0] = source;
-  memcpy(&deferred_data[1], path, deferred_data_size - 1);
+  memcpy(&deferred_data[1], filepath, deferred_data_size - 1);
 
   return prv;
 }
@@ -409,7 +396,7 @@ PreviewImage *BKE_previewimg_id_ensure(ID *id)
   return nullptr;
 }
 
-void BKE_previewimg_id_custom_set(ID *id, const char *path)
+void BKE_previewimg_id_custom_set(ID *id, const char *filepath)
 {
   PreviewImage **prv = BKE_previewimg_id_get_p(id);
 
@@ -419,7 +406,7 @@ void BKE_previewimg_id_custom_set(ID *id, const char *path)
   if (*prv) {
     BKE_previewimg_deferred_release(*prv);
   }
-  *prv = previewimg_deferred_create(path, THB_SOURCE_IMAGE);
+  *prv = previewimg_deferred_create(filepath, THB_SOURCE_IMAGE);
 
   /* Can't lazy-render the preview on access. ID previews are saved to files and we want them to be
    * there in time. Not only if something happened to have accessed it meanwhile. */
@@ -432,7 +419,7 @@ void BKE_previewimg_id_custom_set(ID *id, const char *path)
 
 bool BKE_previewimg_id_supports_jobs(const ID *id)
 {
-  return ELEM(GS(id->name), ID_OB, ID_MA, ID_TE, ID_LA, ID_WO, ID_IM, ID_BR);
+  return ELEM(GS(id->name), ID_OB, ID_MA, ID_TE, ID_LA, ID_WO, ID_IM, ID_BR, ID_GR);
 }
 
 void BKE_previewimg_deferred_release(PreviewImage *prv)
@@ -474,7 +461,7 @@ PreviewImage *BKE_previewimg_cached_ensure(const char *name)
 }
 
 PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
-                                                   const char *path,
+                                                   const char *filepath,
                                                    const int source,
                                                    bool force_update)
 {
@@ -492,8 +479,8 @@ PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
 
   if (prv && force_update) {
     const char *prv_deferred_data = (char *)PRV_DEFERRED_DATA(prv);
-    if (((int)prv_deferred_data[0] == source) && STREQ(&prv_deferred_data[1], path)) {
-      /* If same path, no need to re-allocate preview, just clear it up. */
+    if (((int)prv_deferred_data[0] == source) && STREQ(&prv_deferred_data[1], filepath)) {
+      /* If same filepath, no need to re-allocate preview, just clear it up. */
       BKE_previewimg_clear(prv);
     }
     else {
@@ -502,7 +489,7 @@ PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
   }
 
   if (!prv) {
-    prv = previewimg_deferred_create(path, source);
+    prv = previewimg_deferred_create(filepath, source);
     force_update = true;
   }
 
@@ -537,10 +524,10 @@ void BKE_previewimg_ensure(PreviewImage *prv, const int size)
       ImBuf *thumb;
       char *prv_deferred_data = (char *)PRV_DEFERRED_DATA(prv);
       int source = prv_deferred_data[0];
-      char *path = &prv_deferred_data[1];
+      char *filepath = &prv_deferred_data[1];
       int icon_w, icon_h;
 
-      thumb = IMB_thumb_manage(path, THB_LARGE, (ThumbSource)source);
+      thumb = IMB_thumb_manage(filepath, THB_LARGE, (ThumbSource)source);
 
       if (thumb) {
         /* PreviewImage assumes premultiplied alhpa... */

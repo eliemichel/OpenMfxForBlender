@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2006 by Blender Foundation
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2006 Blender Foundation. All rights reserved. */
 /** \file
  * \ingroup render
  *
@@ -60,8 +44,6 @@ bool RE_texture_evaluate(const struct MTex *mtex,
  * \param fact: Texture strength.
  * \param facg: Button strength value.
  */
-void texture_rgb_blend(
-    float in[3], const float tex[3], const float out[3], float fact, float facg, int blendtype);
 float texture_value_blend(float tex, float out, float fact, float facg, int blendtype);
 
 void RE_texture_rng_init(void);
@@ -103,9 +85,8 @@ void RE_point_density_fix_linking(void);
 typedef struct TexResult {
   float tin;
   float trgba[4];
-  /* Is acually a bool true->use alpha, false->set alpha to 1.0. */
+  /* Is actually a boolean: When true -> use alpha, false -> set alpha to 1.0. */
   int talpha;
-  float *nor;
 } TexResult;
 
 /* This one uses nodes. */

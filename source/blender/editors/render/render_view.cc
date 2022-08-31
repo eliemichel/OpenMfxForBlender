@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2008 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2008 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edrend
@@ -35,6 +19,7 @@
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
 
 #include "BLT_translation.h"
@@ -146,8 +131,11 @@ ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
   }
 
   if (U.render_display_type == USER_RENDER_DISPLAY_WINDOW) {
-    int sizex = 30 * UI_DPI_FAC + (scene->r.xsch * scene->r.size) / 100;
-    int sizey = 60 * UI_DPI_FAC + (scene->r.ysch * scene->r.size) / 100;
+    int sizex, sizey;
+    BKE_render_resolution(&scene->r, false, &sizex, &sizey);
+
+    sizex += 30 * UI_DPI_FAC;
+    sizey += 60 * UI_DPI_FAC;
 
     /* arbitrary... miniature image window views don't make much sense */
     if (sizex < 320) {

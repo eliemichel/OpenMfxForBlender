@@ -1,23 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * The Original Code is: some of this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -25,6 +7,7 @@
  * \ingroup bli
  */
 
+#include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 #include "DNA_vec_types.h"
 
@@ -192,6 +175,25 @@ float angle_signed_qtqt(const float q1[4], const float q2[4]);
 void mat3_to_quat_is_ok(float q[4], const float mat[3][3]);
 
 /* Other. */
+
+/**
+ * Utility that performs `sinf` & `cosf` intended for plotting a 2D circle,
+ * where the values of the coordinates with are exactly symmetrical although this
+ * favors even numbers as odd numbers can only be symmetrical on a single axis.
+ *
+ * Besides adjustments to precision, this function is the equivalent of:
+ * \code {.c}
+ * float phi = (2 * M_PI) * (float)i / (float)denominator;
+ * *r_sin = sinf(phi);
+ * *r_cos = cosf(phi);
+ * \endcode
+ *
+ * \param numerator: An integer factor in [0..denominator] (inclusive).
+ * \param denominator: The faction denominator (typically the number of segments of the circle).
+ * \param r_sin: The resulting sine.
+ * \param r_cos: The resulting cosine.
+ */
+void sin_cos_from_fraction(int numerator, int denominator, float *r_sin, float *r_cos);
 
 void print_qt(const char *str, const float q[4]);
 

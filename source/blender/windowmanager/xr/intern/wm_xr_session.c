@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup wm
@@ -1039,6 +1025,10 @@ static wmXrActionData *wm_xr_session_event_create(const char *action_set_name,
   wmXrActionData *data = MEM_callocN(sizeof(wmXrActionData), __func__);
   strcpy(data->action_set, action_set_name);
   strcpy(data->action, action->name);
+  strcpy(data->user_path, action->subaction_paths[subaction_idx]);
+  if (bimanual) {
+    strcpy(data->user_path_other, action->subaction_paths[subaction_idx_other]);
+  }
   data->type = action->type;
 
   switch (action->type) {
@@ -1185,7 +1175,6 @@ void wm_xr_session_actions_update(wmWindowManager *wm)
   XrSessionSettings *settings = &xr->session_settings;
   GHOST_XrContextHandle xr_context = xr->runtime->context;
   wmXrSessionState *state = &xr->runtime->session_state;
-  wmXrActionSet *active_action_set = state->active_action_set;
 
   if (state->is_navigation_dirty) {
     memcpy(&state->nav_pose_prev, &state->nav_pose, sizeof(state->nav_pose_prev));
@@ -1202,8 +1191,16 @@ void wm_xr_session_actions_update(wmWindowManager *wm)
         &state->viewer_pose, settings->base_scale * state->nav_scale, state->viewer_viewmat);
   }
 
-  int ret = GHOST_XrSyncActions(xr_context, active_action_set ? active_action_set->name : NULL);
-  if (!ret) {
+  /* Set active action set if requested previously. */
+  if (state->active_action_set_next[0]) {
+    WM_xr_active_action_set_set(xr, state->active_action_set_next, false);
+    state->active_action_set_next[0] = '\0';
+  }
+  wmXrActionSet *active_action_set = state->active_action_set;
+
+  const bool synced = GHOST_XrSyncActions(xr_context,
+                                          active_action_set ? active_action_set->name : NULL);
+  if (!synced) {
     return;
   }
 
@@ -1224,6 +1221,11 @@ void wm_xr_session_actions_update(wmWindowManager *wm)
       if (!xr->runtime->area) {
         xr->runtime->area = ED_area_offscreen_create(win, SPACE_VIEW3D);
       }
+
+      /* Set XR area object type flags for operators. */
+      View3D *v3d = xr->runtime->area->spacedata.first;
+      v3d->object_type_exclude_viewport = settings->object_type_exclude_viewport;
+      v3d->object_type_exclude_select = settings->object_type_exclude_select;
 
       wm_xr_session_events_dispatch(xr, xr_context, active_action_set, state, win);
     }
@@ -1317,7 +1319,7 @@ static void wm_xr_session_surface_draw(bContext *C)
 
   GHOST_XrSessionDrawViews(wm->xr.runtime->context, &draw_data);
 
-  /* There's no active framebuffer if the session was cancelled (exception while drawing views). */
+  /* There's no active frame-buffer if the session was canceled (exception while drawing views). */
   if (GPU_framebuffer_active_get()) {
     GPU_framebuffer_restore();
   }

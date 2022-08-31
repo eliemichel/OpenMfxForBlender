@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2017 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2017 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup spoutliner
@@ -28,23 +12,25 @@
 #include "DNA_space_types.h"
 
 #include "outliner_intern.hh"
+#include "tree/tree_iterator.hh"
 
-static void outliner_context_selected_ids_recursive(const ListBase *subtree,
+using namespace blender::ed::outliner;
+
+static void outliner_context_selected_ids_recursive(const SpaceOutliner &space_outliner,
                                                     bContextDataResult *result)
 {
-  LISTBASE_FOREACH (const TreeElement *, te, subtree) {
+  tree_iterator::all(space_outliner, [&](const TreeElement *te) {
     const TreeStoreElem *tse = TREESTORE(te);
     if ((tse->flag & TSE_SELECTED) && (ELEM(tse->type, TSE_SOME_ID, TSE_LAYER_COLLECTION))) {
       CTX_data_id_list_add(result, tse->id);
     }
-    outliner_context_selected_ids_recursive(&te->subtree, result);
-  }
+  });
 }
 
 static void outliner_context_selected_ids(const SpaceOutliner *space_outliner,
                                           bContextDataResult *result)
 {
-  outliner_context_selected_ids_recursive(&space_outliner->tree, result);
+  outliner_context_selected_ids_recursive(*space_outliner, result);
   CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
 }
 

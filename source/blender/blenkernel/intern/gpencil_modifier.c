@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2017, Blender Foundation
- * This is a new part of Blender
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2017 Blender Foundation. */
 
 /** \file
  * \ingroup bke
@@ -44,6 +28,7 @@
 #include "DNA_screen_types.h"
 
 #include "BKE_colortools.h"
+#include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
@@ -110,7 +95,7 @@ void BKE_gpencil_cache_data_init(Depsgraph *depsgraph, Object *ob)
           MEM_SAFE_FREE(mmd->cache_data);
         }
         Object *ob_target = DEG_get_evaluated_object(depsgraph, ob);
-        Mesh *target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
+        Mesh *target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target);
         mmd->cache_data = MEM_callocN(sizeof(ShrinkwrapTreeData), __func__);
         if (BKE_shrinkwrap_init_tree(
                 mmd->cache_data, target, mmd->shrink_type, mmd->shrink_mode, false)) {
@@ -212,9 +197,11 @@ bool BKE_gpencil_has_transform_modifiers(Object *ob)
   LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
     /* Only if enabled in edit mode. */
     if (!GPENCIL_MODIFIER_EDIT(md, true) && GPENCIL_MODIFIER_ACTIVE(md, false)) {
-      if ((md->type == eGpencilModifierType_Armature) || (md->type == eGpencilModifierType_Hook) ||
-          (md->type == eGpencilModifierType_Lattice) ||
-          (md->type == eGpencilModifierType_Offset)) {
+      if (ELEM(md->type,
+               eGpencilModifierType_Armature,
+               eGpencilModifierType_Hook,
+               eGpencilModifierType_Lattice,
+               eGpencilModifierType_Offset)) {
         return true;
       }
     }
@@ -234,6 +221,9 @@ GpencilLineartLimitInfo BKE_gpencil_get_lineart_modifier_limits(const Object *ob
         info.max_level = MAX2(info.max_level,
                               (lmd->use_multiple_levels ? lmd->level_end : lmd->level_start));
         info.edge_types |= lmd->edge_types;
+        info.shadow_selection = MAX2(lmd->shadow_selection, info.shadow_selection);
+        info.silhouette_selection = MAX2(lmd->silhouette_selection, info.silhouette_selection);
+        is_first = false;
       }
     }
   }
@@ -250,11 +240,15 @@ void BKE_gpencil_set_lineart_modifier_limits(GpencilModifierData *md,
     lmd->level_start_override = info->min_level;
     lmd->level_end_override = info->max_level;
     lmd->edge_types_override = info->edge_types;
+    lmd->shadow_selection_override = info->shadow_selection;
+    lmd->shadow_use_silhouette_override = info->silhouette_selection;
   }
   else {
     lmd->level_start_override = lmd->level_start;
     lmd->level_end_override = lmd->level_end;
     lmd->edge_types_override = lmd->edge_types;
+    lmd->shadow_selection_override = lmd->shadow_selection;
+    lmd->shadow_use_silhouette_override = lmd->silhouette_selection;
   }
 }
 
@@ -634,48 +628,81 @@ static void gpencil_assign_object_eval(Object *object)
   }
 }
 
-/* Helper: Copy active frame from original datablock to evaluated datablock for modifiers. */
-static void gpencil_copy_activeframe_to_eval(
-    Depsgraph *depsgraph, Scene *scene, Object *ob, bGPdata *gpd_orig, bGPdata *gpd_eval)
+static bGPdata *gpencil_copy_structure_for_eval(bGPdata *gpd)
 {
+  /* Create a temporary copy gpd. */
+  ID *newid = NULL;
+  BKE_libblock_copy_ex(NULL, &gpd->id, &newid, LIB_ID_COPY_LOCALIZE);
+  bGPdata *gpd_eval = (bGPdata *)newid;
+  BLI_listbase_clear(&gpd_eval->layers);
 
-  bGPDlayer *gpl_eval = gpd_eval->layers.first;
-  LISTBASE_FOREACH (bGPDlayer *, gpl_orig, &gpd_orig->layers) {
-
-    if (gpl_eval != NULL) {
-      bGPDframe *gpf_orig = gpl_orig->actframe;
-
-      int remap_cfra = gpencil_remap_time_get(depsgraph, scene, ob, gpl_orig);
-      if ((gpf_orig == NULL) || (gpf_orig && gpf_orig->framenum != remap_cfra)) {
-        gpf_orig = BKE_gpencil_layer_frame_get(gpl_orig, remap_cfra, GP_GETFRAME_USE_PREV);
-      }
-
-      if (gpf_orig != NULL) {
-        int gpf_index = BLI_findindex(&gpl_orig->frames, gpf_orig);
-        bGPDframe *gpf_eval = BLI_findlink(&gpl_eval->frames, gpf_index);
-
-        if (gpf_eval != NULL) {
-          /* Delete old strokes. */
-          BKE_gpencil_free_strokes(gpf_eval);
-          /* Copy again strokes. */
-          BKE_gpencil_frame_copy_strokes(gpf_orig, gpf_eval);
-
-          gpf_eval->runtime.gpf_orig = (bGPDframe *)gpf_orig;
-          BKE_gpencil_frame_original_pointers_update(gpf_orig, gpf_eval);
-        }
-      }
-
-      gpl_eval = gpl_eval->next;
-    }
+  if (gpd->mat != NULL) {
+    gpd_eval->mat = MEM_dupallocN(gpd->mat);
   }
+
+  BKE_defgroup_copy_list(&gpd_eval->vertex_group_names, &gpd->vertex_group_names);
+
+  /* Duplicate structure: layers and frames without strokes. */
+  LISTBASE_FOREACH (bGPDlayer *, gpl_orig, &gpd->layers) {
+    bGPDlayer *gpl_eval = BKE_gpencil_layer_duplicate(gpl_orig, true, false);
+    BLI_addtail(&gpd_eval->layers, gpl_eval);
+    gpl_eval->runtime.gpl_orig = gpl_orig;
+    /* Update frames orig pointers (helps for faster lookup in copy_frame_to_eval_cb). */
+    BKE_gpencil_layer_original_pointers_update(gpl_orig, gpl_eval);
+  }
+
+  return gpd_eval;
 }
 
-static bGPdata *gpencil_copy_for_eval(bGPdata *gpd)
+static void copy_frame_to_eval_ex(bGPDframe *gpf_orig, bGPDframe *gpf_eval)
 {
-  const int flags = LIB_ID_COPY_LOCALIZE;
+  /* Free any existing eval stroke data. This happens in case we have a single user on the data
+   * block and the strokes have not been deleted. */
+  if (!BLI_listbase_is_empty(&gpf_eval->strokes)) {
+    BKE_gpencil_free_strokes(gpf_eval);
+  }
+  /* Copy strokes to eval frame and update internal orig pointers. */
+  BKE_gpencil_frame_copy_strokes(gpf_orig, gpf_eval);
+  BKE_gpencil_frame_original_pointers_update(gpf_orig, gpf_eval);
+}
 
-  bGPdata *result = (bGPdata *)BKE_id_copy_ex(NULL, &gpd->id, NULL, flags);
-  return result;
+static void copy_frame_to_eval_cb(bGPDlayer *gpl,
+                                  bGPDframe *gpf,
+                                  bGPDstroke *UNUSED(gps),
+                                  void *UNUSED(thunk))
+{
+  /* Early return when callback:
+   * - Is not provided with a frame.
+   * - When the frame is the layer's active frame (already handled in
+   * gpencil_copy_visible_frames_to_eval).
+   */
+  if (gpf == NULL || gpf == gpl->actframe) {
+    return;
+  }
+
+  copy_frame_to_eval_ex(gpf->runtime.gpf_orig, gpf);
+}
+
+static void gpencil_copy_visible_frames_to_eval(Depsgraph *depsgraph, Scene *scene, Object *ob)
+{
+  /* Remap layers active frame with time modifiers applied. */
+  bGPdata *gpd_eval = ob->data;
+  LISTBASE_FOREACH (bGPDlayer *, gpl_eval, &gpd_eval->layers) {
+    bGPDframe *gpf_eval = gpl_eval->actframe;
+    int remap_cfra = gpencil_remap_time_get(depsgraph, scene, ob, gpl_eval);
+    if (gpf_eval == NULL || gpf_eval->framenum != remap_cfra) {
+      gpl_eval->actframe = BKE_gpencil_layer_frame_get(gpl_eval, remap_cfra, GP_GETFRAME_USE_PREV);
+    }
+    /* Always copy active frame to eval, because the modifiers always evaluate the active frame,
+     * even if it's not visible (e.g. the layer is hidden).*/
+    if (gpl_eval->actframe != NULL) {
+      copy_frame_to_eval_ex(gpl_eval->actframe->runtime.gpf_orig, gpl_eval->actframe);
+    }
+  }
+
+  /* Copy visible frames that are not the active one to evaluated version. */
+  BKE_gpencil_visible_stroke_advanced_iter(
+      NULL, ob, copy_frame_to_eval_cb, NULL, NULL, true, scene->r.cfra);
 }
 
 void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *ob)
@@ -698,33 +725,44 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
     }
   }
 
-  const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_eval);
-  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd_eval);
-  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
-                                   (ob->greasepencil_modifiers.first != NULL) &&
-                                   (!GPENCIL_SIMPLIFY_MODIF(scene)));
-  if ((!do_modifiers) && (!do_parent) && (!do_transform)) {
-    return;
-  }
   DEG_debug_print_eval(depsgraph, __func__, gpd_eval->id.name, gpd_eval);
 
-  /* If only one user, don't need a new copy, just update data of the frame. */
-  if (gpd_orig->id.us == 1) {
+  /* Delete any previously created runtime copy. */
+  if (ob->runtime.gpd_eval != NULL) {
+    /* Make sure to clear the pointer in case the runtime eval data points to the same data block.
+     * This can happen when the gpencil data block was not tagged for a depsgraph update after last
+     * call to this function (e.g. a frame change). */
+    if (gpd_eval == ob->runtime.gpd_eval) {
+      gpd_eval = NULL;
+    }
+    BKE_gpencil_eval_delete(ob->runtime.gpd_eval);
     ob->runtime.gpd_eval = NULL;
-    gpencil_copy_activeframe_to_eval(depsgraph, scene, ob, ob_orig->data, gpd_eval);
+    ob->data = gpd_eval;
+  }
+
+  const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_orig);
+  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd_orig);
+  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
+                                   (ob_orig->greasepencil_modifiers.first != NULL) &&
+                                   (!GPENCIL_SIMPLIFY_MODIF(scene)));
+  if ((!do_modifiers) && (!do_parent) && (!do_transform)) {
+    BLI_assert(ob->data != NULL);
     return;
   }
 
-  /* Copy full Datablock to evaluated version. */
-  ob->runtime.gpd_orig = gpd_orig;
-  if (ob->runtime.gpd_eval != NULL) {
-    BKE_gpencil_eval_delete(ob->runtime.gpd_eval);
-    ob->runtime.gpd_eval = NULL;
-    ob->data = ob->runtime.gpd_orig;
+  /* If datablock has only one user, we can update its eval data directly.
+   * Otherwise, we need to have distinct copies for each instance, since applied transformations
+   * may differ. */
+  if (gpd_orig->id.us > 1) {
+    /* Copy of the original datablock's structure (layers and empty frames). */
+    ob->runtime.gpd_eval = gpencil_copy_structure_for_eval(gpd_orig);
+    /* Overwrite ob->data with gpd_eval here. */
+    gpencil_assign_object_eval(ob);
   }
-  ob->runtime.gpd_eval = gpencil_copy_for_eval(ob->runtime.gpd_orig);
-  gpencil_assign_object_eval(ob);
-  BKE_gpencil_update_orig_pointers(ob_orig, ob);
+
+  BLI_assert(ob->data != NULL);
+  /* Only copy strokes from visible frames to evaluated data. */
+  gpencil_copy_visible_frames_to_eval(depsgraph, scene, ob);
 }
 
 void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)

@@ -1,19 +1,6 @@
-/*
+/* SPDX-License-Identifier: Apache-2.0
  * Adapted from code copyright 2009-2010 NVIDIA Corporation
- * Modifications Copyright 2011, Blender Foundation.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+ * Modifications Copyright 2011-2022 Blender Foundation. */
 
 #ifndef __BVH_PARAMS_H__
 #define __BVH_PARAMS_H__
@@ -52,10 +39,10 @@ enum BVHType {
   BVH_NUM_TYPES,
 };
 
-/* Names bitflag type to denote which BVH layouts are supported by
+/* Names bit-flag type to denote which BVH layouts are supported by
  * particular area.
  *
- * Bitflags are the BVH_LAYOUT_* values.
+ * Bit-flags are the BVH_LAYOUT_* values.
  */
 typedef int BVHLayoutMask;
 
@@ -142,7 +129,7 @@ class BVHParams {
 
     top_level = false;
     bvh_layout = BVH_LAYOUT_BVH2;
-    use_compact_structure = true;
+    use_compact_structure = false;
     use_unaligned_nodes = false;
 
     num_motion_curve_steps = 0;

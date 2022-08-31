@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -112,7 +98,7 @@ static void rna_LayerObjects_active_object_set(PointerRNA *ptr,
   }
 }
 
-size_t rna_ViewLayer_path_buffer_get(ViewLayer *view_layer,
+size_t rna_ViewLayer_path_buffer_get(const ViewLayer *view_layer,
                                      char *r_rna_path,
                                      const size_t rna_path_buffer_size)
 {
@@ -122,9 +108,9 @@ size_t rna_ViewLayer_path_buffer_get(ViewLayer *view_layer,
   return BLI_snprintf_rlen(r_rna_path, rna_path_buffer_size, "view_layers[\"%s\"]", name_esc);
 }
 
-static char *rna_ViewLayer_path(PointerRNA *ptr)
+static char *rna_ViewLayer_path(const PointerRNA *ptr)
 {
-  ViewLayer *view_layer = (ViewLayer *)ptr->data;
+  const ViewLayer *view_layer = (ViewLayer *)ptr->data;
   char rna_path[sizeof(view_layer->name) * 3];
 
   rna_ViewLayer_path_buffer_get(view_layer, rna_path, sizeof(rna_path));
@@ -353,6 +339,7 @@ static void rna_LayerCollection_update(Main *UNUSED(bmain), Scene *UNUSED(scene)
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
 
   WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
+  WM_main_add_notifier(NC_IMAGE | ND_LAYER_CONTENT, NULL);
 }
 
 static bool rna_LayerCollection_has_objects(LayerCollection *lc)

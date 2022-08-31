@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 /** \file
  * \ingroup RNA
@@ -871,30 +857,30 @@ static void rna_Fluid_domaintype_set(struct PointerRNA *ptr, int value)
   BKE_fluid_fields_sanitize(settings);
 }
 
-static char *rna_FluidDomainSettings_path(PointerRNA *ptr)
+static char *rna_FluidDomainSettings_path(const PointerRNA *ptr)
 {
-  FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->fmd;
+  const FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
+  const ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_str_escape(name_esc, md->name, sizeof(name_esc));
   return BLI_sprintfN("modifiers[\"%s\"].domain_settings", name_esc);
 }
 
-static char *rna_FluidFlowSettings_path(PointerRNA *ptr)
+static char *rna_FluidFlowSettings_path(const PointerRNA *ptr)
 {
-  FluidFlowSettings *settings = (FluidFlowSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->fmd;
+  const FluidFlowSettings *settings = (FluidFlowSettings *)ptr->data;
+  const ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_str_escape(name_esc, md->name, sizeof(name_esc));
   return BLI_sprintfN("modifiers[\"%s\"].flow_settings", name_esc);
 }
 
-static char *rna_FluidEffectorSettings_path(PointerRNA *ptr)
+static char *rna_FluidEffectorSettings_path(const PointerRNA *ptr)
 {
-  FluidEffectorSettings *settings = (FluidEffectorSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->fmd;
+  const FluidEffectorSettings *settings = (FluidEffectorSettings *)ptr->data;
+  const ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_str_escape(name_esc, md->name, sizeof(name_esc));
@@ -907,9 +893,10 @@ static char *rna_FluidEffectorSettings_path(PointerRNA *ptr)
 
 #  ifdef WITH_FLUID
 
-static int rna_FluidModifier_grid_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
+static int rna_FluidModifier_grid_get_length(const PointerRNA *ptr,
+                                             int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
+  const FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *density = NULL;
   int size = 0;
 
@@ -932,7 +919,7 @@ static int rna_FluidModifier_grid_get_length(PointerRNA *ptr, int length[RNA_MAX
   return length[0];
 }
 
-static int rna_FluidModifier_color_grid_get_length(PointerRNA *ptr,
+static int rna_FluidModifier_color_grid_get_length(const PointerRNA *ptr,
                                                    int length[RNA_MAX_ARRAY_DIMENSION])
 {
   rna_FluidModifier_grid_get_length(ptr, length);
@@ -941,10 +928,10 @@ static int rna_FluidModifier_color_grid_get_length(PointerRNA *ptr,
   return length[0];
 }
 
-static int rna_FluidModifier_velocity_grid_get_length(PointerRNA *ptr,
+static int rna_FluidModifier_velocity_grid_get_length(const PointerRNA *ptr,
                                                       int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
+  const FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *vx = NULL;
   float *vy = NULL;
   float *vz = NULL;
@@ -962,10 +949,10 @@ static int rna_FluidModifier_velocity_grid_get_length(PointerRNA *ptr,
   return length[0];
 }
 
-static int rna_FluidModifier_heat_grid_get_length(PointerRNA *ptr,
+static int rna_FluidModifier_heat_grid_get_length(const PointerRNA *ptr,
                                                   int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
+  const FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *heat = NULL;
   int size = 0;
 
@@ -2460,8 +2447,10 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "cfl_condition", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "cfl_condition");
   RNA_def_property_range(prop, 0.0, 10.0);
-  RNA_def_property_ui_text(
-      prop, "CFL", "Maximal velocity per cell (higher value results in greater timesteps)");
+  RNA_def_property_ui_text(prop,
+                           "CFL",
+                           "Maximal velocity per cell (greater CFL numbers will minimize the "
+                           "number of simulation steps and the computation time.)");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
 
   prop = RNA_def_property(srna, "use_adaptive_timesteps", PROP_BOOLEAN, PROP_NONE);
@@ -2656,6 +2645,12 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, gridlines_cell_filter_items);
   RNA_def_property_ui_text(prop, "Cell Type", "Cell type to be highlighted");
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, NULL);
+
+  prop = RNA_def_property(srna, "velocity_scale", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "velocity_scale");
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
+  RNA_def_property_ui_text(prop, "Velocity Scale", "Factor to control the amount of motion blur");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_update");
 }
 
 static void rna_def_fluid_flow_settings(BlenderRNA *brna)

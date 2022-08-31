@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -63,8 +47,6 @@ typedef struct IDCacheKey {
   /* Value uniquely identifying the cache within its ID.
    * Typically the offset of its member in the data-block struct, but can be anything. */
   size_t offset_in_ID;
-  /* Actual address of the cached data to save and restore. */
-  void *cache_v;
 } IDCacheKey;
 
 uint BKE_idtype_cache_key_hash(const void *key_v);
@@ -103,7 +85,11 @@ typedef void (*IDTypeForeachCacheFunction)(struct ID *id,
 
 typedef void (*IDTypeForeachPathFunction)(struct ID *id, struct BPathForeachPathData *bpath_data);
 
-typedef struct ID *(*IDTypeEmbeddedOwnerGetFunction)(struct Main *bmain, struct ID *id);
+/** \param owner_id_hint: If non-NULL, a potential owner of the given embedded ID. Can speed up
+ * look-up of the owner ID in some cases. */
+typedef struct ID *(*IDTypeEmbeddedOwnerGetFunction)(struct Main *bmain,
+                                                     struct ID *id,
+                                                     struct ID *owner_id_hint);
 
 typedef void (*IDTypeBlendWriteFunction)(struct BlendWriter *writer,
                                          struct ID *id,
@@ -127,7 +113,7 @@ typedef struct IDTypeInfo {
    */
   short id_code;
   /**
-   * Bitflag matching id_code, used for filtering (e.g. in file browser), see DNA_ID.h's
+   * Bit-flag matching id_code, used for filtering (e.g. in file browser), see DNA_ID.h's
    * FILTER_ID_XX enums.
    */
   uint64_t id_filter;
@@ -246,7 +232,7 @@ extern IDTypeInfo IDType_ID_SCE;
 extern IDTypeInfo IDType_ID_LI;
 extern IDTypeInfo IDType_ID_OB;
 extern IDTypeInfo IDType_ID_ME;
-extern IDTypeInfo IDType_ID_CU;
+extern IDTypeInfo IDType_ID_CU_LEGACY;
 extern IDTypeInfo IDType_ID_MB;
 extern IDTypeInfo IDType_ID_MA;
 extern IDTypeInfo IDType_ID_TE;
@@ -278,7 +264,7 @@ extern IDTypeInfo IDType_ID_PC;
 extern IDTypeInfo IDType_ID_CF;
 extern IDTypeInfo IDType_ID_WS;
 extern IDTypeInfo IDType_ID_LP;
-extern IDTypeInfo IDType_ID_HA;
+extern IDTypeInfo IDType_ID_CV;
 extern IDTypeInfo IDType_ID_PT;
 extern IDTypeInfo IDType_ID_VO;
 extern IDTypeInfo IDType_ID_SIM;

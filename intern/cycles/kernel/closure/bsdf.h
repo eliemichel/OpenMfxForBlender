@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -99,11 +86,11 @@ ccl_device_inline float bump_shadowing_term(float3 Ng, float3 N, float3 I)
   return -g2 * g + g2 + g;
 }
 
-/* Shadow terminator workaround, taken from Appleseed.
- * Original code is under the MIT License
- * Copyright (c) 2019 Francois Beaune, The appleseedhq Organization */
 ccl_device_inline float shift_cos_in(float cos_in, const float frequency_multiplier)
 {
+  /* Shadow terminator workaround, taken from Appleseed.
+   * SPDX-License-Identifier: MIT
+   * Copyright (c) 2019 Francois Beaune, The appleseedhq Organization */
   cos_in = min(cos_in, 1.0f);
 
   const float angle = fast_acosf(cos_in);
@@ -447,16 +434,21 @@ ccl_device_inline int bsdf_sample(KernelGlobals kg,
   else {
     /* Shadow terminator offset. */
     const float frequency_multiplier =
-        kernel_tex_fetch(__objects, sd->object).shadow_terminator_shading_offset;
+        kernel_data_fetch(objects, sd->object).shadow_terminator_shading_offset;
     if (frequency_multiplier > 1.0f) {
       *eval *= shift_cos_in(dot(*omega_in, sc->N), frequency_multiplier);
     }
     if (label & LABEL_DIFFUSE) {
-      if (!isequal_float3(sc->N, sd->N)) {
+      if (!isequal(sc->N, sd->N)) {
         *eval *= bump_shadowing_term((label & LABEL_TRANSMIT) ? -sd->N : sd->N, sc->N, *omega_in);
       }
     }
   }
+
+#ifdef WITH_CYCLES_DEBUG
+  kernel_assert(*pdf >= 0.0f);
+  kernel_assert(eval->x >= 0.0f && eval->y >= 0.0f && eval->z >= 0.0f);
+#endif
 
   return label;
 }
@@ -558,13 +550,13 @@ ccl_device_inline
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
-      if (!isequal_float3(sc->N, sd->N)) {
+      if (!isequal(sc->N, sd->N)) {
         eval *= bump_shadowing_term(sd->N, sc->N, omega_in);
       }
     }
     /* Shadow terminator offset. */
     const float frequency_multiplier =
-        kernel_tex_fetch(__objects, sd->object).shadow_terminator_shading_offset;
+        kernel_data_fetch(objects, sd->object).shadow_terminator_shading_offset;
     if (frequency_multiplier > 1.0f) {
       eval *= shift_cos_in(dot(omega_in, sc->N), frequency_multiplier);
     }
@@ -643,12 +635,15 @@ ccl_device_inline
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
-      if (!isequal_float3(sc->N, sd->N)) {
+      if (!isequal(sc->N, sd->N)) {
         eval *= bump_shadowing_term(-sd->N, sc->N, omega_in);
       }
     }
   }
-
+#ifdef WITH_CYCLES_DEBUG
+  kernel_assert(*pdf >= 0.0f);
+  kernel_assert(eval.x >= 0.0f && eval.y >= 0.0f && eval.z >= 0.0f);
+#endif
   return eval;
 }
 

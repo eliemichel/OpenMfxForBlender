@@ -1,22 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2004 Blender Foundation
- * All rights reserved.
- * .blend file reading entry point
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2004 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup blenloader
@@ -137,7 +120,7 @@ void BLO_memfile_write_init(MemFileWriteData *mem_data,
           *entry = mem_chunk;
         }
         else {
-          BLI_assert(0);
+          BLI_assert_unreachable();
         }
       }
     }
@@ -212,7 +195,7 @@ struct Main *BLO_memfile_main_get(struct MemFile *memfile,
   return bmain_undo;
 }
 
-bool BLO_memfile_write_file(struct MemFile *memfile, const char *filename)
+bool BLO_memfile_write_file(struct MemFile *memfile, const char *filepath)
 {
   MemFileChunk *chunk;
   int file, oflags;
@@ -233,12 +216,12 @@ bool BLO_memfile_write_file(struct MemFile *memfile, const char *filename)
 #    warning "Symbolic links will be followed on undo save, possibly causing CVE-2008-1103"
 #  endif
 #endif
-  file = BLI_open(filename, oflags, 0666);
+  file = BLI_open(filepath, oflags, 0666);
 
   if (file == -1) {
     fprintf(stderr,
             "Unable to save '%s': %s\n",
-            filename,
+            filepath,
             errno ? strerror(errno) : "Unknown error opening file");
     return false;
   }
@@ -259,7 +242,7 @@ bool BLO_memfile_write_file(struct MemFile *memfile, const char *filename)
   if (chunk) {
     fprintf(stderr,
             "Unable to save '%s': %s\n",
-            filename,
+            filepath,
             errno ? strerror(errno) : "Unknown error writing file");
     return false;
   }

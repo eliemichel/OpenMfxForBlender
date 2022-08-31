@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2009 Blender Foundation, Joshua Leung. All rights reserved. */
 
 /** \file
  * \ingroup edanimation
@@ -55,6 +39,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_path.h"
 
 #include "anim_intern.h"
 
@@ -722,6 +707,72 @@ KeyingSet *ANIM_get_keyingset_for_autokeying(const Scene *scene, const char *tra
     return ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_AVAILABLE_ID);
   }
   return ANIM_builtin_keyingset_get_named(NULL, transformKSName);
+}
+
+static void anim_keyingset_visit_for_search_impl(const bContext *C,
+                                                 StringPropertySearchVisitFunc visit_fn,
+                                                 void *visit_user_data,
+                                                 const bool use_poll)
+{
+  /* Poll requires context.  */
+  if (use_poll && (C == NULL)) {
+    return;
+  }
+
+  Scene *scene = C ? CTX_data_scene(C) : NULL;
+  KeyingSet *ks;
+
+  /* Active Keying Set. */
+  if (!use_poll || (scene && scene->active_keyingset)) {
+    StringPropertySearchVisitParams visit_params = {NULL};
+    visit_params.text = "__ACTIVE__";
+    visit_params.info = "Active Keying Set";
+    visit_fn(visit_user_data, &visit_params);
+  }
+
+  /* User-defined Keying Sets. */
+  if (scene && scene->keyingsets.first) {
+    for (ks = scene->keyingsets.first; ks; ks = ks->next) {
+      if (use_poll && !ANIM_keyingset_context_ok_poll((bContext *)C, ks)) {
+        continue;
+      }
+      StringPropertySearchVisitParams visit_params = {NULL};
+      visit_params.text = ks->idname;
+      visit_params.info = ks->name;
+      visit_fn(visit_user_data, &visit_params);
+    }
+  }
+
+  /* Builtin Keying Sets. */
+  for (ks = builtin_keyingsets.first; ks; ks = ks->next) {
+    if (use_poll && !ANIM_keyingset_context_ok_poll((bContext *)C, ks)) {
+      continue;
+    }
+    StringPropertySearchVisitParams visit_params = {NULL};
+    visit_params.text = ks->idname;
+    visit_params.info = ks->name;
+    visit_fn(visit_user_data, &visit_params);
+  }
+}
+
+void ANIM_keyingset_visit_for_search(const bContext *C,
+                                     PointerRNA *UNUSED(ptr),
+                                     PropertyRNA *UNUSED(prop),
+                                     const char *UNUSED(edit_text),
+                                     StringPropertySearchVisitFunc visit_fn,
+                                     void *visit_user_data)
+{
+  anim_keyingset_visit_for_search_impl(C, visit_fn, visit_user_data, false);
+}
+
+void ANIM_keyingset_visit_for_search_no_poll(const bContext *C,
+                                             PointerRNA *UNUSED(ptr),
+                                             PropertyRNA *UNUSED(prop),
+                                             const char *UNUSED(edit_text),
+                                             StringPropertySearchVisitFunc visit_fn,
+                                             void *visit_user_data)
+{
+  anim_keyingset_visit_for_search_impl(C, visit_fn, visit_user_data, true);
 }
 
 /* Menu of All Keying Sets ----------------------------- */

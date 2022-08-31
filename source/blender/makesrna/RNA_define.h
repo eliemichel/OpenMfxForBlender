@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #pragma once
 
@@ -460,6 +446,9 @@ void RNA_def_property_string_funcs(PropertyRNA *prop,
                                    const char *get,
                                    const char *length,
                                    const char *set);
+void RNA_def_property_string_search_func(PropertyRNA *prop,
+                                         const char *search,
+                                         eStringPropertySearchFlag search_flag);
 void RNA_def_property_pointer_funcs(
     PropertyRNA *prop, const char *get, const char *set, const char *type_fn, const char *poll);
 void RNA_def_property_collection_funcs(PropertyRNA *prop,
@@ -504,6 +493,9 @@ void RNA_def_property_string_funcs_runtime(PropertyRNA *prop,
                                            StringPropertyGetFunc getfunc,
                                            StringPropertyLengthFunc lengthfunc,
                                            StringPropertySetFunc setfunc);
+void RNA_def_property_string_search_func_runtime(PropertyRNA *prop,
+                                                 StringPropertySearchFunc search_fn,
+                                                 eStringPropertySearchFlag search_flag);
 
 void RNA_def_property_translation_context(PropertyRNA *prop, const char *context);
 

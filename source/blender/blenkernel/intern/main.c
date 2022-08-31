@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bke
@@ -40,6 +24,7 @@
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_main_idmap.h"
+#include "BKE_main_namemap.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
@@ -198,6 +183,10 @@ void BKE_main_free(Main *mainvar)
 
   if (mainvar->id_map) {
     BKE_main_idmap_destroy(mainvar->id_map);
+  }
+
+  if (mainvar->name_map) {
+    BKE_main_namemap_destroy(&mainvar->name_map);
   }
 
   BLI_spin_end((SpinLock *)mainvar->lock);
@@ -518,13 +507,13 @@ BlendThumbnail *BKE_main_thumbnail_from_imbuf(Main *bmain, ImBuf *img)
   }
 
   if (img) {
-    const size_t sz = BLEN_THUMB_MEMSIZE(img->x, img->y);
-    data = MEM_mallocN(sz, __func__);
+    const size_t data_size = BLEN_THUMB_MEMSIZE(img->x, img->y);
+    data = MEM_mallocN(data_size, __func__);
 
     IMB_rect_from_float(img); /* Just in case... */
     data->width = img->x;
     data->height = img->y;
-    memcpy(data->rect, img->rect, sz - sizeof(*data));
+    memcpy(data->rect, img->rect, data_size - sizeof(*data));
   }
 
   if (bmain) {
@@ -579,7 +568,7 @@ ListBase *which_libbase(Main *bmain, short type)
       return &(bmain->objects);
     case ID_ME:
       return &(bmain->meshes);
-    case ID_CU:
+    case ID_CU_LEGACY:
       return &(bmain->curves);
     case ID_MB:
       return &(bmain->metaballs);
@@ -643,8 +632,8 @@ ListBase *which_libbase(Main *bmain, short type)
       return &(bmain->cachefiles);
     case ID_WS:
       return &(bmain->workspaces);
-    case ID_HA:
-      return &(bmain->hairs);
+    case ID_CV:
+      return &(bmain->hair_curves);
     case ID_PT:
       return &(bmain->pointclouds);
     case ID_VO:
@@ -686,9 +675,9 @@ int set_listbasepointers(Main *bmain, ListBase *lb[/*INDEX_ID_MAX*/])
 
   lb[INDEX_ID_CF] = &(bmain->cachefiles);
   lb[INDEX_ID_ME] = &(bmain->meshes);
-  lb[INDEX_ID_CU] = &(bmain->curves);
+  lb[INDEX_ID_CU_LEGACY] = &(bmain->curves);
   lb[INDEX_ID_MB] = &(bmain->metaballs);
-  lb[INDEX_ID_HA] = &(bmain->hairs);
+  lb[INDEX_ID_CV] = &(bmain->hair_curves);
   lb[INDEX_ID_PT] = &(bmain->pointclouds);
   lb[INDEX_ID_VO] = &(bmain->volumes);
 

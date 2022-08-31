@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2009 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2009 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edinterface
@@ -26,6 +10,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_material_types.h"
 #include "DNA_modifier_types.h" /* for handling geometry nodes properties */
 #include "DNA_object_types.h"   /* for OB_DATA_SUPPORT_ID */
 #include "DNA_screen_types.h"
@@ -36,6 +21,7 @@
 
 #include "BLF_api.h"
 #include "BLT_lang.h"
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -43,6 +29,8 @@
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
+#include "BKE_lib_remap.h"
+#include "BKE_material.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
@@ -54,6 +42,8 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_path.h"
+#include "RNA_prototypes.h"
 #include "RNA_types.h"
 
 #include "UI_interface.h"
@@ -756,6 +746,284 @@ static void UI_OT_override_remove_button(wmOperatorType *ot)
   RNA_def_boolean(ot->srna, "all", 1, "All", "Reset to default values all elements of the array");
 }
 
+static void override_idtemplate_ids_get(
+    bContext *C, ID **r_owner_id, ID **r_id, PointerRNA *r_owner_ptr, PropertyRNA **r_prop)
+{
+  PointerRNA owner_ptr;
+  PropertyRNA *prop;
+  UI_context_active_but_prop_get_templateID(C, &owner_ptr, &prop);
+
+  if (owner_ptr.data == NULL || prop == NULL) {
+    *r_owner_id = *r_id = NULL;
+    if (r_owner_ptr != NULL) {
+      *r_owner_ptr = PointerRNA_NULL;
+    }
+    if (r_prop != NULL) {
+      *r_prop = NULL;
+    }
+    return;
+  }
+
+  *r_owner_id = owner_ptr.owner_id;
+  PointerRNA idptr = RNA_property_pointer_get(&owner_ptr, prop);
+  *r_id = idptr.data;
+  if (r_owner_ptr != NULL) {
+    *r_owner_ptr = owner_ptr;
+  }
+  if (r_prop != NULL) {
+    *r_prop = prop;
+  }
+}
+
+static bool override_idtemplate_poll(bContext *C, const bool is_create_op)
+{
+  ID *owner_id, *id;
+  override_idtemplate_ids_get(C, &owner_id, &id, NULL, NULL);
+
+  if (owner_id == NULL || id == NULL) {
+    return false;
+  }
+
+  if (is_create_op) {
+    if (!ID_IS_LINKED(id) && !ID_IS_OVERRIDE_LIBRARY_REAL(id)) {
+      return false;
+    }
+    return true;
+  }
+
+  /* Reset/Clear operations. */
+  if (ID_IS_LINKED(id) || !ID_IS_OVERRIDE_LIBRARY_REAL(id)) {
+    return false;
+  }
+  return true;
+}
+
+static bool override_idtemplate_make_poll(bContext *C)
+{
+  return override_idtemplate_poll(C, true);
+}
+
+static int override_idtemplate_make_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  ID *owner_id, *id;
+  PointerRNA owner_ptr;
+  PropertyRNA *prop;
+  override_idtemplate_ids_get(C, &owner_id, &id, &owner_ptr, &prop);
+  if (ELEM(NULL, owner_id, id)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  ID *id_override = ui_template_id_liboverride_hierarchy_make(
+      C, CTX_data_main(C), owner_id, id, NULL);
+
+  if (id_override == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  PointerRNA idptr;
+  /* `idptr` is re-assigned to owner property to ensure proper updates etc. Here we also use it
+   * to ensure remapping of the owner property from the linked data to the newly created
+   * liboverride (note that in theory this remapping has already been done by code above), but
+   * only in case owner ID was already local ID (override or pure local data).
+   *
+   * Otherwise, owner ID will also have been overridden, and remapped already to use it's
+   * override of the data too. */
+  if (!ID_IS_LINKED(owner_id)) {
+    RNA_id_pointer_create(id_override, &idptr);
+    RNA_property_pointer_set(&owner_ptr, prop, idptr, NULL);
+  }
+  RNA_property_update(C, &owner_ptr, prop);
+
+  /* 'Security' extra tagging, since this process may also affect the owner ID and not only the
+   * used ID, relying on the property update code only is not always enough. */
+  DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_BASE_FLAGS | ID_RECALC_COPY_ON_WRITE);
+  WM_event_add_notifier(C, NC_WINDOW, NULL);
+  WM_event_add_notifier(C, NC_WM | ND_LIB_OVERRIDE_CHANGED, NULL);
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_override_idtemplate_make(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Make Library Override";
+  ot->idname = "UI_OT_override_idtemplate_make";
+  ot->description =
+      "Create a local override of the selected linked data-block, and its hierarchy of "
+      "dependencies";
+
+  /* callbacks */
+  ot->poll = override_idtemplate_make_poll;
+  ot->exec = override_idtemplate_make_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_UNDO;
+}
+
+static bool override_idtemplate_reset_poll(bContext *C)
+{
+  return override_idtemplate_poll(C, false);
+}
+
+static int override_idtemplate_reset_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  ID *owner_id, *id;
+  PointerRNA owner_ptr;
+  PropertyRNA *prop;
+  override_idtemplate_ids_get(C, &owner_id, &id, &owner_ptr, &prop);
+  if (ELEM(NULL, owner_id, id)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  if (ID_IS_LINKED(id) || !ID_IS_OVERRIDE_LIBRARY_REAL(id)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  BKE_lib_override_library_id_reset(CTX_data_main(C), id, false);
+
+  PointerRNA idptr;
+  /* `idptr` is re-assigned to owner property to ensure proper updates etc. */
+  RNA_id_pointer_create(id, &idptr);
+  RNA_property_pointer_set(&owner_ptr, prop, idptr, NULL);
+  RNA_property_update(C, &owner_ptr, prop);
+
+  /* No need for 'security' extra tagging here, since this process will never affect the owner ID.
+   */
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_override_idtemplate_reset(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Reset Library Override";
+  ot->idname = "UI_OT_override_idtemplate_reset";
+  ot->description = "Reset the selected local override to its linked reference values";
+
+  /* callbacks */
+  ot->poll = override_idtemplate_reset_poll;
+  ot->exec = override_idtemplate_reset_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_UNDO;
+}
+
+static bool override_idtemplate_clear_poll(bContext *C)
+{
+  return override_idtemplate_poll(C, false);
+}
+
+static int override_idtemplate_clear_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  ID *owner_id, *id;
+  PointerRNA owner_ptr;
+  PropertyRNA *prop;
+  override_idtemplate_ids_get(C, &owner_id, &id, &owner_ptr, &prop);
+  if (ELEM(NULL, owner_id, id)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  if (ID_IS_LINKED(id)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  Main *bmain = CTX_data_main(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Scene *scene = CTX_data_scene(C);
+  ID *id_new = id;
+
+  if (BKE_lib_override_library_is_hierarchy_leaf(bmain, id)) {
+    id_new = id->override_library->reference;
+    bool do_remap_active = false;
+    if (OBACT(view_layer) == (Object *)id) {
+      BLI_assert(GS(id->name) == ID_OB);
+      BLI_assert(GS(id_new->name) == ID_OB);
+      do_remap_active = true;
+    }
+    BKE_libblock_remap(bmain, id, id_new, ID_REMAP_SKIP_INDIRECT_USAGE);
+    if (do_remap_active) {
+      Object *ref_object = (Object *)id_new;
+      Base *basact = BKE_view_layer_base_find(view_layer, ref_object);
+      if (basact != NULL) {
+        view_layer->basact = basact;
+      }
+      DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
+    }
+    BKE_id_delete(bmain, id);
+  }
+  else {
+    BKE_lib_override_library_id_reset(bmain, id, true);
+  }
+
+  /* Here the affected ID may remain the same, or be replaced by its linked reference. In either
+   * case, the owner ID remains unchanged, and remapping is already handled by internal code, so
+   * calling `RNA_property_update` on it is enough to ensure proper notifiers are sent. */
+  RNA_property_update(C, &owner_ptr, prop);
+
+  /* 'Security' extra tagging, since this process may also affect the owner ID and not only the
+   * used ID, relying on the property update code only is not always enough. */
+  DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS | ID_RECALC_COPY_ON_WRITE);
+  WM_event_add_notifier(C, NC_WINDOW, NULL);
+  WM_event_add_notifier(C, NC_WM | ND_LIB_OVERRIDE_CHANGED, NULL);
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_override_idtemplate_clear(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Clear Library Override";
+  ot->idname = "UI_OT_override_idtemplate_clear";
+  ot->description =
+      "Delete the selected local override and relink its usages to the linked data-block if "
+      "possible, else reset it and mark it as non editable";
+
+  /* callbacks */
+  ot->poll = override_idtemplate_clear_poll;
+  ot->exec = override_idtemplate_clear_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_UNDO;
+}
+
+static bool override_idtemplate_menu_poll(const bContext *C_const, MenuType *UNUSED(mt))
+{
+  bContext *C = (bContext *)C_const;
+  ID *owner_id, *id;
+  override_idtemplate_ids_get(C, &owner_id, &id, NULL, NULL);
+
+  if (owner_id == NULL || id == NULL) {
+    return false;
+  }
+
+  if (!(ID_IS_LINKED(id) || ID_IS_OVERRIDE_LIBRARY_REAL(id))) {
+    return false;
+  }
+  return true;
+}
+
+static void override_idtemplate_menu_draw(const bContext *UNUSED(C), Menu *menu)
+{
+  uiLayout *layout = menu->layout;
+  uiItemO(layout, IFACE_("Make"), ICON_NONE, "UI_OT_override_idtemplate_make");
+  uiItemO(layout, IFACE_("Reset"), ICON_NONE, "UI_OT_override_idtemplate_reset");
+  uiItemO(layout, IFACE_("Clear"), ICON_NONE, "UI_OT_override_idtemplate_clear");
+}
+
+static void override_idtemplate_menu(void)
+{
+  MenuType *mt;
+
+  mt = MEM_callocN(sizeof(MenuType), __func__);
+  strcpy(mt->idname, "UI_MT_idtemplate_liboverride");
+  strcpy(mt->label, N_("Library Override"));
+  mt->poll = override_idtemplate_menu_poll;
+  mt->draw = override_idtemplate_menu_draw;
+  WM_menutype_add(mt);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -1180,7 +1448,9 @@ static void UI_OT_copy_to_selected_button(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Copy to Selected";
   ot->idname = "UI_OT_copy_to_selected_button";
-  ot->description = "Copy property from this object to selected objects or bones";
+  ot->description =
+      "Copy the property's value from the active item to the same property of all selected items "
+      "if the same property exists";
 
   /* callbacks */
   ot->poll = copy_to_selected_button_poll;
@@ -1687,7 +1957,7 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
   RNA_string_set(&ptr, "rna_prop", rna_prop.strinfo);
   RNA_string_set(&ptr, "rna_enum", rna_enum.strinfo);
   RNA_string_set(&ptr, "rna_ctxt", rna_ctxt.strinfo);
-  const int ret = WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+  const int ret = WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr, NULL);
 
   /* Clean up */
   if (but_label.strinfo) {
@@ -1875,7 +2145,7 @@ bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(
   return 0;
 }
 
-void UI_drop_color_copy(wmDrag *drag, wmDropBox *drop)
+void UI_drop_color_copy(bContext *UNUSED(C), wmDrag *drag, wmDropBox *drop)
 {
   uiDragColorHandle *drag_info = drag->poin;
 
@@ -1908,14 +2178,14 @@ static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
     if (RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
       if (!gamma) {
-        IMB_colormanagement_scene_linear_to_srgb_v3(color);
+        IMB_colormanagement_scene_linear_to_srgb_v3(color, color);
       }
       RNA_property_float_set_array(&but->rnapoin, but->rnaprop, color);
       RNA_property_update(C, &but->rnapoin, but->rnaprop);
     }
     else if (RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
       if (gamma) {
-        IMB_colormanagement_srgb_to_scene_linear_v3(color);
+        IMB_colormanagement_srgb_to_scene_linear_v3(color, color);
       }
       RNA_property_float_set_array(&but->rnapoin, but->rnaprop, color);
       RNA_property_update(C, &but->rnapoin, but->rnaprop);
@@ -1953,6 +2223,24 @@ static void UI_OT_drop_color(wmOperatorType *ot)
 /** \name Drop Name Operator
  * \{ */
 
+static bool drop_name_poll(bContext *C)
+{
+  if (!ED_operator_regionactive(C)) {
+    return false;
+  }
+
+  const uiBut *but = UI_but_active_drop_name_button(C);
+  if (!but) {
+    return false;
+  }
+
+  if (but->flag & UI_BUT_DISABLED) {
+    return false;
+  }
+
+  return true;
+}
+
 static int drop_name_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   uiBut *but = UI_but_active_drop_name_button(C);
@@ -1972,7 +2260,7 @@ static void UI_OT_drop_name(wmOperatorType *ot)
   ot->idname = "UI_OT_drop_name";
   ot->description = "Drop name to button";
 
-  ot->poll = ED_operator_regionactive;
+  ot->poll = drop_name_poll;
   ot->invoke = drop_name_invoke;
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
 
@@ -2047,40 +2335,42 @@ static void UI_OT_list_start_filter(wmOperatorType *ot)
 /** \name UI Tree-View Drop Operator
  * \{ */
 
-static bool ui_tree_view_drop_poll(bContext *C)
+static bool ui_view_drop_poll(bContext *C)
 {
   const wmWindow *win = CTX_wm_window(C);
   const ARegion *region = CTX_wm_region(C);
-  const uiTreeViewItemHandle *hovered_tree_item = UI_block_tree_view_find_item_at(
-      region, win->eventstate->xy);
+  if (region == NULL) {
+    return false;
+  }
+  const uiViewItemHandle *hovered_item = UI_region_views_find_item_at(region, win->eventstate->xy);
 
-  return hovered_tree_item != NULL;
+  return hovered_item != NULL;
 }
 
-static int ui_tree_view_drop_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
+static int ui_view_drop_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
   if (event->custom != EVT_DATA_DRAGDROP) {
     return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
   }
 
   const ARegion *region = CTX_wm_region(C);
-  uiTreeViewItemHandle *hovered_tree_item = UI_block_tree_view_find_item_at(region, event->xy);
+  uiViewItemHandle *hovered_item = UI_region_views_find_item_at(region, event->xy);
 
-  if (!UI_tree_view_item_drop_handle(C, hovered_tree_item, event->customdata)) {
+  if (!UI_view_item_drop_handle(C, hovered_item, event->customdata)) {
     return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
   }
 
   return OPERATOR_FINISHED;
 }
 
-static void UI_OT_tree_view_drop(wmOperatorType *ot)
+static void UI_OT_view_drop(wmOperatorType *ot)
 {
-  ot->name = "Tree View drop";
-  ot->idname = "UI_OT_tree_view_drop";
-  ot->description = "Drag and drop items onto a tree item";
+  ot->name = "View drop";
+  ot->idname = "UI_OT_view_drop";
+  ot->description = "Drag and drop items onto a data-set item";
 
-  ot->invoke = ui_tree_view_drop_invoke;
-  ot->poll = ui_tree_view_drop_poll;
+  ot->invoke = ui_view_drop_invoke;
+  ot->poll = ui_view_drop_poll;
 
   ot->flag = OPTYPE_INTERNAL;
 }
@@ -2088,44 +2378,115 @@ static void UI_OT_tree_view_drop(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name UI Tree-View Item Rename Operator
+/** \name UI View Item Rename Operator
  *
- * General purpose renaming operator for tree-views. Thanks to this, to add a rename button to
- * context menus for example, tree-view API users don't have to implement own renaming operators
- * with the same logic as they already have for their #ui::AbstractTreeViewItem::rename() override.
+ * General purpose renaming operator for views. Thanks to this, to add a rename button to context
+ * menus for example, view API users don't have to implement their own renaming operators with the
+ * same logic as they already have for their #ui::AbstractViewItem::rename() override.
  *
  * \{ */
 
-static bool ui_tree_view_item_rename_poll(bContext *C)
+static bool ui_view_item_rename_poll(bContext *C)
 {
   const ARegion *region = CTX_wm_region(C);
-  const uiTreeViewItemHandle *active_item = UI_block_tree_view_find_active_item(region);
-  return active_item != NULL && UI_tree_view_item_can_rename(active_item);
+  if (region == NULL) {
+    return false;
+  }
+  const uiViewItemHandle *active_item = UI_region_views_find_active_item(region);
+  return active_item != NULL && UI_view_item_can_rename(active_item);
 }
 
-static int ui_tree_view_item_rename_exec(bContext *C, wmOperator *UNUSED(op))
+static int ui_view_item_rename_exec(bContext *C, wmOperator *UNUSED(op))
 {
   ARegion *region = CTX_wm_region(C);
-  uiTreeViewItemHandle *active_item = UI_block_tree_view_find_active_item(region);
+  uiViewItemHandle *active_item = UI_region_views_find_active_item(region);
 
-  UI_tree_view_item_begin_rename(active_item);
+  UI_view_item_begin_rename(active_item);
   ED_region_tag_redraw(region);
 
   return OPERATOR_FINISHED;
 }
 
-static void UI_OT_tree_view_item_rename(wmOperatorType *ot)
+static void UI_OT_view_item_rename(wmOperatorType *ot)
 {
-  ot->name = "Rename Tree-View Item";
-  ot->idname = "UI_OT_tree_view_item_rename";
-  ot->description = "Rename the active item in the tree";
+  ot->name = "Rename View Item";
+  ot->idname = "UI_OT_view_item_rename";
+  ot->description = "Rename the active item in the data-set view";
 
-  ot->exec = ui_tree_view_item_rename_exec;
-  ot->poll = ui_tree_view_item_rename_poll;
+  ot->exec = ui_view_item_rename_exec;
+  ot->poll = ui_view_item_rename_poll;
   /* Could get a custom tooltip via the `get_description()` callback and another overridable
-   * function of the tree-view. */
+   * function of the view. */
 
   ot->flag = OPTYPE_INTERNAL;
+}
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Drag/Drop Operator
+ *
+ * \{ */
+
+static bool ui_drop_material_poll(bContext *C)
+{
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "object", &RNA_Object);
+  Object *ob = ptr.data;
+  if (ob == NULL) {
+    return false;
+  }
+
+  PointerRNA mat_slot = CTX_data_pointer_get_type(C, "material_slot", &RNA_MaterialSlot);
+  if (RNA_pointer_is_null(&mat_slot)) {
+    return false;
+  }
+
+  return true;
+}
+
+static int ui_drop_material_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+
+  Material *ma = (Material *)WM_operator_properties_id_lookup_from_name_or_session_uuid(
+      bmain, op->ptr, ID_MA);
+  if (ma == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "object", &RNA_Object);
+  Object *ob = ptr.data;
+  BLI_assert(ob);
+
+  PointerRNA mat_slot = CTX_data_pointer_get_type(C, "material_slot", &RNA_MaterialSlot);
+  BLI_assert(mat_slot.data);
+  const int target_slot = RNA_int_get(&mat_slot, "slot_index") + 1;
+
+  /* only drop grease pencil material on grease pencil objects */
+  if ((ma->gp_style != NULL) && (ob->type != OB_GPENCIL)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  BKE_object_material_assign(bmain, ob, ma, target_slot, BKE_MAT_ASSIGN_USERPREF);
+
+  WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, ob);
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_LINKS, ma);
+  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_drop_material(wmOperatorType *ot)
+{
+  ot->name = "Drop Material in Material slots";
+  ot->description = "Drag material to Material slots in Properties";
+  ot->idname = "UI_OT_drop_material";
+
+  ot->poll = ui_drop_material_poll;
+  ot->exec = ui_drop_material_exec;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+
+  WM_operator_properties_id_lookup(ot, false);
 }
 
 /** \} */
@@ -2142,12 +2503,11 @@ void ED_operatortypes_ui(void)
   WM_operatortype_append(UI_OT_reset_default_button);
   WM_operatortype_append(UI_OT_assign_default_button);
   WM_operatortype_append(UI_OT_unset_property_button);
-  WM_operatortype_append(UI_OT_override_type_set_button);
-  WM_operatortype_append(UI_OT_override_remove_button);
   WM_operatortype_append(UI_OT_copy_to_selected_button);
   WM_operatortype_append(UI_OT_jump_to_target_button);
   WM_operatortype_append(UI_OT_drop_color);
   WM_operatortype_append(UI_OT_drop_name);
+  WM_operatortype_append(UI_OT_drop_material);
 #ifdef WITH_PYTHON
   WM_operatortype_append(UI_OT_editsource);
   WM_operatortype_append(UI_OT_edittranslation_init);
@@ -2158,8 +2518,15 @@ void ED_operatortypes_ui(void)
 
   WM_operatortype_append(UI_OT_list_start_filter);
 
-  WM_operatortype_append(UI_OT_tree_view_drop);
-  WM_operatortype_append(UI_OT_tree_view_item_rename);
+  WM_operatortype_append(UI_OT_view_drop);
+  WM_operatortype_append(UI_OT_view_item_rename);
+
+  WM_operatortype_append(UI_OT_override_type_set_button);
+  WM_operatortype_append(UI_OT_override_remove_button);
+  WM_operatortype_append(UI_OT_override_idtemplate_make);
+  WM_operatortype_append(UI_OT_override_idtemplate_reset);
+  WM_operatortype_append(UI_OT_override_idtemplate_clear);
+  override_idtemplate_menu();
 
   /* external */
   WM_operatortype_append(UI_OT_eyedropper_color);

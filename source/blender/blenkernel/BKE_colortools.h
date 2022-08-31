@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2006 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2006 Blender Foundation. All rights reserved. */
 #pragma once
 
 /** \file
@@ -144,6 +128,36 @@ void BKE_curvemapping_evaluate_premulRGBF(const struct CurveMapping *cumap,
 bool BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
 void BKE_curvemapping_table_F(const struct CurveMapping *cumap, float **array, int *size);
 void BKE_curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array, int *size);
+
+/** Get the minimum x value of each curve map table. */
+void BKE_curvemapping_get_range_minimums(const struct CurveMapping *curve_mapping,
+                                         float minimums[4]);
+
+/** Get the reciprocal of the difference between the maximum and the minimum x value of each curve
+ * map table. Evaluation parameters can be multiplied by this value to be normalized. If the
+ * difference is zero, 1^8 is returned. */
+void BKE_curvemapping_compute_range_dividers(const struct CurveMapping *curve_mapping,
+                                             float dividers[4]);
+
+/** Compute the slopes at the start and end points of each curve map. The slopes are multiplied by
+ * the range of the curve map to compensate for parameter normalization. If the slope is vertical,
+ * 1^8 is returned.  */
+void BKE_curvemapping_compute_slopes(const struct CurveMapping *curve_mapping,
+                                     float start_slopes[4],
+                                     float end_slopes[4]);
+
+/** Check if the curve map at the index is identity, that is, does nothing. A curve map is said to
+ * be identity if:
+ * - The curve mapping uses extrapolation.
+ * - Its range is 1.
+ * - The slope at its start point is 1.
+ * - The slope at its end point is 1.
+ * - The number of points is 2.
+ * - The start point is at (0, 0).
+ * - The end point is at (1, 1).
+ * Note that this could return false even if the curve map is identity, this happens in the case
+ * when more than 2 points exist in the curve map but all points are collinear. */
+bool BKE_curvemapping_is_map_identity(const struct CurveMapping *curve_mapping, int index);
 
 /**
  * Call when you do images etc, needs restore too. also verifies tables.

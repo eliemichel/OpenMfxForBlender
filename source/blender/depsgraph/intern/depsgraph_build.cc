@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2013 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2013 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup depsgraph
@@ -286,7 +270,7 @@ void DEG_graph_tag_relations_update(Depsgraph *graph)
 {
   DEG_DEBUG_PRINTF(graph, TAG, "%s: Tagging relations for update.\n", __func__);
   deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(graph);
-  deg_graph->need_update = true;
+  deg_graph->need_update_relations = true;
   /* NOTE: When relations are updated, it's quite possible that
    * we've got new bases in the scene. This means, we need to
    * re-create flat array of bases in view layer.
@@ -302,7 +286,7 @@ void DEG_graph_tag_relations_update(Depsgraph *graph)
 void DEG_graph_relations_update(Depsgraph *graph)
 {
   deg::Depsgraph *deg_graph = (deg::Depsgraph *)graph;
-  if (!deg_graph->need_update) {
+  if (!deg_graph->need_update_relations) {
     /* Graph is up to date, nothing to do. */
     return;
   }

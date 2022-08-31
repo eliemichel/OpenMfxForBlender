@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -57,38 +43,31 @@ static void node_geo_exec(GeoNodeExecParams params)
   const Field<bool> selection_field = params.extract_input<Field<bool>>("Selection");
 
   const NodeGeometrySeparateGeometry &storage = node_storage(params.node());
-  const AttributeDomain domain = static_cast<AttributeDomain>(storage.domain);
+  const eAttrDomain domain = static_cast<eAttrDomain>(storage.domain);
 
-  auto separate_geometry_maybe_recursively = [&](GeometrySet &geometry_set, bool invert) {
+  auto separate_geometry_maybe_recursively = [&](GeometrySet &geometry_set,
+                                                 const Field<bool> &selection) {
     bool is_error;
     if (domain == ATTR_DOMAIN_INSTANCE) {
       /* Only delete top level instances. */
-      separate_geometry(geometry_set,
-                        domain,
-                        GEO_NODE_DELETE_GEOMETRY_MODE_ALL,
-                        selection_field,
-                        invert,
-                        is_error);
+      separate_geometry(
+          geometry_set, domain, GEO_NODE_DELETE_GEOMETRY_MODE_ALL, selection, is_error);
     }
     else {
       geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
-        separate_geometry(geometry_set,
-                          domain,
-                          GEO_NODE_DELETE_GEOMETRY_MODE_ALL,
-                          selection_field,
-                          invert,
-                          is_error);
+        separate_geometry(
+            geometry_set, domain, GEO_NODE_DELETE_GEOMETRY_MODE_ALL, selection, is_error);
       });
     }
   };
 
   GeometrySet second_set(geometry_set);
   if (params.output_is_required("Selection")) {
-    separate_geometry_maybe_recursively(geometry_set, false);
+    separate_geometry_maybe_recursively(geometry_set, selection_field);
     params.set_output("Selection", std::move(geometry_set));
   }
   if (params.output_is_required("Inverted")) {
-    separate_geometry_maybe_recursively(second_set, true);
+    separate_geometry_maybe_recursively(second_set, fn::invert_boolean_field(selection_field));
     params.set_output("Inverted", std::move(second_set));
   }
 }

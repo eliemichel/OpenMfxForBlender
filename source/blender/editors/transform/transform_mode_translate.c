@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edtransform
@@ -32,6 +16,7 @@
 #include "BLI_task.h"
 
 #include "BKE_context.h"
+#include "BKE_image.h"
 #include "BKE_report.h"
 #include "BKE_unit.h"
 
@@ -450,6 +435,54 @@ static void applyTranslationValue(TransInfo *t, const float vec[3])
   custom_data->prev.rotate_mode = rotate_mode;
 }
 
+static bool clip_uv_transform_translation(TransInfo *t, float vec[2])
+{
+  /* Check if the current image in UV editor is a tiled image or not. */
+  const SpaceImage *sima = t->area->spacedata.first;
+  const Image *image = sima->image;
+  const bool is_tiled_image = image && (image->source == IMA_SRC_TILED);
+
+  /* Stores the coordinates of the closest UDIM tile.
+   * Also acts as an offset to the tile from the origin of UV space. */
+  float base_offset[2] = {0.0f, 0.0f};
+
+  /* If tiled image then constrain to correct/closest UDIM tile, else 0-1 UV space. */
+  if (is_tiled_image) {
+    BKE_image_find_nearest_tile_with_offset(image, t->center_global, base_offset);
+  }
+
+  float min[2], max[2];
+  min[0] = min[1] = FLT_MAX;
+  max[0] = max[1] = -FLT_MAX;
+
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+    for (TransData *td = tc->data; td < tc->data + tc->data_len; td++) {
+      minmax_v2v2_v2(min, max, td->loc);
+    }
+  }
+
+  bool result = false;
+  if (min[0] < base_offset[0]) {
+    vec[0] += base_offset[0] - min[0];
+    result = true;
+  }
+  else if (max[0] > base_offset[0] + t->aspect[0]) {
+    vec[0] -= max[0] - base_offset[0] - t->aspect[0];
+    result = true;
+  }
+
+  if (min[1] < base_offset[1]) {
+    vec[1] += base_offset[1] - min[1];
+    result = true;
+  }
+  else if (max[1] > base_offset[1] + t->aspect[1]) {
+    vec[1] -= max[1] - base_offset[1] - t->aspect[1];
+    result = true;
+  }
+
+  return result;
+}
+
 static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 {
   char str[UI_MAX_DRAW_STR];
@@ -485,8 +518,8 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
       add_v3_v3(global_dir, values_ofs);
     }
 
-    t->tsnap.snapElem = 0;
-    applySnapping(t, global_dir);
+    t->tsnap.snapElem = SCE_SNAP_MODE_NONE;
+    applySnappingAsGroup(t, global_dir);
     transform_snap_grid(t, global_dir);
 
     if (t->con.mode & CON_APPLY) {
@@ -502,7 +535,7 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 
       /* Test for mixed snap with grid. */
       float snap_dist_sq = FLT_MAX;
-      if (t->tsnap.snapElem != 0) {
+      if (t->tsnap.snapElem != SCE_SNAP_MODE_NONE) {
         snap_dist_sq = len_squared_v3v3(t->values, global_dir);
       }
       if ((snap_dist_sq == FLT_MAX) || (len_squared_v3v3(global_dir, incr_dir) < snap_dist_sq)) {
@@ -514,7 +547,7 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
   applyTranslationValue(t, global_dir);
 
   /* evil hack - redo translation if clipping needed */
-  if (t->flag & T_CLIP_UV && clipUVTransform(t, global_dir, 0)) {
+  if (t->flag & T_CLIP_UV && clip_uv_transform_translation(t, global_dir)) {
     applyTranslationValue(t, global_dir);
 
     /* In proportional edit it can happen that */
@@ -534,6 +567,13 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
   ED_area_status_text(t->area, str);
 }
 
+static void applyTranslationMatrix(TransInfo *t, float mat_xform[4][4])
+{
+  float delta[3];
+  mul_v3_m3v3(delta, t->spacemtx, t->values_final);
+  add_v3_v3(mat_xform[3], delta);
+}
+
 void initTranslation(TransInfo *t)
 {
   if (t->spacetype == SPACE_ACTION) {
@@ -546,6 +586,7 @@ void initTranslation(TransInfo *t)
   }
 
   t->transform = applyTranslation;
+  t->transform_matrix = applyTranslationMatrix;
   t->tsnap.applySnap = ApplySnapTranslation;
   t->tsnap.distance = transform_snap_distance_len_squared_fn;
 

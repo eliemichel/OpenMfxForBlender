@@ -1,18 +1,5 @@
-/*
- * Copyright 2011-2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2011-2022 Blender Foundation */
 
 #pragma once
 
@@ -52,7 +39,7 @@ ccl_device void volume_stack_enter_exit(KernelGlobals kg,
         break;
       }
 
-      if (entry.object == sd->object) {
+      if (entry.object == sd->object && entry.shader == sd->shader) {
         /* Shift back next stack entries. */
         do {
           entry = stack_read(i + 1);
@@ -74,7 +61,7 @@ ccl_device void volume_stack_enter_exit(KernelGlobals kg,
       }
 
       /* Already in the stack? then we have nothing to do. */
-      if (entry.object == sd->object) {
+      if (entry.object == sd->object && entry.shader == sd->shader) {
         return;
       }
     }
@@ -146,7 +133,7 @@ ccl_device float volume_stack_step_size(KernelGlobals kg, StackReadOp stack_read
       break;
     }
 
-    int shader_flag = kernel_tex_fetch(__shaders, (entry.shader & SHADER_MASK)).flags;
+    int shader_flag = kernel_data_fetch(shaders, (entry.shader & SHADER_MASK)).flags;
 
     bool heterogeneous = false;
 
@@ -159,7 +146,7 @@ ccl_device float volume_stack_step_size(KernelGlobals kg, StackReadOp stack_read
        * heterogeneous volume objects may be using the same shader. */
       int object = entry.object;
       if (object != OBJECT_NONE) {
-        int object_flag = kernel_tex_fetch(__object_flag, object);
+        int object_flag = kernel_data_fetch(object_flag, object);
         if (object_flag & SD_OBJECT_HAS_VOLUME_ATTRIBUTES) {
           heterogeneous = true;
         }
@@ -193,7 +180,7 @@ ccl_device VolumeSampleMethod volume_stack_sample_method(KernelGlobals kg, Integ
       break;
     }
 
-    int shader_flag = kernel_tex_fetch(__shaders, (entry.shader & SHADER_MASK)).flags;
+    int shader_flag = kernel_data_fetch(shaders, (entry.shader & SHADER_MASK)).flags;
 
     if (shader_flag & SD_VOLUME_MIS) {
       /* Multiple importance sampling. */

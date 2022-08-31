@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2021 by Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2021 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup draw
@@ -26,7 +10,7 @@
 #include "BKE_deform.h"
 
 #include "draw_subdivision.h"
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 namespace blender::draw {
 
@@ -95,7 +79,7 @@ static float evaluate_vertex_weight(const MDeformVert *dvert, const DRW_MeshWeig
 }
 
 static void extract_weights_init(const MeshRenderData *mr,
-                                 struct MeshBatchCache *cache,
+                                 MeshBatchCache *cache,
                                  void *buf,
                                  void *tls_data)
 {
@@ -170,7 +154,7 @@ static void extract_weights_iter_poly_mesh(const MeshRenderData *mr,
 
 static void extract_weights_init_subdiv(const DRWSubdivCache *subdiv_cache,
                                         const MeshRenderData *mr,
-                                        struct MeshBatchCache *cache,
+                                        MeshBatchCache *cache,
                                         void *buffer,
                                         void *_data)
 {
@@ -224,6 +208,4 @@ constexpr MeshExtract create_extractor_weights()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_weights = blender::draw::create_extractor_weights();
-}

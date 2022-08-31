@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2005 Blender Foundation. All rights reserved. */
 
 #include "node_shader_util.hh"
 
@@ -60,7 +44,7 @@ static int node_shader_gpu_tex_image(GPUMaterial *mat,
 
   GPUNodeLink **texco = &in[0].link;
   if (!*texco) {
-    *texco = GPU_attribute(mat, CD_MTFACE, "");
+    *texco = GPU_attribute(mat, CD_AUTO_FROM_NAME, "");
     node_shader_gpu_bump_tex_coord(mat, node, texco);
   }
 
@@ -90,7 +74,7 @@ static int node_shader_gpu_tex_image(GPUMaterial *mat,
     const char *gpu_node_name = use_cubic ? "node_tex_tile_cubic" : "node_tex_tile_linear";
     GPUNodeLink *gpu_image = GPU_image_tiled(mat, ima, iuser, sampler_state);
     GPUNodeLink *gpu_image_tile_mapping = GPU_image_tiled_mapping(mat, ima, iuser);
-    /* UDIM tiles needs a samper2DArray and sampler1DArray for tile mapping. */
+    /* UDIM tiles needs a `sampler2DArray` and `sampler1DArray` for tile mapping. */
     GPU_stack_link(mat, node, gpu_node_name, in, out, gpu_image, gpu_image_tile_mapping);
   }
   else {
@@ -104,13 +88,11 @@ static int node_shader_gpu_tex_image(GPUMaterial *mat,
       }
       case SHD_PROJ_BOX: {
         gpu_node_name = use_cubic ? "tex_box_sample_cubic" : "tex_box_sample_linear";
-        GPUNodeLink *wnor, *col1, *col2, *col3;
-        GPUNodeLink *vnor = GPU_builtin(GPU_WORLD_NORMAL);
-        GPUNodeLink *ob_mat = GPU_builtin(GPU_OBJECT_MATRIX);
+        GPUNodeLink *vnor, *wnor, *col1, *col2, *col3;
         GPUNodeLink *blend = GPU_uniform(&tex->projection_blend);
         GPUNodeLink *gpu_image = GPU_image(mat, ima, iuser, sampler_state);
-        /* equivalent to normal_world_to_object */
-        GPU_link(mat, "normal_transform_transposed_m4v3", vnor, ob_mat, &wnor);
+        GPU_link(mat, "world_normals_get", &vnor);
+        GPU_link(mat, "normal_transform_world_to_object", vnor, &wnor);
         GPU_link(mat, gpu_node_name, in[0].link, wnor, gpu_image, &col1, &col2, &col3);
         GPU_link(mat, "tex_box_blend", wnor, col1, col2, col3, blend, &out[0].link, &out[1].link);
         break;

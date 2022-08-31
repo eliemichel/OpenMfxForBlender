@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2020 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2020 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup edsculpt
@@ -133,7 +117,7 @@ static int sculpt_detail_flood_fill_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   MEM_SAFE_FREE(nodes);
-  SCULPT_undo_push_end();
+  SCULPT_undo_push_end(ob);
 
   /* Force rebuild of PBVH for better BB placement. */
   SCULPT_pbvh_clear(ob);
@@ -174,7 +158,7 @@ static EnumPropertyItem prop_sculpt_sample_detail_mode_types[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static void sample_detail_voxel(bContext *C, ViewContext *vc, int mx, int my)
+static void sample_detail_voxel(bContext *C, ViewContext *vc, const int mval[2])
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Object *ob = vc->obact;
@@ -185,8 +169,8 @@ static void sample_detail_voxel(bContext *C, ViewContext *vc, int mx, int my)
   SCULPT_vertex_random_access_ensure(ss);
 
   /* Update the active vertex. */
-  const float mouse[2] = {mx, my};
-  SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
+  const float mval_fl[2] = {UNPACK2(mval)};
+  SCULPT_cursor_geometry_info_update(C, &sgi, mval_fl, false);
   BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false, false);
 
   /* Average the edge length of the connected edges to the active vertex. */
@@ -217,7 +201,7 @@ static void sculpt_raycast_detail_cb(PBVHNode *node, void *data_v, float *tmin)
   }
 }
 
-static void sample_detail_dyntopo(bContext *C, ViewContext *vc, ARegion *region, int mx, int my)
+static void sample_detail_dyntopo(bContext *C, ViewContext *vc, const int mval[2])
 {
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   Object *ob = vc->obact;
@@ -225,9 +209,9 @@ static void sample_detail_dyntopo(bContext *C, ViewContext *vc, ARegion *region,
 
   SCULPT_stroke_modifiers_check(C, ob, brush);
 
-  const float mouse[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
+  const float mval_fl[2] = {UNPACK2(mval)};
   float ray_start[3], ray_end[3], ray_normal[3];
-  float depth = SCULPT_raycast_init(vc, mouse, ray_start, ray_end, ray_normal, false);
+  float depth = SCULPT_raycast_init(vc, mval_fl, ray_start, ray_end, ray_normal, false);
 
   SculptDetailRaycastData srd;
   srd.hit = 0;
@@ -244,14 +228,12 @@ static void sample_detail_dyntopo(bContext *C, ViewContext *vc, ARegion *region,
   }
 }
 
-static int sample_detail(bContext *C, int mx, int my, int mode)
+static int sample_detail(bContext *C, const int event_xy[2], int mode)
 {
   /* Find 3D view to pick from. */
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_VIEW3D, (const int[2]){mx, my});
-  ARegion *region = (area) ?
-                        BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, (const int[2]){mx, my}) :
-                        NULL;
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_VIEW3D, event_xy);
+  ARegion *region = (area) ? BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, event_xy) : NULL;
   if (region == NULL) {
     return OPERATOR_CANCELLED;
   }
@@ -276,6 +258,11 @@ static int sample_detail(bContext *C, int mx, int my, int mode)
     return OPERATOR_CANCELLED;
   }
 
+  const int mval[2] = {
+      event_xy[0] - region->winrct.xmin,
+      event_xy[1] - region->winrct.ymin,
+  };
+
   /* Pick sample detail. */
   switch (mode) {
     case SAMPLE_DETAIL_DYNTOPO:
@@ -284,7 +271,7 @@ static int sample_detail(bContext *C, int mx, int my, int mode)
         CTX_wm_region_set(C, prev_region);
         return OPERATOR_CANCELLED;
       }
-      sample_detail_dyntopo(C, &vc, region, mx, my);
+      sample_detail_dyntopo(C, &vc, mval);
       break;
     case SAMPLE_DETAIL_VOXEL:
       if (BKE_pbvh_type(ss->pbvh) != PBVH_FACES) {
@@ -292,7 +279,7 @@ static int sample_detail(bContext *C, int mx, int my, int mode)
         CTX_wm_region_set(C, prev_region);
         return OPERATOR_CANCELLED;
       }
-      sample_detail_voxel(C, &vc, mx, my);
+      sample_detail_voxel(C, &vc, mval);
       break;
   }
 
@@ -308,7 +295,7 @@ static int sculpt_sample_detail_size_exec(bContext *C, wmOperator *op)
   int ss_co[2];
   RNA_int_get_array(op->ptr, "location", ss_co);
   int mode = RNA_enum_get(op->ptr, "mode");
-  return sample_detail(C, ss_co[0], ss_co[1], mode);
+  return sample_detail(C, ss_co, mode);
 }
 
 static int sculpt_sample_detail_size_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e))
@@ -324,12 +311,10 @@ static int sculpt_sample_detail_size_modal(bContext *C, wmOperator *op, const wm
   switch (event->type) {
     case LEFTMOUSE:
       if (event->val == KM_PRESS) {
-        const int ss_co[2] = {event->xy[0], event->xy[1]};
-
         int mode = RNA_enum_get(op->ptr, "mode");
-        sample_detail(C, ss_co[0], ss_co[1], mode);
+        sample_detail(C, event->xy, mode);
 
-        RNA_int_set_array(op->ptr, "location", ss_co);
+        RNA_int_set_array(op->ptr, "location", event->xy);
         WM_cursor_modal_restore(CTX_wm_window(C));
         ED_workspace_status_text(C, NULL);
         WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, NULL);
@@ -424,7 +409,7 @@ static void sculpt_detail_size_set_radial_control(bContext *C)
     RNA_string_set(&props_ptr, "data_path_primary", "tool_settings.sculpt.detail_size");
   }
 
-  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr, NULL);
 
   WM_operator_properties_free(&props_ptr);
 }
@@ -673,11 +658,13 @@ static int dyntopo_detail_size_edit_modal(bContext *C, wmOperator *op, const wmE
 
   ED_region_tag_redraw(region);
 
-  if (event->type == EVT_LEFTCTRLKEY && event->val == KM_PRESS) {
-    cd->sample_mode = true;
-  }
-  if (event->type == EVT_LEFTCTRLKEY && event->val == KM_RELEASE) {
-    cd->sample_mode = false;
+  if (ELEM(event->type, EVT_LEFTCTRLKEY, EVT_RIGHTCTRLKEY)) {
+    if (event->val == KM_PRESS) {
+      cd->sample_mode = true;
+    }
+    else if (event->val == KM_RELEASE) {
+      cd->sample_mode = false;
+    }
   }
 
   /* Sample mode sets the detail size sampling the average edge length under the surface. */

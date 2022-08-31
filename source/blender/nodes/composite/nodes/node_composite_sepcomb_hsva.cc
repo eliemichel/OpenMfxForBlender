@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2006 Blender Foundation.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2006 Blender Foundation. All rights reserved. */
 
 /** \file
  * \ingroup cmpnodes
@@ -44,8 +28,10 @@ void register_node_type_cmp_sephsva()
 
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_SEPHSVA, "Separate HSVA", NODE_CLASS_CONVERTER);
+  cmp_node_type_base(&ntype, CMP_NODE_SEPHSVA_LEGACY, "Separate HSVA", NODE_CLASS_CONVERTER);
   ntype.declare = file_ns::cmp_node_sephsva_declare;
+  ntype.gather_link_search_ops = nullptr;
+
   nodeRegisterType(&ntype);
 }
 
@@ -70,8 +56,9 @@ void register_node_type_cmp_combhsva()
 
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_COMBHSVA, "Combine HSVA", NODE_CLASS_CONVERTER);
+  cmp_node_type_base(&ntype, CMP_NODE_COMBHSVA_LEGACY, "Combine HSVA", NODE_CLASS_CONVERTER);
   ntype.declare = file_ns::cmp_node_combhsva_declare;
+  ntype.gather_link_search_ops = nullptr;
 
   nodeRegisterType(&ntype);
 }

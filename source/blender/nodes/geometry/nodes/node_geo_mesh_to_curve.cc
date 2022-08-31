@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "GEO_mesh_to_curve.hh"
 
@@ -32,8 +18,9 @@ static void node_geo_exec(GeoNodeExecParams params)
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Mesh");
 
   geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
-    if (!geometry_set.has_mesh()) {
-      geometry_set.keep_only({GEO_COMPONENT_TYPE_INSTANCES});
+    const Mesh *mesh = geometry_set.get_mesh_for_read();
+    if (mesh == nullptr) {
+      geometry_set.remove_geometry_during_modify();
       return;
     }
 
@@ -44,13 +31,13 @@ static void node_geo_exec(GeoNodeExecParams params)
     evaluator.evaluate();
     const IndexMask selection = evaluator.get_evaluated_as_mask(0);
     if (selection.size() == 0) {
-      geometry_set.keep_only({GEO_COMPONENT_TYPE_INSTANCES});
+      geometry_set.remove_geometry_during_modify();
       return;
     }
 
-    std::unique_ptr<CurveEval> curve = geometry::mesh_to_curve_convert(component, selection);
-    geometry_set.replace_curve(curve.release());
-    geometry_set.keep_only({GEO_COMPONENT_TYPE_CURVE, GEO_COMPONENT_TYPE_INSTANCES});
+    bke::CurvesGeometry curves = geometry::mesh_to_curve_convert(*mesh, selection);
+    geometry_set.replace_curves(bke::curves_new_nomain(std::move(curves)));
+    geometry_set.keep_only_during_modify({GEO_COMPONENT_TYPE_CURVE});
   });
 
   params.set_output("Curve", std::move(geometry_set));

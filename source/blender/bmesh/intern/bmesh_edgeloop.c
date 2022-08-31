@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2013 by Campbell Barton.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2013 by Campbell Barton. All rights reserved. */
 
 /** \file
  * \ingroup bmesh
@@ -476,7 +460,7 @@ void BM_mesh_edgeloops_calc_order(BMesh *UNUSED(bm), ListBase *eloops, const boo
     for (el_store = eloops->first; el_store; el_store = el_store->next) {
       float len_sq;
       if (use_normals) {
-        /* scale the length by how close the loops are to pointing at eachother */
+        /* Scale the length by how close the loops are to pointing at each other. */
         float dir[3];
         sub_v3_v3v3(dir, co, el_store->co);
         len_sq = normalize_v3(dir);

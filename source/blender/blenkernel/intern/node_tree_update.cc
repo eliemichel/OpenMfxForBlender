@@ -1,18 +1,4 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BLI_map.hh"
 #include "BLI_multi_value_map.hh"
@@ -26,8 +12,10 @@
 #include "DNA_node_types.h"
 
 #include "BKE_anim_data.h"
+#include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
+#include "BKE_node_runtime.hh"
 #include "BKE_node_tree_update.h"
 
 #include "MOD_nodes.h"
@@ -61,19 +49,19 @@ enum eNodeTreeChangedFlag {
 
 static void add_tree_tag(bNodeTree *ntree, const eNodeTreeChangedFlag flag)
 {
-  ntree->changed_flag |= flag;
+  ntree->runtime->changed_flag |= flag;
 }
 
 static void add_node_tag(bNodeTree *ntree, bNode *node, const eNodeTreeChangedFlag flag)
 {
   add_tree_tag(ntree, flag);
-  node->changed_flag |= flag;
+  node->runtime->changed_flag |= flag;
 }
 
 static void add_socket_tag(bNodeTree *ntree, bNodeSocket *socket, const eNodeTreeChangedFlag flag)
 {
   add_tree_tag(ntree, flag);
-  socket->changed_flag |= flag;
+  socket->runtime->changed_flag |= flag;
 }
 
 namespace blender::bke {
@@ -104,6 +92,9 @@ static InputSocketFieldType get_interface_input_field_type(const NodeRef &node,
     return InputSocketFieldType::IsSupported;
   }
   if (node.is_undefined()) {
+    return InputSocketFieldType::None;
+  }
+  if (node.bnode()->type == NODE_CUSTOM) {
     return InputSocketFieldType::None;
   }
 
@@ -141,6 +132,9 @@ static OutputFieldDependency get_interface_output_field_dependency(const NodeRef
     return OutputFieldDependency::ForDependentField();
   }
   if (node.is_undefined()) {
+    return OutputFieldDependency::ForDataSource();
+  }
+  if (node.bnode()->type == NODE_CUSTOM) {
     return OutputFieldDependency::ForDataSource();
   }
 
@@ -185,11 +179,11 @@ static FieldInferencingInterface get_node_field_inferencing_interface(const Node
       /* This can happen when there is a linked node group that was not found (see T92799). */
       return get_dummy_field_inferencing_interface(node);
     }
-    if (group->field_inferencing_interface == nullptr) {
+    if (!group->runtime->field_inferencing_interface) {
       /* This shouldn't happen because referenced node groups should always be updated first. */
       BLI_assert_unreachable();
     }
-    return *group->field_inferencing_interface;
+    return *group->runtime->field_inferencing_interface;
   }
 
   FieldInferencingInterface inferencing_interface;
@@ -564,7 +558,8 @@ static bool update_field_inferencing(const NodeTreeRef &tree)
   bNodeTree &btree = *tree.btree();
 
   /* Create new inferencing interface for this node group. */
-  FieldInferencingInterface *new_inferencing_interface = new FieldInferencingInterface();
+  std::unique_ptr<FieldInferencingInterface> new_inferencing_interface =
+      std::make_unique<FieldInferencingInterface>();
   new_inferencing_interface->inputs.resize(BLI_listbase_count(&btree.inputs),
                                            InputSocketFieldType::IsSupported);
   new_inferencing_interface->outputs.resize(BLI_listbase_count(&btree.outputs),
@@ -580,11 +575,10 @@ static bool update_field_inferencing(const NodeTreeRef &tree)
   update_socket_shapes(tree, field_state_by_socket_id);
 
   /* Update the previous group interface. */
-  const bool group_interface_changed = btree.field_inferencing_interface == nullptr ||
-                                       *btree.field_inferencing_interface !=
+  const bool group_interface_changed = !btree.runtime->field_inferencing_interface ||
+                                       *btree.runtime->field_inferencing_interface !=
                                            *new_inferencing_interface;
-  delete btree.field_inferencing_interface;
-  btree.field_inferencing_interface = new_inferencing_interface;
+  btree.runtime->field_inferencing_interface = std::move(new_inferencing_interface);
 
   return group_interface_changed;
 }
@@ -812,7 +806,7 @@ class NodeTreeMainUpdater {
   {
     Vector<bNodeTree *> changed_ntrees;
     FOREACH_NODETREE_BEGIN (bmain_, ntree, id) {
-      if (ntree->changed_flag != NTREE_CHANGED_NOTHING) {
+      if (ntree->runtime->changed_flag != NTREE_CHANGED_NOTHING) {
         changed_ntrees.append(ntree);
       }
     }
@@ -830,7 +824,7 @@ class NodeTreeMainUpdater {
 
     if (root_ntrees.size() == 1) {
       bNodeTree *ntree = root_ntrees[0];
-      if (ntree->changed_flag == NTREE_CHANGED_NOTHING) {
+      if (ntree->runtime->changed_flag == NTREE_CHANGED_NOTHING) {
         return;
       }
       const TreeUpdateResult result = this->update_tree(*ntree);
@@ -843,7 +837,7 @@ class NodeTreeMainUpdater {
     if (!is_single_tree_update) {
       Vector<bNodeTree *> ntrees_in_order = this->get_tree_update_order(root_ntrees);
       for (bNodeTree *ntree : ntrees_in_order) {
-        if (ntree->changed_flag == NTREE_CHANGED_NOTHING) {
+        if (ntree->runtime->changed_flag == NTREE_CHANGED_NOTHING) {
           continue;
         }
         if (!update_result_by_tree_.contains(ntree)) {
@@ -998,6 +992,7 @@ class NodeTreeMainUpdater {
     this->remove_unused_previews_when_necessary(ntree);
 
     this->ensure_tree_ref(ntree, tree_ref);
+    this->propagate_runtime_flags(*tree_ref);
     if (ntree.type == NTREE_GEOMETRY) {
       if (node_field_inferencing::update_field_inferencing(*tree_ref)) {
         result.interface_changed = true;
@@ -1014,7 +1009,8 @@ class NodeTreeMainUpdater {
       ntreeTexCheckCyclics(&ntree);
     }
 
-    if (ntree.changed_flag & NTREE_CHANGED_INTERFACE || ntree.changed_flag & NTREE_CHANGED_ANY) {
+    if (ntree.runtime->changed_flag & NTREE_CHANGED_INTERFACE ||
+        ntree.runtime->changed_flag & NTREE_CHANGED_ANY) {
       result.interface_changed = true;
     }
 
@@ -1069,18 +1065,18 @@ class NodeTreeMainUpdater {
       this->ensure_tree_ref(ntree, tree_ref);
       const NodeRef &node = *tree_ref->find_node(*bnode);
       if (this->should_update_individual_node(node)) {
-        const uint32_t old_changed_flag = ntree.changed_flag;
-        ntree.changed_flag = NTREE_CHANGED_NOTHING;
+        const uint32_t old_changed_flag = ntree.runtime->changed_flag;
+        ntree.runtime->changed_flag = NTREE_CHANGED_NOTHING;
 
-        /* This may set #ntree.changed_flag which is detected below. */
+        /* This may set #ntree.runtime->changed_flag which is detected below. */
         this->update_individual_node(node);
 
-        if (ntree.changed_flag != NTREE_CHANGED_NOTHING) {
+        if (ntree.runtime->changed_flag != NTREE_CHANGED_NOTHING) {
           /* The tree ref is outdated and needs to be rebuilt. Generally, only very few update
            * functions change the node. Typically zero or one nodes change after an update. */
           tree_ref.reset();
         }
-        ntree.changed_flag |= old_changed_flag;
+        ntree.runtime->changed_flag |= old_changed_flag;
       }
     }
   }
@@ -1089,13 +1085,13 @@ class NodeTreeMainUpdater {
   {
     bNodeTree &ntree = *node.btree();
     bNode &bnode = *node.bnode();
-    if (ntree.changed_flag & NTREE_CHANGED_ANY) {
+    if (ntree.runtime->changed_flag & NTREE_CHANGED_ANY) {
       return true;
     }
-    if (bnode.changed_flag & NTREE_CHANGED_NODE_PROPERTY) {
+    if (bnode.runtime->changed_flag & NTREE_CHANGED_NODE_PROPERTY) {
       return true;
     }
-    if (ntree.changed_flag & NTREE_CHANGED_LINK) {
+    if (ntree.runtime->changed_flag & NTREE_CHANGED_LINK) {
       /* Node groups currently always rebuilt their sockets when they are updated.
        * So avoid calling the update method when no new link was added to it. */
       if (node.is_group_input_node()) {
@@ -1113,7 +1109,7 @@ class NodeTreeMainUpdater {
         return true;
       }
     }
-    if (ntree.changed_flag & NTREE_CHANGED_INTERFACE) {
+    if (ntree.runtime->changed_flag & NTREE_CHANGED_INTERFACE) {
       if (node.is_group_input_node() || node.is_group_output_node()) {
         return true;
       }
@@ -1244,16 +1240,16 @@ class NodeTreeMainUpdater {
     }
 
     /* Reset the changed_flag to allow detecting when the update callback changed the node tree. */
-    const uint32_t old_changed_flag = ntree.changed_flag;
-    ntree.changed_flag = NTREE_CHANGED_NOTHING;
+    const uint32_t old_changed_flag = ntree.runtime->changed_flag;
+    ntree.runtime->changed_flag = NTREE_CHANGED_NOTHING;
 
     ntree.typeinfo->update(&ntree);
 
-    if (ntree.changed_flag != NTREE_CHANGED_NOTHING) {
+    if (ntree.runtime->changed_flag != NTREE_CHANGED_NOTHING) {
       /* The tree ref is outdated and needs to be rebuilt. */
       tree_ref.reset();
     }
-    ntree.changed_flag |= old_changed_flag;
+    ntree.runtime->changed_flag |= old_changed_flag;
   }
 
   void remove_unused_previews_when_necessary(bNodeTree &ntree)
@@ -1262,10 +1258,48 @@ class NodeTreeMainUpdater {
     const uint32_t allowed_flags = NTREE_CHANGED_LINK | NTREE_CHANGED_SOCKET_PROPERTY |
                                    NTREE_CHANGED_NODE_PROPERTY | NTREE_CHANGED_NODE_OUTPUT |
                                    NTREE_CHANGED_INTERFACE;
-    if ((ntree.changed_flag & allowed_flags) == ntree.changed_flag) {
+    if ((ntree.runtime->changed_flag & allowed_flags) == ntree.runtime->changed_flag) {
       return;
     }
     BKE_node_preview_remove_unused(&ntree);
+  }
+
+  void propagate_runtime_flags(const NodeTreeRef &tree_ref)
+  {
+    bNodeTree &ntree = *tree_ref.btree();
+    ntree.runtime->runtime_flag = 0;
+    if (ntree.type != NTREE_SHADER) {
+      return;
+    }
+
+    /* Check if a used node group has an animated image. */
+    for (const NodeRef *group_node : tree_ref.nodes_by_type("ShaderNodeGroup")) {
+      const bNodeTree *group = reinterpret_cast<bNodeTree *>(group_node->bnode()->id);
+      if (group != nullptr) {
+        ntree.runtime->runtime_flag |= group->runtime->runtime_flag;
+      }
+    }
+    /* Check if the tree itself has an animated image. */
+    for (const StringRefNull idname : {"ShaderNodeTexImage", "ShaderNodeTexEnvironment"}) {
+      for (const NodeRef *node : tree_ref.nodes_by_type(idname)) {
+        Image *image = reinterpret_cast<Image *>(node->bnode()->id);
+        if (image != nullptr && BKE_image_is_animated(image)) {
+          ntree.runtime->runtime_flag |= NTREE_RUNTIME_FLAG_HAS_IMAGE_ANIMATION;
+          break;
+        }
+      }
+    }
+    /* Check if the tree has a material output. */
+    for (const StringRefNull idname : {"ShaderNodeOutputMaterial",
+                                       "ShaderNodeOutputLight",
+                                       "ShaderNodeOutputWorld",
+                                       "ShaderNodeOutputAOV"}) {
+      const Span<const NodeRef *> nodes = tree_ref.nodes_by_type(idname);
+      if (!nodes.is_empty()) {
+        ntree.runtime->runtime_flag |= NTREE_RUNTIME_FLAG_HAS_MATERIAL_OUTPUT;
+        break;
+      }
+    }
   }
 
   void update_node_levels(bNodeTree &ntree)
@@ -1297,12 +1331,12 @@ class NodeTreeMainUpdater {
 
     /* Compute a hash that represents the node topology connected to the output. This always has to
      * be updated even if it is not used to detect changes right now. Otherwise
-     * #btree.output_topology_hash will go out of date. */
+     * #btree.runtime.output_topology_hash will go out of date. */
     const Vector<const SocketRef *> tree_output_sockets = this->find_output_sockets(tree);
-    const uint32_t old_topology_hash = btree.output_topology_hash;
+    const uint32_t old_topology_hash = btree.runtime->output_topology_hash;
     const uint32_t new_topology_hash = this->get_combined_socket_topology_hash(
         tree, tree_output_sockets);
-    btree.output_topology_hash = new_topology_hash;
+    btree.runtime->output_topology_hash = new_topology_hash;
 
     if (const AnimData *adt = BKE_animdata_from_id(&btree.id)) {
       /* Drivers may copy values in the node tree around arbitrarily and may cause the output to
@@ -1326,7 +1360,7 @@ class NodeTreeMainUpdater {
       }
     }
 
-    if (btree.changed_flag & NTREE_CHANGED_ANY) {
+    if (btree.runtime->changed_flag & NTREE_CHANGED_ANY) {
       return true;
     }
 
@@ -1335,8 +1369,8 @@ class NodeTreeMainUpdater {
     }
 
     /* The topology hash can only be used when only topology-changing operations have been done. */
-    if (btree.changed_flag ==
-        (btree.changed_flag & (NTREE_CHANGED_LINK | NTREE_CHANGED_REMOVED_NODE))) {
+    if (btree.runtime->changed_flag ==
+        (btree.runtime->changed_flag & (NTREE_CHANGED_LINK | NTREE_CHANGED_REMOVED_NODE))) {
       if (old_topology_hash == new_topology_hash) {
         return false;
       }
@@ -1375,10 +1409,12 @@ class NodeTreeMainUpdater {
       return true;
     }
     /* Assume node groups without output sockets are outputs. */
-    /* TODO: Store whether a node group contains a top-level output node (e.g. Material Output) in
-     * run-time information on the node group itself. */
-    if (bnode.type == NODE_GROUP && node.outputs().is_empty()) {
-      return true;
+    if (bnode.type == NODE_GROUP) {
+      const bNodeTree *node_group = reinterpret_cast<const bNodeTree *>(bnode.id);
+      if (node_group != nullptr &&
+          node_group->runtime->runtime_flag & NTREE_RUNTIME_FLAG_HAS_MATERIAL_OUTPUT) {
+        return true;
+      }
     }
     return false;
   }
@@ -1469,6 +1505,16 @@ class NodeTreeMainUpdater {
             socket_hash = noise::hash(socket_hash, input_socket_hash);
           }
         }
+        /* The Image Texture node has a special case. The behavior of the color output changes
+         * depending on whether the Alpha output is linked. */
+        if (node.bnode()->type == SH_NODE_TEX_IMAGE && socket.index() == 0) {
+          BLI_assert(socket.name() == "Color");
+          const OutputSocketRef &alpha_socket = node.output(1);
+          BLI_assert(alpha_socket.name() == "Alpha");
+          if (alpha_socket.is_directly_linked()) {
+            socket_hash = noise::hash(socket_hash);
+          }
+        }
         hash_by_socket_id[socket.id()] = socket_hash;
         sockets_to_check.pop();
       }
@@ -1502,12 +1548,12 @@ class NodeTreeMainUpdater {
       const NodeRef &node = in_out_socket.node();
       const bNode &bnode = *node.bnode();
       const bNodeSocket &bsocket = *in_out_socket.bsocket();
-      if (bsocket.changed_flag != NTREE_CHANGED_NOTHING) {
+      if (bsocket.runtime->changed_flag != NTREE_CHANGED_NOTHING) {
         return true;
       }
-      if (bnode.changed_flag != NTREE_CHANGED_NOTHING) {
+      if (bnode.runtime->changed_flag != NTREE_CHANGED_NOTHING) {
         const bool only_unused_internal_link_changed = (bnode.flag & NODE_MUTED) == 0 &&
-                                                       bnode.changed_flag ==
+                                                       bnode.runtime->changed_flag ==
                                                            NTREE_CHANGED_INTERNAL_LINK;
         if (!only_unused_internal_link_changed) {
           return true;
@@ -1553,15 +1599,15 @@ class NodeTreeMainUpdater {
 
   void reset_changed_flags(bNodeTree &ntree)
   {
-    ntree.changed_flag = NTREE_CHANGED_NOTHING;
+    ntree.runtime->changed_flag = NTREE_CHANGED_NOTHING;
     LISTBASE_FOREACH (bNode *, node, &ntree.nodes) {
-      node->changed_flag = NTREE_CHANGED_NOTHING;
+      node->runtime->changed_flag = NTREE_CHANGED_NOTHING;
       node->update = 0;
       LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
-        socket->changed_flag = NTREE_CHANGED_NOTHING;
+        socket->runtime->changed_flag = NTREE_CHANGED_NOTHING;
       }
       LISTBASE_FOREACH (bNodeSocket *, socket, &node->outputs) {
-        socket->changed_flag = NTREE_CHANGED_NOTHING;
+        socket->runtime->changed_flag = NTREE_CHANGED_NOTHING;
       }
     }
   }

@@ -268,7 +268,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
     Mesh *mesh = NULL;
     if (object != NULL && fxmd->extra_inputs[i].request_geometry) {
       Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
-      mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object_eval, false);
+      mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object_eval);
     }
     extra_input_data[i].header.is_input = true;
     extra_input_data[i].header.type = BlenderMfxHost::CallbackContext::Modifier;

@@ -1,27 +1,12 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 #pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#include "BLI_compiler_attrs.h"
 #include "BLI_utildefines.h"
 
 #include "BLI_rect.h"
@@ -80,7 +65,7 @@ struct StampData *BKE_stamp_info_from_scene_static(const struct Scene *scene);
  * Check whether the given metadata field name translates to a known field of a stamp.
  */
 bool BKE_stamp_is_known_field(const char *field_name);
-void BKE_imbuf_stamp_info(struct RenderResult *rr, struct ImBuf *ibuf);
+void BKE_imbuf_stamp_info(const struct RenderResult *rr, struct ImBuf *ibuf);
 void BKE_stamp_info_from_imbuf(struct RenderResult *rr, struct ImBuf *ibuf);
 void BKE_stamp_info_callback(void *data,
                              struct StampData *stamp_data,
@@ -98,15 +83,14 @@ void BKE_image_stamp_buf(struct Scene *scene,
                          int height,
                          int channels);
 bool BKE_imbuf_alpha_test(struct ImBuf *ibuf);
-int BKE_imbuf_write_stamp(struct Scene *scene,
-                          struct RenderResult *rr,
+int BKE_imbuf_write_stamp(const struct Scene *scene,
+                          const struct RenderResult *rr,
                           struct ImBuf *ibuf,
                           const char *name,
                           const struct ImageFormatData *imf);
 /**
  * \note imf->planes is ignored here, its assumed the image channels are already set.
  */
-void BKE_imbuf_write_prepare(struct ImBuf *ibuf, const struct ImageFormatData *imf);
 int BKE_imbuf_write(struct ImBuf *ibuf, const char *name, const struct ImageFormatData *imf);
 /**
  * Same as #BKE_imbuf_write() but crappy workaround not to permanently modify _some_,
@@ -114,45 +98,8 @@ int BKE_imbuf_write(struct ImBuf *ibuf, const char *name, const struct ImageForm
  */
 int BKE_imbuf_write_as(struct ImBuf *ibuf,
                        const char *name,
-                       struct ImageFormatData *imf,
+                       const struct ImageFormatData *imf,
                        bool save_copy);
-void BKE_image_path_from_imformat(char *string,
-                                  const char *base,
-                                  const char *relbase,
-                                  int frame,
-                                  const struct ImageFormatData *im_format,
-                                  bool use_ext,
-                                  bool use_frames,
-                                  const char *suffix);
-void BKE_image_path_from_imtype(char *string,
-                                const char *base,
-                                const char *relbase,
-                                int frame,
-                                char imtype,
-                                bool use_ext,
-                                bool use_frames,
-                                const char *suffix);
-int BKE_image_path_ensure_ext_from_imformat(char *string, const struct ImageFormatData *im_format);
-int BKE_image_path_ensure_ext_from_imtype(char *string, char imtype);
-char BKE_image_ftype_to_imtype(int ftype, const struct ImbFormatOptions *options);
-int BKE_image_imtype_to_ftype(char imtype, struct ImbFormatOptions *r_options);
-
-bool BKE_imtype_is_movie(char imtype);
-bool BKE_imtype_supports_zbuf(char imtype);
-bool BKE_imtype_supports_compress(char imtype);
-bool BKE_imtype_supports_quality(char imtype);
-bool BKE_imtype_requires_linear_float(char imtype);
-char BKE_imtype_valid_channels(char imtype, bool write_file);
-char BKE_imtype_valid_depths(char imtype);
-
-/**
- * String is from command line `--render-format` argument,
- * keep in sync with `creator_args.c` help info.
- */
-char BKE_imtype_from_arg(const char *arg);
-
-void BKE_imformat_defaults(struct ImageFormatData *im_format);
-void BKE_imbuf_to_image_format(struct ImageFormatData *im_format, const struct ImBuf *imbuf);
 
 /**
  * Used by sequencer too.
@@ -186,10 +133,6 @@ struct RenderResult;
 /* image-user gets a new image, check settings */
 #define IMA_SIGNAL_USER_NEW_IMAGE 6
 #define IMA_SIGNAL_COLORMANAGE 7
-
-#define IMA_CHAN_FLAG_BW 1
-#define IMA_CHAN_FLAG_RGB 2
-#define IMA_CHAN_FLAG_ALPHA 4
 
 /**
  * Checks whether there's an image buffer for given image and user.
@@ -253,6 +196,14 @@ struct Image *BKE_image_add_generated(struct Main *bmain,
 struct Image *BKE_image_add_from_imbuf(struct Main *bmain, struct ImBuf *ibuf, const char *name);
 
 /**
+ * For a non-viewer single-buffer image (single frame file, or generated image) replace its image
+ * buffer with the given one.
+ * If an unsupported image type (multi-layer, image sequence, ...) the function will assert in the
+ * debug mode and will have an undefined behavior in the release mode.
+ */
+void BKE_image_replace_imbuf(struct Image *image, struct ImBuf *ibuf);
+
+/**
  * For reload, refresh, pack.
  */
 void BKE_imageuser_default(struct ImageUser *iuser);
@@ -286,11 +237,13 @@ void BKE_image_ensure_viewer_views(const struct RenderData *rd,
  */
 void BKE_image_user_frame_calc(struct Image *ima, struct ImageUser *iuser, int cfra);
 int BKE_image_user_frame_get(const struct ImageUser *iuser, int cfra, bool *r_is_in_range);
-void BKE_image_user_file_path(struct ImageUser *iuser, struct Image *ima, char *path);
-void BKE_image_user_file_path_ex(struct ImageUser *iuser,
-                                 struct Image *ima,
+void BKE_image_user_file_path(const struct ImageUser *iuser, const struct Image *ima, char *path);
+void BKE_image_user_file_path_ex(const struct Main *bmain,
+                                 const struct ImageUser *iuser,
+                                 const struct Image *ima,
                                  char *path,
-                                 bool resolve_udim);
+                                 const bool resolve_udim,
+                                 const bool resolve_multiview);
 void BKE_image_editors_update_frame(const struct Main *bmain, int cfra);
 
 /**
@@ -308,15 +261,15 @@ struct RenderPass *BKE_image_multilayer_index(struct RenderResult *rr, struct Im
 /**
  * Sets index offset for multi-view files.
  */
-void BKE_image_multiview_index(struct Image *ima, struct ImageUser *iuser);
+void BKE_image_multiview_index(const struct Image *ima, struct ImageUser *iuser);
 
 /**
  * For multi-layer images as well as for render-viewer
  * and because rendered results use fake layer/passes, don't correct for wrong indices here.
  */
-bool BKE_image_is_multilayer(struct Image *ima);
-bool BKE_image_is_multiview(struct Image *ima);
-bool BKE_image_is_stereo(struct Image *ima);
+bool BKE_image_is_multilayer(const struct Image *ima);
+bool BKE_image_is_multiview(const struct Image *ima);
+bool BKE_image_is_stereo(const struct Image *ima);
 struct RenderResult *BKE_image_acquire_renderresult(struct Scene *scene, struct Image *ima);
 void BKE_image_release_renderresult(struct Scene *scene, struct Image *ima);
 
@@ -329,14 +282,6 @@ bool BKE_image_is_openexr(struct Image *ima);
  * For multiple slot render, call this before render.
  */
 void BKE_image_backup_render(struct Scene *scene, struct Image *ima, bool free_current_slot);
-
-/**
- * For single-layer OpenEXR saving.
- */
-bool BKE_image_save_openexr_multiview(struct Image *ima,
-                                      struct ImBuf *ibuf,
-                                      const char *filepath,
-                                      int flags);
 
 /**
  * Goes over all textures that use images.
@@ -387,7 +332,7 @@ void BKE_image_merge(struct Main *bmain, struct Image *dest, struct Image *sourc
 bool BKE_image_scale(struct Image *image, int width, int height);
 
 /**
- * Check if texture has alpha (depth=32).
+ * Check if texture has alpha `planes == 32 || planes == 16`.
  */
 bool BKE_image_has_alpha(struct Image *image);
 
@@ -408,13 +353,13 @@ void BKE_image_get_tile_label(struct Image *ima,
  * Checks whether the given filepath refers to a UDIM tiled texture.
  * If yes, the range from the lowest to the highest tile is returned.
  *
- * `filepath` may be modified to ensure a UDIM token is present.
- * `tiles` may be filled even if the result ultimately is false!
+ * \param filepath: may be modified to ensure a UDIM token is present.
+ * \param tiles: may be filled even if the result ultimately is false!
  */
 bool BKE_image_get_tile_info(char *filepath,
                              struct ListBase *tiles,
-                             int *tile_start,
-                             int *tile_range);
+                             int *r_tile_start,
+                             int *r_tile_range);
 
 struct ImageTile *BKE_image_add_tile(struct Image *ima, int tile_number, const char *label);
 bool BKE_image_remove_tile(struct Image *ima, struct ImageTile *tile);
@@ -437,23 +382,28 @@ typedef enum {
 } eUDIM_TILE_FORMAT;
 
 /**
+ * Checks if the filename portion of the path contains a UDIM token.
+ */
+bool BKE_image_is_filename_tokenized(char *filepath);
+
+/**
  * Ensures that `filename` contains a UDIM token if we find a supported format pattern.
  * \note This must only be the name component (without slashes).
  */
 void BKE_image_ensure_tile_token(char *filename);
 
 /**
- * When provided with an absolute virtual filepath, check to see if at least
+ * When provided with an absolute virtual `filepath`, check to see if at least
  * one concrete file exists.
- * Note: This function requires directory traversal and may be inefficient in time-critical,
+ * NOTE: This function requires directory traversal and may be inefficient in time-critical,
  * or iterative, code paths.
  */
 bool BKE_image_tile_filepath_exists(const char *filepath);
 
 /**
  * Retrieves the UDIM token format and returns the pattern from the provided `filepath`.
- * The returned pattern is typically passed to either `BKE_image_get_tile_number_from_filepath` or
- * `BKE_image_set_filepath_from_tile_number`.
+ * The returned pattern is typically passed to either #BKE_image_get_tile_number_from_filepath or
+ * #BKE_image_set_filepath_from_tile_number.
  */
 char *BKE_image_get_tile_strformat(const char *filepath, eUDIM_TILE_FORMAT *r_tile_format);
 bool BKE_image_get_tile_number_from_filepath(const char *filepath,
@@ -472,10 +422,16 @@ int BKE_image_get_tile_from_pos(struct Image *ima,
                                 const float uv[2],
                                 float r_uv[2],
                                 float r_ofs[2]);
+void BKE_image_get_tile_uv(const struct Image *ima, const int tile_number, float r_uv[2]);
+
 /**
  * Return the tile_number for the closest UDIM tile.
  */
-int BKE_image_find_nearest_tile(const struct Image *image, const float co[2]);
+int BKE_image_find_nearest_tile_with_offset(const struct Image *image,
+                                            const float co[2],
+                                            float r_uv_offset[2]) ATTR_NONNULL(1, 2, 3);
+int BKE_image_find_nearest_tile(const struct Image *image, const float co[2])
+    ATTR_NONNULL(1, 2) ATTR_WARN_UNUSED_RESULT;
 
 void BKE_image_get_size(struct Image *image, struct ImageUser *iuser, int *r_width, int *r_height);
 void BKE_image_get_size_fl(struct Image *image, struct ImageUser *iuser, float r_size[2]);
@@ -502,7 +458,7 @@ bool BKE_image_is_dirty(struct Image *image);
 void BKE_image_mark_dirty(struct Image *image, struct ImBuf *ibuf);
 bool BKE_image_buffer_format_writable(struct ImBuf *ibuf);
 
-bool BKE_image_is_dirty_writable(struct Image *image, bool *is_format_writable);
+bool BKE_image_is_dirty_writable(struct Image *image, bool *r_is_writable);
 
 /**
  * Guess offset for the first frame in the sequence.
@@ -510,7 +466,7 @@ bool BKE_image_is_dirty_writable(struct Image *image, bool *is_format_writable);
 int BKE_image_sequence_guess_offset(struct Image *image);
 bool BKE_image_has_anim(struct Image *image);
 bool BKE_image_has_packedfile(const struct Image *image);
-bool BKE_image_has_filepath(struct Image *ima);
+bool BKE_image_has_filepath(const struct Image *ima);
 /**
  * Checks the image buffer changes with time (not keyframed values).
  */

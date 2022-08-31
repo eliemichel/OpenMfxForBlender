@@ -1,23 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * The Original Code is: some of this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup bli
@@ -1134,6 +1116,22 @@ double determinant_m3_array_db(const double m[3][3])
           m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]));
 }
 
+bool invert_m2_m2(float m1[2][2], const float m2[2][2])
+{
+  adjoint_m2_m2(m1, m2);
+  float det = determinant_m2(m2[0][0], m2[1][0], m2[0][1], m2[1][1]);
+
+  bool success = (det != 0.0f);
+  if (success) {
+    m1[0][0] /= det;
+    m1[1][0] /= det;
+    m1[0][1] /= det;
+    m1[1][1] /= det;
+  }
+
+  return success;
+}
+
 bool invert_m3_ex(float m[3][3], const float epsilon)
 {
   float tmp[3][3];
@@ -1514,7 +1512,7 @@ void orthogonalize_m3(float R[3][3], int axis)
       }
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
   mul_v3_fl(R[0], size[0]);
@@ -1598,7 +1596,7 @@ void orthogonalize_m4(float R[4][4], int axis)
       }
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
   mul_v3_fl(R[0], size[0]);
@@ -1672,7 +1670,7 @@ void orthogonalize_m3_stable(float R[3][3], int axis, bool normalize)
       orthogonalize_stable(R[2], R[0], R[1], normalize);
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 }
@@ -1690,7 +1688,7 @@ void orthogonalize_m4_stable(float R[4][4], int axis, bool normalize)
       orthogonalize_stable(R[2], R[0], R[1], normalize);
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 }
@@ -1752,7 +1750,7 @@ static bool orthogonalize_m3_zero_axes_impl(float *mat[3], const float unit_leng
       break;
     }
     default: {
-      BLI_assert(0); /* Unreachable! */
+      BLI_assert_unreachable();
     }
   }
 
@@ -2144,6 +2142,16 @@ void mat4_to_size(float size[3], const float M[4][4])
   size[2] = len_v3(M[2]);
 }
 
+float mat3_to_size_max_axis(const float M[3][3])
+{
+  return sqrtf(max_fff(len_squared_v3(M[0]), len_squared_v3(M[1]), len_squared_v3(M[2])));
+}
+
+float mat4_to_size_max_axis(const float M[4][4])
+{
+  return sqrtf(max_fff(len_squared_v3(M[0]), len_squared_v3(M[1]), len_squared_v3(M[2])));
+}
+
 void mat4_to_size_fix_shear(float size[3], const float M[4][4])
 {
   mat4_to_size(size, M);
@@ -2346,7 +2354,7 @@ void rotate_m4(float mat[4][4], const char axis, const float angle)
       }
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 }

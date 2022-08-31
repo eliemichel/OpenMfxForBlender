@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup edtransform
@@ -1424,7 +1408,6 @@ static void VertsToTransData(TransInfo *t,
                              TransDataExtension *tx,
                              BMEditMesh *em,
                              BMVert *eve,
-                             float *bweight,
                              const struct TransIslandData *island_data,
                              const int island_index)
 {
@@ -1465,17 +1448,13 @@ static void VertsToTransData(TransInfo *t,
   td->ext = NULL;
   td->val = NULL;
   td->extra = eve;
-  if (t->mode == TFM_BWEIGHT || t->mode == TFM_VERT_CREASE) {
-    td->val = bweight;
-    td->ival = *bweight;
-  }
-  else if (t->mode == TFM_SHRINKFATTEN) {
+  if (t->mode == TFM_SHRINKFATTEN) {
     td->ext = tx;
     tx->isize[0] = BM_vert_calc_shell_factor_ex(eve, no, BM_ELEM_SELECT);
   }
 }
 
-void createTransEditVerts(TransInfo *t)
+static void createTransEditVerts(bContext *UNUSED(C), TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransDataExtension *tx = NULL;
@@ -1605,17 +1584,6 @@ void createTransEditVerts(TransInfo *t)
                                       "TransObData ext");
     }
 
-    int cd_vert_bweight_offset = -1;
-    int cd_vert_crease_offset = -1;
-    if (t->mode == TFM_BWEIGHT) {
-      BM_mesh_cd_flag_ensure(bm, BKE_mesh_from_object(tc->obedit), ME_CDFLAG_VERT_BWEIGHT);
-      cd_vert_bweight_offset = CustomData_get_offset(&bm->vdata, CD_BWEIGHT);
-    }
-    else if (t->mode == TFM_VERT_CREASE) {
-      BM_mesh_cd_flag_ensure(bm, BKE_mesh_from_object(tc->obedit), ME_CDFLAG_VERT_CREASE);
-      cd_vert_crease_offset = CustomData_get_offset(&bm->vdata, CD_CREASE);
-    }
-
     TransData *tob = tc->data;
     TransDataMirror *td_mirror = tc->data_mirror;
     BM_ITER_MESH_INDEX (eve, &iter, bm, BM_VERTS_OF_MESH, a) {
@@ -1648,15 +1616,9 @@ void createTransEditVerts(TransInfo *t)
         td_mirror++;
       }
       else if (prop_mode || BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
-        float *bweight = (cd_vert_bweight_offset != -1) ?
-                             BM_ELEM_CD_GET_VOID_P(eve, cd_vert_bweight_offset) :
-                         (cd_vert_crease_offset != -1) ?
-                             BM_ELEM_CD_GET_VOID_P(eve, cd_vert_crease_offset) :
-                             NULL;
-
         /* Do not use the island center in case we are using islands
          * only to get axis for snap/rotate to normal... */
-        VertsToTransData(t, tob, tx, em, eve, bweight, &island_data, island_index);
+        VertsToTransData(t, tob, tx, em, eve, &island_data, island_index);
         if (tx) {
           tx++;
         }
@@ -1956,7 +1918,7 @@ static void tc_mesh_partial_types_calc(TransInfo *t, struct PartialTypeState *r_
   }
 
   /* With projection, transform isn't affine. */
-  if (activeSnap_with_project(t)) {
+  if (activeSnap_SnappingIndividual(t)) {
     if (partial_for_looptri == PARTIAL_TYPE_GROUP) {
       partial_for_looptri = PARTIAL_TYPE_ALL;
     }
@@ -2067,12 +2029,12 @@ static void tc_mesh_transdata_mirror_apply(TransDataContainer *tc)
   }
 }
 
-void recalcData_mesh(TransInfo *t)
+static void recalcData_mesh(TransInfo *t)
 {
   bool is_canceling = t->state == TRANS_CANCEL;
   /* Apply corrections. */
   if (!is_canceling) {
-    applyProject(t);
+    applySnappingIndividual(t);
 
     bool do_mirror = !(t->flag & T_NO_MIRROR);
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
@@ -2167,3 +2129,10 @@ void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
 }
 
 /** \} */
+
+TransConvertTypeInfo TransConvertType_Mesh = {
+    /* flags */ (T_EDIT | T_POINTS),
+    /* createTransData */ createTransEditVerts,
+    /* recalcData */ recalcData_mesh,
+    /* special_aftertrans_update */ special_aftertrans_update__mesh,
+};

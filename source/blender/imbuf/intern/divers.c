@@ -1,22 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- * allocimbuf.c
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 /** \file
  * \ingroup imbuf
@@ -712,9 +695,6 @@ void IMB_buffer_byte_from_byte(uchar *rect_to,
 
 void IMB_rect_from_float(ImBuf *ibuf)
 {
-  float *buffer;
-  const char *from_colorspace;
-
   /* verify we have a float buffer */
   if (ibuf->rect_float == NULL) {
     return;
@@ -727,24 +707,21 @@ void IMB_rect_from_float(ImBuf *ibuf)
     }
   }
 
-  if (ibuf->float_colorspace == NULL) {
-    from_colorspace = IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_SCENE_LINEAR);
-  }
-  else {
-    from_colorspace = ibuf->float_colorspace->name;
-  }
+  const char *from_colorspace = (ibuf->float_colorspace == NULL) ?
+                                    IMB_colormanagement_role_colorspace_name_get(
+                                        COLOR_ROLE_SCENE_LINEAR) :
+                                    ibuf->float_colorspace->name;
+  const char *to_colorspace = (ibuf->rect_colorspace == NULL) ?
+                                  IMB_colormanagement_role_colorspace_name_get(
+                                      COLOR_ROLE_DEFAULT_BYTE) :
+                                  ibuf->rect_colorspace->name;
 
-  buffer = MEM_dupallocN(ibuf->rect_float);
+  float *buffer = MEM_dupallocN(ibuf->rect_float);
 
   /* first make float buffer in byte space */
   const bool predivide = IMB_alpha_affects_rgb(ibuf);
-  IMB_colormanagement_transform(buffer,
-                                ibuf->x,
-                                ibuf->y,
-                                ibuf->channels,
-                                from_colorspace,
-                                ibuf->rect_colorspace->name,
-                                predivide);
+  IMB_colormanagement_transform(
+      buffer, ibuf->x, ibuf->y, ibuf->channels, from_colorspace, to_colorspace, predivide);
 
   /* convert from float's premul alpha to byte's straight alpha */
   if (IMB_alpha_affects_rgb(ibuf)) {

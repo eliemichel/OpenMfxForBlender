@@ -1,21 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2016 by Mike Erwin.
- * All rights reserved.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2016 by Mike Erwin. All rights reserved. */
 
 /** \file
  * \ingroup gpu
@@ -65,7 +49,7 @@ void GPU_vertformat_copy(GPUVertFormat *dest, const GPUVertFormat *src)
   memcpy(dest, src, sizeof(GPUVertFormat));
 }
 
-static uint comp_sz(GPUVertCompType type)
+static uint comp_size(GPUVertCompType type)
 {
 #if TRUST_NO_ONE
   assert(type <= GPU_COMP_F32); /* other types have irregular sizes (not bytes) */
@@ -74,12 +58,12 @@ static uint comp_sz(GPUVertCompType type)
   return sizes[type];
 }
 
-static uint attr_sz(const GPUVertAttr *a)
+static uint attr_size(const GPUVertAttr *a)
 {
   if (a->comp_type == GPU_COMP_I10) {
     return 4; /* always packed as 10_10_10_2 */
   }
-  return a->comp_len * comp_sz(static_cast<GPUVertCompType>(a->comp_type));
+  return a->comp_len * comp_size(static_cast<GPUVertCompType>(a->comp_type));
 }
 
 static uint attr_align(const GPUVertAttr *a)
@@ -87,7 +71,7 @@ static uint attr_align(const GPUVertAttr *a)
   if (a->comp_type == GPU_COMP_I10) {
     return 4; /* always packed as 10_10_10_2 */
   }
-  uint c = comp_sz(static_cast<GPUVertCompType>(a->comp_type));
+  uint c = comp_size(static_cast<GPUVertCompType>(a->comp_type));
   if (a->comp_len == 3 && c <= 2) {
     return 4 * c; /* AMD HW can't fetch these well, so pad it out (other vendors too?) */
   }
@@ -149,7 +133,7 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
     case GPU_COMP_I10:
       /* 10_10_10 format intended for normals (xyz) or colors (rgb)
        * extra component packed.w can be manually set to { -2, -1, 0, 1 } */
-      assert(comp_len == 3 || comp_len == 4);
+      assert(ELEM(comp_len, 3, 4));
 
       /* Not strictly required, may relax later. */
       assert(fetch_mode == GPU_FETCH_INT_TO_FLOAT_UNIT);
@@ -159,7 +143,7 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
       /* integer types can be kept as int or converted/normalized to float */
       assert(fetch_mode != GPU_FETCH_FLOAT);
       /* only support float matrices (see Batch_update_program_bindings) */
-      assert(comp_len != 8 && comp_len != 12 && comp_len != 16);
+      assert(!ELEM(comp_len, 8, 12, 16));
   }
 #endif
   format->name_len++; /* Multi-name support. */
@@ -172,7 +156,7 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
   attr->comp_len = (comp_type == GPU_COMP_I10) ?
                        4 :
                        comp_len; /* system needs 10_10_10_2 to be 4 or BGRA */
-  attr->sz = attr_sz(attr);
+  attr->size = attr_size(attr);
   attr->offset = 0; /* offsets & stride are calculated later (during pack) */
   attr->fetch_mode = fetch_mode;
 
@@ -310,13 +294,13 @@ uint padding(uint offset, uint alignment)
 }
 
 #if PACK_DEBUG
-static void show_pack(uint a_idx, uint sz, uint pad)
+static void show_pack(uint a_idx, uint size, uint pad)
 {
   const char c = 'A' + a_idx;
   for (uint i = 0; i < pad; i++) {
     putchar('-');
   }
-  for (uint i = 0; i < sz; i++) {
+  for (uint i = 0; i < size; i++) {
     putchar(c);
   }
 }
@@ -326,10 +310,10 @@ void VertexFormat_pack(GPUVertFormat *format)
 {
   GPUVertAttr *a0 = &format->attrs[0];
   a0->offset = 0;
-  uint offset = a0->sz;
+  uint offset = a0->size;
 
 #if PACK_DEBUG
-  show_pack(0, a0->sz, 0);
+  show_pack(0, a0->size, 0);
 #endif
 
   for (uint a_idx = 1; a_idx < format->attr_len; a_idx++) {
@@ -337,10 +321,10 @@ void VertexFormat_pack(GPUVertFormat *format)
     uint mid_padding = padding(offset, attr_align(a));
     offset += mid_padding;
     a->offset = offset;
-    offset += a->sz;
+    offset += a->size;
 
 #if PACK_DEBUG
-    show_pack(a_idx, a->sz, mid_padding);
+    show_pack(a_idx, a->size, mid_padding);
 #endif
   }
 

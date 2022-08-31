@@ -1,18 +1,5 @@
-/*
- * Copyright 2021 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2021-2022 Blender Foundation */
 
 /* Constant Globals */
 
@@ -25,11 +12,11 @@ CCL_NAMESPACE_BEGIN
 
 typedef struct KernelParamsMetal {
 
-#define KERNEL_TEX(type, name) ccl_global const type *name;
-#include "kernel/textures.h"
-#undef KERNEL_TEX
+#define KERNEL_DATA_ARRAY(type, name) ccl_global const type *name;
+#include "kernel/data_arrays.h"
+#undef KERNEL_DATA_ARRAY
 
-  const IntegratorStateGPU __integrator_state;
+  const IntegratorStateGPU integrator_state;
   const KernelData data;
 
 } KernelParamsMetal;
@@ -40,12 +27,10 @@ typedef struct KernelGlobalsGPU {
 
 typedef ccl_global const KernelGlobalsGPU *ccl_restrict KernelGlobals;
 
+/* Abstraction macros */
 #define kernel_data launch_params_metal.data
-#define kernel_integrator_state launch_params_metal.__integrator_state
-
-/* data lookup defines */
-
-#define kernel_tex_fetch(tex, index) launch_params_metal.tex[index]
-#define kernel_tex_array(tex) launch_params_metal.tex
+#define kernel_data_fetch(name, index) launch_params_metal.name[index]
+#define kernel_data_array(name) launch_params_metal.name
+#define kernel_integrator_state launch_params_metal.integrator_state
 
 CCL_NAMESPACE_END

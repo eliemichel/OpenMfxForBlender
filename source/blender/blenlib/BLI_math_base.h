@@ -1,23 +1,5 @@
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
- *
- * The Original Code is: some of this file.
- */
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2001-2002 NaN Holding BV. All rights reserved. */
 
 #pragma once
 
@@ -222,19 +204,36 @@ MINLINE int integer_digits_i(int i);
 /* These don't really fit anywhere but were being copied about a lot. */
 
 MINLINE int is_power_of_2_i(int n);
-MINLINE int power_of_2_max_i(int n);
-MINLINE int power_of_2_min_i(int n);
 
-MINLINE unsigned int power_of_2_max_u(unsigned int x);
-MINLINE unsigned int power_of_2_min_u(unsigned int x);
 MINLINE unsigned int log2_floor_u(unsigned int x);
 MINLINE unsigned int log2_ceil_u(unsigned int x);
+
+/**
+ * Returns next (or previous) power of 2 or the input number if it is already a power of 2.
+ */
+MINLINE int power_of_2_max_i(int n);
+MINLINE int power_of_2_min_i(int n);
+MINLINE unsigned int power_of_2_max_u(unsigned int x);
+MINLINE unsigned int power_of_2_min_u(unsigned int x);
 
 /**
  * Integer division that rounds 0.5 up, particularly useful for color blending
  * with integers, to avoid gradual darkening when rounding down.
  */
 MINLINE int divide_round_i(int a, int b);
+
+/**
+ * Integer division that returns the ceiling, instead of flooring like normal C division.
+ */
+MINLINE uint divide_ceil_u(uint a, uint b);
+MINLINE uint64_t divide_ceil_ul(uint64_t a, uint64_t b);
+
+/**
+ * Returns \a a if it is a multiple of \a b or the next multiple or \a b after \b a .
+ */
+MINLINE uint ceil_to_multiple_u(uint a, uint b);
+MINLINE uint64_t ceil_to_multiple_ul(uint64_t a, uint64_t b);
+
 /**
  * modulo that handles negative numbers, works the same as Python's.
  */
