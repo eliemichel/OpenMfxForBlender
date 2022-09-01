@@ -446,22 +446,21 @@ Default to false.
  */
 #define kOfxInputPropRequestTransform "OfxInputPropRequestTransform"
 
- /** @brief Whether the input (output mesh) defines an input output indices map
+/** @brief Whether the input (output mesh) defines an input output indices map
 
     - Type - bool X 1
     - Property Set - an input's property set
 
-This will decide wether the effect will forward the attributes of source meshes.
+This will decide wether the effect will forward the attributes of source meshes. 
  */
 #define kOfxInputPropRequestIOMap "OfxInputPropRequestIOMap"
 
-/** @brief As a member of a mesh effect, pointer to the I/O map used in the attribute propagation
-   phase
+
+/** @brief As a member of a mesh effect, pointer to the I/O map used in the attribute propagation phase
 
     - Type - Pointer X 1
     - Property Set - an input's property set
  */
-
 #define kOfxMeshPropIOMap "OfxMeshPropIOMap"
 
 

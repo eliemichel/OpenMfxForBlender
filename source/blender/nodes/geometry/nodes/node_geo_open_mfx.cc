@@ -354,7 +354,7 @@ static bool MFX_node_try_ensure_runtime(bNode *node)
   return true;
 }
 
-//template<typename T>
+// TODO: use templates instead
 static void copy_based_on_IOMap(Span<float> srcData,
                                 MutableSpan<float> destData,
                                 std::function<int(int)> getOriginPointsPoolSize,
@@ -368,17 +368,106 @@ static void copy_based_on_IOMap(Span<float> srcData,
     for (int l = 0; l < nbOriginPoints; l++) {
       int originPointIndex = getOriginPointIndex(originPoint);
       float originPointWeight = getOriginPointWeight(originPointIndex);
-
       destData[i] += srcData[originPointIndex] * originPointWeight;
       originPoint++;
     }
   }
 }
 
+static void copy_based_on_IOMap(Span<bool> srcData,
+                                MutableSpan<bool> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  int originPoint = 0;
+  for (const int i : destData.index_range()) {
+    int nbOriginPoints = getOriginPointsPoolSize(i);
+    float estimation = 0.0f;
+    for (int l = 0; l < nbOriginPoints; l++) {
+      int originPointIndex = getOriginPointIndex(originPoint);
+      float originPointWeight = getOriginPointWeight(originPointIndex);
+      estimation += srcData[originPointIndex] * originPointWeight;
+      originPoint++;
+    }
+    destData[i] = estimation > 0.5f; //
+  }
+}
+
+static void copy_based_on_IOMap(Span<int> srcData,
+                                MutableSpan<int> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  int originPoint = 0;
+  for (const int i : destData.index_range()) {
+    int nbOriginPoints = getOriginPointsPoolSize(i);
+    float estimation = 0.0f;
+    for (int l = 0; l < nbOriginPoints; l++) {
+      int originPointIndex = getOriginPointIndex(originPoint);
+      float originPointWeight = getOriginPointWeight(originPointIndex);
+      estimation += srcData[originPointIndex] * originPointWeight;
+      originPoint++;
+    }
+    destData[i] = static_cast<int>(estimation);  //
+  }
+}
+
+static void copy_based_on_IOMap(Span<float2> srcData,
+                                MutableSpan<float2> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  int originPoint = 0;
+  for (const int i : destData.index_range()) {
+    int nbOriginPoints = getOriginPointsPoolSize(i);
+    destData[i] = {0.0f, 0.0f};
+    for (int l = 0; l < nbOriginPoints; l++) {
+      int originPointIndex = getOriginPointIndex(originPoint);
+      float originPointWeight = getOriginPointWeight(originPointIndex);
+      destData[i] += srcData[originPointIndex] * originPointWeight;
+      originPoint++;
+    }
+  }
+}
+
+static void copy_based_on_IOMap(Span<float3> srcData,
+                                MutableSpan<float3> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  int originPoint = 0;
+  for (const int i : destData.index_range()) {
+    int nbOriginPoints = getOriginPointsPoolSize(i);
+    destData[i] = {0.0f, 0.0f, 0.0f};
+    for (int l = 0; l < nbOriginPoints; l++) {
+      int originPointIndex = getOriginPointIndex(originPoint);
+      float originPointWeight = getOriginPointWeight(originPointIndex);
+      destData[i] += srcData[originPointIndex] * originPointWeight;
+      originPoint++;
+    }
+  }
+}
+
+template<typename T>
+static void copy_based_on_IOMap(Span<T> srcData,
+                                MutableSpan<T> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  // TODO: not handled
+  return;
+}
+
 static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attributes,
                                  const bke::AttributeAccessor src_attributes,
                                  bke::MutableAttributeAccessor dst_attributes,
                                  const Span<eAttrDomain> domains,
+                                 const Span<eCustomDataType> types,
                                  std::function<int(int)> getOriginPointsPoolSize,
                                  std::function<int(int)> getOriginPointIndex,
                                  std::function<float(int)> getOriginPointWeight)
@@ -392,9 +481,8 @@ static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attri
 
     const eCustomDataType data_type = bke::cpp_type_to_custom_data_type(attribute.varray.type());
 
-    /* Only copy if it is on a domain we want. */
-    // TODO: extend this process to other types and other domains
-    if (!domains.contains(attribute.domain) || data_type != CD_PROP_FLOAT) {
+    /* Only copy if it is on a domain and of a type we want. */
+    if (!domains.contains(attribute.domain) || !types.contains(data_type)) {
       continue;
     }
 
@@ -406,9 +494,9 @@ static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attri
     }
 
     attribute_math::convert_to_static_type(data_type, [&](auto dummy) {
-      //using T = decltype(dummy);
-      VArraySpan<float> span{attribute.varray.typed<float>()};
-      MutableSpan<float> out_span = result_attribute.span.typed<float>();
+      using T = decltype(dummy);
+      VArraySpan<T> span{attribute.varray.typed<T>()};
+      MutableSpan<T> out_span = result_attribute.span.typed<T>();
       copy_based_on_IOMap(
           span, out_span, getOriginPointsPoolSize, getOriginPointIndex, getOriginPointWeight); 
     });
@@ -903,11 +991,12 @@ static void node_geo_exec(GeoNodeExecParams params)
         return *attributeAt<float>(
             ofxAttribDataOriginPointWeight, ofxAttribStrideOriginPointWeight, originPointIndex);
       };
-
+      // TODO: extend this process to other types and other domains
       propagate_attributes(attributes_to_propagate,
                            in_component.attributes().value(),
                            out_component.attributes_for_write().value(),
                            {ATTR_DOMAIN_POINT},
+                           {CD_PROP_FLOAT, CD_PROP_FLOAT2, CD_PROP_FLOAT3, CD_PROP_INT32, CD_PROP_BOOL},
                            getOriginPointsPoolSize,
                            getOriginPointIndex,
                            getOriginPointWeight);
