@@ -42,7 +42,6 @@
 #include "intern/BlenderMfxHost.h"
 #include "TinyTimer.h"
 
-#include "sdk/MfxAttributeProps.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
 #include "util/mfx_util.h"
@@ -377,27 +376,29 @@ static void copy_based_on_IOMap(Span<float> srcData,
 }
 
 static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attributes,
-                            const GeometryComponent &in_component,
-                            GeometryComponent &result_component,
-                            const Span<AttributeDomain> domains,
-                            std::function<int(int)> getOriginPointsPoolSize,
-                            std::function<int(int)> getOriginPointIndex,
-                            std::function<float(int)> getOriginPointWeight)
+                                 const bke::AttributeAccessor src_attributes,
+                                 bke::MutableAttributeAccessor dst_attributes,
+                                 const Span<eAttrDomain> domains,
+                                 std::function<int(int)> getOriginPointsPoolSize,
+                                 std::function<int(int)> getOriginPointIndex,
+                                 std::function<float(int)> getOriginPointWeight)
 {
   for (Map<AttributeIDRef, AttributeKind>::Item entry : attributes.items()) {
     const AttributeIDRef attribute_id = entry.key;
-    ReadAttributeLookup attribute = in_component.attribute_try_get_for_read(attribute_id);
+    GAttributeReader attribute = src_attributes.lookup(attribute_id);
     if (!attribute) {
       continue;
     }
 
+    const eCustomDataType data_type = bke::cpp_type_to_custom_data_type(attribute.varray.type());
+
     /* Only copy if it is on a domain we want. */
-    if (!domains.contains(attribute.domain)) {
+    // TODO: extend this process to other types and other domains
+    if (!domains.contains(attribute.domain) || data_type != CD_PROP_FLOAT) {
       continue;
     }
-    const CustomDataType data_type = bke::cpp_type_to_custom_data_type(attribute.varray.type());
 
-    OutputAttribute result_attribute = result_component.attribute_try_get_for_output_only(
+    GSpanAttributeWriter result_attribute = dst_attributes.lookup_or_add_for_write_only_span(
         attribute_id, attribute.domain, data_type);
 
     if (!result_attribute) {
@@ -406,12 +407,12 @@ static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attri
 
     attribute_math::convert_to_static_type(data_type, [&](auto dummy) {
       //using T = decltype(dummy);
-      VArray_Span<float> span{attribute.varray.typed<float>()};
-      MutableSpan<float> out_span = result_attribute.as_span<float>();
+      VArraySpan<float> span{attribute.varray.typed<float>()};
+      MutableSpan<float> out_span = result_attribute.span.typed<float>();
       copy_based_on_IOMap(
           span, out_span, getOriginPointsPoolSize, getOriginPointIndex, getOriginPointWeight); 
     });
-    result_attribute.save();
+    result_attribute.finish();
   }
 }
 
@@ -794,26 +795,6 @@ static void node_geo_exec(GeoNodeExecParams params)
 
           void *data = spans[j].data();
           const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
-          
-         /* MeshComponent &component = inputData.geo.get_component_for_write<MeshComponent>();
-          component.attribute_foreach([&](const AttributeIDRef &id, const AttributeMetaData meta_data) {
-            if (!ELEM(meta_data.domain, ATTR_DOMAIN_POINT, ATTR_DOMAIN_CORNER, ATTR_DOMAIN_FACE)) {
-              return true;
-            }
-            OutputAttribute attribute = component.attribute_try_get_for_output(
-                id, meta_data.domain, meta_data.data_type);
-            attribute_math::convert_to_static_type(meta_data.data_type, [&](auto dummy) {
-              using T = decltype(dummy);
-              MutableSpan<T> data = attribute.as_span().typed<T>();
-              switch (attribute.domain()) {
-                case ATTR_DOMAIN_POINT: {
-                  copy_with_mask(data.slice(new_vert_range), data.as_span(), selection);
-                  break;
-                }
-                default:
-                  BLI_assert_unreachable();
-              }
-            });*/
             
           attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
           attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.alignment();
@@ -841,7 +822,6 @@ static void node_geo_exec(GeoNodeExecParams params)
         inputData.outputAttributes[j] = StrongAnonymousAttributeID(attribData.name());
       }
 
-      // TODO: For other default attributes, check if a map exists, add to requested attributes and prepare a StrongAnonymousAttributeID
       IOMapRequested = input.properties.find(kOfxInputPropRequestIOMap) != -1 &&
                        input.properties[kOfxInputPropRequestIOMap].value[0].as_int;
 
@@ -925,16 +905,16 @@ static void node_geo_exec(GeoNodeExecParams params)
       };
 
       propagate_attributes(attributes_to_propagate,
-                           in_component,
-                           out_component,
+                           in_component.attributes().value(),
+                           out_component.attributes_for_write().value(),
                            {ATTR_DOMAIN_POINT},
                            getOriginPointsPoolSize,
                            getOriginPointIndex,
                            getOriginPointWeight);
-    }
 
-    AttributeIOMap.free_owned_data();
-    //meshHandle->properties.remove(findIOMap);
+      AttributeIOMap.free_owned_data();
+      // meshHandle->properties.remove(findIOMap);
+    }
 
     params.set_output(outputLabel, outputIt->geo);
 
