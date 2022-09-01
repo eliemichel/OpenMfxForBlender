@@ -75,13 +75,10 @@ struct OfxAttributeStruct {
 
   AttributeType type() const;
   int componentCount() const;
+  AttributeSemantic semantic() const;
   AttributeAttachment attachment() const
   {
     return m_attachment;
-  }
-  AttributeSemantic semantic() const
-  {
-      return m_semantic;
   }
   const std::string &name() const
   {
@@ -111,7 +108,6 @@ struct OfxAttributeStruct {
  private:
   std::string m_name;
   AttributeAttachment m_attachment = AttributeAttachment::Invalid;
-  AttributeSemantic m_semantic = AttributeSemantic::None;
 };
 
 struct OfxAttributeSetStruct : OpenMfx::Collection<OfxAttributeStruct> {

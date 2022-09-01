@@ -351,7 +351,7 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
   }
 
   extractBasicAttributes(pointPosition, cornerPoint, faceSize, blenderMesh, counts);
-  extractUvAttributes(ofxMesh, blenderMesh, counts);
+  //extractUvAttributes(ofxMesh, blenderMesh, counts);
   extractExpectedAttributes(ofxMesh, internalData.requestedAttributes, internalData.outputAttributes, blenderMesh, counts);
 
   if (counts.blenderPolygonCount > 0) {
@@ -1076,10 +1076,10 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
   component.replace(blenderMesh, GeometryOwnershipType::Editable);
   int i = 0;
   for (const auto &requestedAttrib : requestedAttributes) {
-    auto key = std::make_pair(OpenMfx::AttributeAttachment::Point, requestedAttrib.name());
+    auto key = std::make_pair(requestedAttrib.attachment(), requestedAttrib.name());
     int idx = ofxMesh->attributes.find(key);
     if (idx == -1) {
-        // warning!
+        // TODO: check for errors
       continue;
     }
     const OfxAttributeStruct &ofxAttrib = ofxMesh->attributes[idx];
