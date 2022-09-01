@@ -339,7 +339,7 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
     if (kOfxStatOK != status) {
       return status;
     }
-    status = propGetInt(&meshHandle->properties, "OfxMeshOriginPointsTotalPoolSize", 0, &origin_points_pool_size);
+    status = propGetInt(&meshHandle->properties, "OfxMeshPropOriginPointsTotalPoolSize", 0, &origin_points_pool_size);
     if (kOfxStatOK != status) {
       return status;
     }

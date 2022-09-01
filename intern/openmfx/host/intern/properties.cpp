@@ -77,12 +77,11 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
       (0 == strcmp(property, kOfxMeshPropNoLooseEdge)  && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, "OfxMeshPropIsAttributeMap")  && type == PROP_TYPE_INT)     || // TODO use defines
       (0 == strcmp(property, "OfxMeshPropOutputPointsCount")  && type == PROP_TYPE_INT)     ||
-      (0 == strcmp(property, "OfxMeshOriginPointsTotalPoolSize")  && type == PROP_TYPE_INT)     ||
+      (0 == strcmp(property, "OfxMeshPropOriginPointsTotalPoolSize")  && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropConstantFaceSize) && type == PROP_TYPE_INT) ||
       (0 == strcmp(property, kOfxMeshPropAttributeCount) && type == PROP_TYPE_INT) ||
       (0 == strcmp(property, kOfxMeshPropTransformMatrix) && type == PROP_TYPE_POINTER) ||
       (0 == strcmp(property, kOfxMeshPropIOMap) && type == PROP_TYPE_POINTER) ||
-      (0 == strncmp(property, "OfxMeshSource", 13) && type == PROP_TYPE_POINTER) ||
       false
     );
     case PropertySetContext::Param:
