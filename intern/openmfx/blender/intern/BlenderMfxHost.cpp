@@ -1075,78 +1075,11 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
   MeshComponent component;
   component.replace(blenderMesh, GeometryOwnershipType::Editable);
   int i = 0;
-
-  bool hasIOMap = ofxMesh->properties.find(kOfxMeshPropIOMap) != -1;
-  OfxMeshHandle map = hasIOMap? (OfxMeshHandle)ofxMesh->properties[kOfxMeshPropIOMap].value[0].as_pointer : nullptr;
-  OfxMeshHandle meshSource = hasIOMap? (OfxMeshHandle)ofxMesh->properties["OfxMeshSource0"].value[0].as_pointer : nullptr;
-
   for (const auto &requestedAttrib : requestedAttributes) {
     auto key = std::make_pair(requestedAttrib.attachment(), requestedAttrib.name());
     int idx = ofxMesh->attributes.find(key);
     if (idx == -1) {
-        // TODO else check for error 
-        // TODO replace test example with a proper solution
-      if (hasIOMap) {
-        const OfxAttributeStruct &ofxAttribSource = meshSource->attributes[{
-            OfxAttributeStruct::AttributeAttachment::Point, "pointWeight0"}];
-        char *ofxAttribDataSource =
-            (char *)ofxAttribSource.properties[kOfxMeshAttribPropData].value[0].as_pointer;
-        int ofxAttribStrideSource =
-            ofxAttribSource.properties[kOfxMeshAttribPropStride].value[0].as_int;
-
-        const OfxAttributeStruct &ofxAttribOriginPointsPoolSize = map->attributes[{
-            OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointsPoolSize"}];
-        char *ofxAttribDataOriginPointsPoolSize = (char *)ofxAttribOriginPointsPoolSize
-                                                      .properties[kOfxMeshAttribPropData]
-                                                      .value[0]
-                                                      .as_pointer;
-        int ofxAttribStrideOriginPointsPoolSize =
-            ofxAttribOriginPointsPoolSize.properties[kOfxMeshAttribPropStride].value[0].as_int;
-
-        const OfxAttributeStruct &ofxAttribOriginPointIndex = map->attributes[{
-            OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointIndex"}];
-        char *ofxAttribDataOriginPointIndex = (char *)ofxAttribOriginPointIndex
-                                                  .properties[kOfxMeshAttribPropData]
-                                                  .value[0]
-                                                  .as_pointer;
-        int ofxAttribStrideOriginPointIndex =
-            ofxAttribOriginPointIndex.properties[kOfxMeshAttribPropStride].value[0].as_int;
-
-        const OfxAttributeStruct &ofxAttribOriginPointWeight = map->attributes[{
-            OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointWeight"}];
-        char *ofxAttribDataOriginPointWeight = (char *)ofxAttribOriginPointWeight
-                                                   .properties[kOfxMeshAttribPropData]
-                                                   .value[0]
-                                                   .as_pointer;
-        int ofxAttribStrideOriginPointWeight =
-            ofxAttribOriginPointWeight.properties[kOfxMeshAttribPropStride].value[0].as_int;
-
-        const AttributeDomain domain = ATTR_DOMAIN_POINT;  // TODO
-        blender::bke::OutputAttribute_Typed<float> attribute;
-        attribute = component.attribute_try_get_for_output_only<float>(outputAttributes[i].get(),
-                                                                       domain);
-        float *destData = attribute.as_span().data();
-        int originPoint = 0;
-        for (int k = 0; k < counts.ofxPointCount; ++k) {
-          int nbOriginPoints = *attributeAt<int>(
-              ofxAttribDataOriginPointsPoolSize, ofxAttribStrideOriginPointsPoolSize, k);
-          destData[k] = 0.0f;
-          for (int l = 0; l < nbOriginPoints; l++) {
-            int originPointIndex = *attributeAt<int>(
-                ofxAttribDataOriginPointIndex, ofxAttribStrideOriginPointIndex, originPoint);
-            float originPointAtrributeValue = *attributeAt<float>(
-                ofxAttribDataSource, ofxAttribStrideSource, originPointIndex);
-            float originPointWeight = *attributeAt<float>(ofxAttribDataOriginPointWeight,
-                                                          ofxAttribStrideOriginPointWeight,
-                                                          originPointIndex);
-
-            destData[k] += originPointAtrributeValue * originPointWeight;
-            originPoint++;
-          }
-        }
-        attribute.save();
-        ++i;
-      }
+        // TODO: check for errors
       continue;
     }
     const OfxAttributeStruct &ofxAttrib = ofxMesh->attributes[idx];

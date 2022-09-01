@@ -45,6 +45,7 @@
 #include "sdk/MfxAttributeProps.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/properties>
+#include "util/mfx_util.h"
 
 using MeshInternalDataNode = BlenderMfxHost::MeshInternalDataNode;
 
@@ -354,6 +355,66 @@ static bool MFX_node_try_ensure_runtime(bNode *node)
   return true;
 }
 
+//template<typename T>
+static void copy_based_on_IOMap(Span<float> srcData,
+                                MutableSpan<float> destData,
+                                std::function<int(int)> getOriginPointsPoolSize,
+                                std::function<int(int)> getOriginPointIndex,
+                                std::function<float(int)> getOriginPointWeight)
+{
+  int originPoint = 0;
+  for (const int i : destData.index_range()) {
+    int nbOriginPoints = getOriginPointsPoolSize(i);
+    destData[i] = 0.0f;
+    for (int l = 0; l < nbOriginPoints; l++) {
+      int originPointIndex = getOriginPointIndex(originPoint);
+      float originPointWeight = getOriginPointWeight(originPointIndex);
+
+      destData[i] += srcData[originPointIndex] * originPointWeight;
+      originPoint++;
+    }
+  }
+}
+
+static void propagate_attributes(const Map<AttributeIDRef, AttributeKind> &attributes,
+                            const GeometryComponent &in_component,
+                            GeometryComponent &result_component,
+                            const Span<AttributeDomain> domains,
+                            std::function<int(int)> getOriginPointsPoolSize,
+                            std::function<int(int)> getOriginPointIndex,
+                            std::function<float(int)> getOriginPointWeight)
+{
+  for (Map<AttributeIDRef, AttributeKind>::Item entry : attributes.items()) {
+    const AttributeIDRef attribute_id = entry.key;
+    ReadAttributeLookup attribute = in_component.attribute_try_get_for_read(attribute_id);
+    if (!attribute) {
+      continue;
+    }
+
+    /* Only copy if it is on a domain we want. */
+    if (!domains.contains(attribute.domain)) {
+      continue;
+    }
+    const CustomDataType data_type = bke::cpp_type_to_custom_data_type(attribute.varray.type());
+
+    OutputAttribute result_attribute = result_component.attribute_try_get_for_output_only(
+        attribute_id, attribute.domain, data_type);
+
+    if (!result_attribute) {
+      continue;
+    }
+
+    attribute_math::convert_to_static_type(data_type, [&](auto dummy) {
+      //using T = decltype(dummy);
+      VArray_Span<float> span{attribute.varray.typed<float>()};
+      MutableSpan<float> out_span = result_attribute.as_span<float>();
+      copy_based_on_IOMap(
+          span, out_span, getOriginPointsPoolSize, getOriginPointIndex, getOriginPointWeight); 
+    });
+    result_attribute.save();
+  }
+}
+
 // -----------------------------------------
 // Node Callbacks
 
@@ -644,6 +705,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   bool canCook = true;
 
   OfxMeshStruct AttributeIOMap;
+  bool IOMapRequested = false;
 
   for (int i = 0; i < effect->inputs.count(); ++i) {
     OfxMeshInputStruct &input = effect->inputs[i];
@@ -779,12 +841,11 @@ static void node_geo_exec(GeoNodeExecParams params)
       }
 
       // TODO: For other default attributes, check if a map exists, add to requested attributes and prepare a StrongAnonymousAttributeID
-      bool IOMapRequested = input.properties.find(kOfxInputPropRequestIOMap) != -1;
-      IOMapRequested = IOMapRequested && input.properties[kOfxInputPropRequestIOMap].value[0].as_int;
+      IOMapRequested = input.properties.find(kOfxInputPropRequestIOMap) != -1 &&
+                       input.properties[kOfxInputPropRequestIOMap].value[0].as_int;
 
       if (IOMapRequested) {
         host.propertySuite->propSetPointer(&input.mesh.properties, kOfxMeshPropIOMap, 0, (void *)&AttributeIOMap);
-        host.propertySuite->propSetPointer(&input.mesh.properties, "OfxMeshSource0", 0, (void *)&effect->inputs[0].mesh);
       }
     }
 
@@ -805,7 +866,6 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   TinyTimer::Timer subtimer;
   bool success = host.Cook(effect);
-  
   PERF(1).add_sample(subtimer);
 
   if (!success) {
@@ -815,6 +875,66 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   if (nullptr != outputIt) {
+    if (IOMapRequested) {
+      Map<AttributeIDRef, AttributeKind> attributes_to_propagate;
+      GeometrySet geometry_set = inputInternalData[0].geo;
+      geometry_set.gather_attributes_for_propagation(
+          {GEO_COMPONENT_TYPE_MESH}, GEO_COMPONENT_TYPE_INSTANCES, false, attributes_to_propagate);
+      attributes_to_propagate.remove("position");
+
+      MeshComponent &in_component = geometry_set.get_component_for_write<MeshComponent>();
+      MeshComponent &out_component = outputIt->geo.get_component_for_write<MeshComponent>();
+
+      const OfxAttributeStruct &ofxAttribOriginPointsPoolSize = AttributeIOMap.attributes[{
+          OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointsPoolSize"}];
+      char *ofxAttribDataOriginPointsPoolSize = (char *)ofxAttribOriginPointsPoolSize
+                                                    .properties[kOfxMeshAttribPropData]
+                                                    .value[0]
+                                                    .as_pointer;
+      int ofxAttribStrideOriginPointsPoolSize =
+          ofxAttribOriginPointsPoolSize.properties[kOfxMeshAttribPropStride].value[0].as_int;
+
+      const OfxAttributeStruct &ofxAttribOriginPointIndex = AttributeIOMap.attributes[{
+          OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointIndex"}];
+      char *ofxAttribDataOriginPointIndex =
+          (char *)ofxAttribOriginPointIndex.properties[kOfxMeshAttribPropData].value[0].as_pointer;
+      int ofxAttribStrideOriginPointIndex =
+          ofxAttribOriginPointIndex.properties[kOfxMeshAttribPropStride].value[0].as_int;
+
+      const OfxAttributeStruct &ofxAttribOriginPointWeight = AttributeIOMap.attributes[{
+          OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointWeight"}];
+      char *ofxAttribDataOriginPointWeight = (char *)ofxAttribOriginPointWeight
+                                                 .properties[kOfxMeshAttribPropData]
+                                                 .value[0]
+                                                 .as_pointer;
+      int ofxAttribStrideOriginPointWeight =
+          ofxAttribOriginPointWeight.properties[kOfxMeshAttribPropStride].value[0].as_int;
+
+      auto getOriginPointsPoolSize = [&](int outputPointIndex) {
+        return *attributeAt<int>(
+            ofxAttribDataOriginPointsPoolSize, ofxAttribStrideOriginPointsPoolSize, outputPointIndex);
+      };
+      auto getOriginPointIndex = [&](int originPoint) {
+        return *attributeAt<int>(
+            ofxAttribDataOriginPointIndex, ofxAttribStrideOriginPointIndex, originPoint);
+      };
+      auto getOriginPointWeight = [&](int originPointIndex) {
+        return *attributeAt<float>(
+            ofxAttribDataOriginPointWeight, ofxAttribStrideOriginPointWeight, originPointIndex);
+      };
+
+      propagate_attributes(attributes_to_propagate,
+                           in_component,
+                           out_component,
+                           {ATTR_DOMAIN_POINT},
+                           getOriginPointsPoolSize,
+                           getOriginPointIndex,
+                           getOriginPointWeight);
+    }
+
+    AttributeIOMap.free_owned_data();
+    //meshHandle->properties.remove(findIOMap);
+
     params.set_output(outputLabel, outputIt->geo);
 
     int requestedAttribCount = outputIt->requestedAttributes.size();

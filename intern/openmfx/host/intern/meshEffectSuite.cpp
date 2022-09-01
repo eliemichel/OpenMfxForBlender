@@ -235,15 +235,6 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
 
   meshHandle->free_owned_data();
 
-  // Free owned data sur le IOMap
-  
-  int findIOMap = meshHandle->properties.find(kOfxMeshPropIOMap);
-  if (findIOMap != -1) {
-    OfxMeshStruct *map = nullptr;
-    propGetPointer(&meshHandle->properties, kOfxMeshPropIOMap, 0, (void **)&map);
-    map->free_owned_data();
-    meshHandle->properties.remove(findIOMap);
-  }
   propSetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropCornerCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropFaceCount, 0, 0);
