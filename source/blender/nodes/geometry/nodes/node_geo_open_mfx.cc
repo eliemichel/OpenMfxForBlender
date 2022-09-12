@@ -311,10 +311,17 @@ static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
 static const CPPType &MFX_to_cpptype(OpenMfx::AttributeType mfxType, int componentCount)
 {
   // TODO: use componentCount
-  (void)componentCount;
+  //(void)componentCount;
   switch (mfxType) {
     case OfxAttributeStruct::AttributeType::Float:
-      return CPPType::get<float>();
+      if (componentCount == 1)
+        return CPPType::get<float>();
+      else if (componentCount <= 3)
+        return CPPType::get<float3>();
+      else {
+        BLI_assert(false);  // not implemented
+        return CPPType::get<int>();
+      }
     case OfxAttributeStruct::AttributeType::Int:
       return CPPType::get<int>();
     default:
@@ -423,7 +430,7 @@ static void copy_based_on_IOMap(Span<float2> srcData,
   int originPoint = 0;
   for (const int i : destData.index_range()) {
     int nbOriginPoints = getOriginPointsPoolSize(i);
-    destData[i] = {0.0f, 0.0f};
+    destData[i] = {};
     for (int l = 0; l < nbOriginPoints; l++) {
       int originPointIndex = getOriginPointIndex(originPoint);
       float originPointWeight = getOriginPointWeight(originPointIndex);
@@ -442,7 +449,7 @@ static void copy_based_on_IOMap(Span<float3> srcData,
   int originPoint = 0;
   for (const int i : destData.index_range()) {
     int nbOriginPoints = getOriginPointsPoolSize(i);
-    destData[i] = {0.0f, 0.0f, 0.0f};
+    destData[i] = {};
     for (int l = 0; l < nbOriginPoints; l++) {
       int originPointIndex = getOriginPointIndex(originPoint);
       float originPointWeight = getOriginPointWeight(originPointIndex);
@@ -844,7 +851,14 @@ static void node_geo_exec(GeoNodeExecParams params)
           // TODO switch on the number of components
           switch (def.type()) {
             case OfxAttributeStruct::AttributeType::Float:
-              field = params.get_input<Field<float>>(def.name());
+              if (def.componentCount() == 1)
+                field = params.get_input<Field<float>>(def.name());
+              else if (def.componentCount() <= 3)
+                field = params.get_input<Field<float3>>(def.name());
+              else {
+                BLI_assert(false);  // not implemented
+              }
+              
               break;
             case OfxAttributeStruct::AttributeType::Int:
               field = params.get_input<Field<int>>(def.name());
@@ -885,7 +899,7 @@ static void node_geo_exec(GeoNodeExecParams params)
           const CPPType &type = MFX_to_cpptype(def.type(), def.componentCount());
             
           attrib.properties[kOfxMeshAttribPropData].value[0].as_pointer = data;
-          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.alignment();
+          attrib.properties[kOfxMeshAttribPropStride].value[0].as_int = type.size();
         }
 
         // --------
@@ -948,8 +962,11 @@ static void node_geo_exec(GeoNodeExecParams params)
       Map<AttributeIDRef, AttributeKind> attributes_to_propagate;
       GeometrySet geometry_set = inputInternalData[0].geo;
       geometry_set.gather_attributes_for_propagation(
-          {GEO_COMPONENT_TYPE_MESH}, GEO_COMPONENT_TYPE_INSTANCES, false, attributes_to_propagate);
+          {GEO_COMPONENT_TYPE_MESH}, GEO_COMPONENT_TYPE_MESH, false, attributes_to_propagate);
+      // don't use map to propagate attributes that are calculated by blender on mesh create
       attributes_to_propagate.remove("position");
+      attributes_to_propagate.remove("normal");
+      attributes_to_propagate.remove("crease");
 
       MeshComponent &in_component = geometry_set.get_component_for_write<MeshComponent>();
       MeshComponent &out_component = outputIt->geo.get_component_for_write<MeshComponent>();
