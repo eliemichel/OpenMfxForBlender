@@ -423,7 +423,7 @@ AUD_API char** AUD_getDeviceNames()
 	{
 		std::string name = v_names[i];
 		names[i] = (char*) malloc(sizeof(char) * (name.length() + 1));
-		strcpy(names[i], name.c_str());
+		strncpy(names[i], name.c_str(), name.length() + 1);
 	}
 
 	names[v_names.size()] = nullptr;

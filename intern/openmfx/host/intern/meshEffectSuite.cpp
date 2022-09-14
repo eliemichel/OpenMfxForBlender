@@ -17,14 +17,12 @@
 #include "meshEffectSuite.h"
 #include "propertySuite.h"
 #include "mesheffect.h"
+#include "util/mfx_util.h"
 
 #include <cstring>
 #include <cstdio>
-#include <cassert>
 
 using namespace OpenMfx;
-
-#define MFX_ENSURE(op) assert(kOfxStatOK == op)
 
  // CONVERSION UTILS
 
@@ -202,7 +200,7 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   OfxHost *host = input->host;
   BeforeMeshGetCbFunc beforeMeshGetCb = nullptr;
   if (nullptr != host) {
-      MFX_ENSURE(propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void**)&beforeMeshGetCb));
+    MFX_CHECK(propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void**)&beforeMeshGetCb));
     if (nullptr != beforeMeshGetCb) {
         OfxStatus status = beforeMeshGetCb(host, inputMeshHandle);
         if (kOfxStatOK != status) {
@@ -225,9 +223,9 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
   // Call internal callback before actually releasing data
   OfxHost *host = nullptr;
   BeforeMeshReleaseCbFunc beforeMeshReleaseCb = nullptr;
-  propGetPointer(&meshHandle->properties, kOfxMeshPropHostHandle, 0, (void **)&host);
+  MFX_CHECK(propGetPointer(&meshHandle->properties, kOfxMeshPropHostHandle, 0, (void **)&host));
   if (NULL != host) {
-    propGetPointer(host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void **)&beforeMeshReleaseCb);
+    MFX_CHECK(propGetPointer(host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void **)&beforeMeshReleaseCb));
     if (NULL != beforeMeshReleaseCb) {
       beforeMeshReleaseCb(host, meshHandle);
     }

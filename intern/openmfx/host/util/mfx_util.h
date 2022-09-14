@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 template <typename T>
 inline T* attributeAt(char* buffer, int byteStride, int index) {
 	return reinterpret_cast<T*>(buffer + static_cast<size_t>(index) * static_cast<size_t>(byteStride));
