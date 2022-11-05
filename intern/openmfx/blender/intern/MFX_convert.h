@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "mfxHost.h"
-#include <mfxHost/parameters>
+#include <OpenMfx/Sdk/Cpp/Host/Host>
+#include <OpenMfx/Sdk/Cpp/Host/Parameters>
 
 #include "ofxParam.h"
 

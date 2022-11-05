@@ -14,15 +14,23 @@
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-# The Original Code is Copyright (C) 2019 - 2020, Elie Michel
+# The Original Code is Copyright (C) 2019 - 2022, Elie Michel
 # All rights reserved.
 # ***** END GPL LICENSE BLOCK *****
 
+# For some reason this is not automatically discovered...
+set(OPENMFX_SDK_INCLUDES "")
+get_target_property(INC OpenMfx::Sdk::Cpp::Host INCLUDE_DIRECTORIES)
+list(APPEND OPENMFX_SDK_INCLUDES ${INC})
+get_target_property(INC OpenMfx::Sdk::Cpp::Common INCLUDE_DIRECTORIES)
+list(APPEND OPENMFX_SDK_INCLUDES ${INC})
+get_target_property(INC OpenMfx::Core INCLUDE_DIRECTORIES)
+list(APPEND OPENMFX_SDK_INCLUDES ${INC})
+list(REMOVE_DUPLICATES OPENMFX_SDK_INCLUDES)
+
 set(INC
   .
-  ../host
-  ../openfx
-  ../util/include
+  ../include
   ../../guardedalloc
   ../../../source/blender/makesdna
   ../../../source/blender/modifiers
@@ -30,6 +38,7 @@ set(INC
   ../../../source/blender/blenkernel
   ../../../source/blender/depsgraph
   ../../../source/blender/functions
+  ${OPENMFX_SDK_INCLUDES}
 )
 
 set(INC_SYS
@@ -43,17 +52,18 @@ set(SRC
   
   intern/BlenderMfxHost.h
   intern/BlenderMfxHost.cpp
-  intern/OpenMfxRuntime.h
-  intern/OpenMfxRuntime.cpp
   intern/MFX_convert.h
   intern/convert.cpp
-  intern/node_runtime.cpp
   intern/modifier.cpp
+  intern/modifier_runtime.h
+  intern/modifier_runtime.cpp
+  intern/node_runtime.cpp
   intern/util.cpp
 )
 
 set(LIB
-  OpenMfx::Host
+  OpenMfx::Sdk::Cpp::Host
+  OpenMfx::Sdk::Cpp::Common
   OpenMfx::Core
 )
 

@@ -18,46 +18,48 @@
 
 #include "MFX_convert.h"
 
-#include "mfxHost.h"
+#include <OpenMfx/Sdk/Cpp/Host/Host>
 
 #include <iostream>
 #include <cstring>
 
+using ParameterType = OpenMfx::ParameterType;
+
 void MFX_copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParameter *rna)
 {
-  param->type = static_cast<ParamType>(rna->type);
-  switch (rna->type) {
-    case PARAM_TYPE_INTEGER_3D:
+  param->type = static_cast<OpenMfx::ParameterType>(rna->type);
+  switch (param->type) {
+    case ParameterType::Integer3d:
       param->value[2].as_int = rna->integer_vec_value[2];
-    case PARAM_TYPE_INTEGER_2D:
+    case ParameterType::Integer2d:
       param->value[1].as_int = rna->integer_vec_value[1];
-    case PARAM_TYPE_INTEGER:
+    case ParameterType::Integer:
       param->value[0].as_int = rna->integer_vec_value[0];
       break;
 
-    case PARAM_TYPE_RGBA:
+    case ParameterType::Rgba:
       param->value[3].as_double = (double)rna->float_vec_value[3];
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB:
+    case ParameterType::Double3d:
+    case ParameterType::Rgb:
       param->value[2].as_double = (double)rna->float_vec_value[2];
-    case PARAM_TYPE_DOUBLE_2D:
+    case ParameterType::Double2d:
       param->value[1].as_double = (double)rna->float_vec_value[1];
-    case PARAM_TYPE_DOUBLE:
+    case ParameterType::Double:
       param->value[0].as_double = (double)rna->float_vec_value[0];
       break;
 
-    case PARAM_TYPE_BOOLEAN:
+    case ParameterType::Boolean:
       param->value[0].as_bool = rna->integer_vec_value[0];
       break;
 
-    case PARAM_TYPE_STRING:
+    case ParameterType::String:
       param->realloc_string(MOD_OPENMFX_MAX_STRING_VALUE);
       strncpy(param->value[0].as_char, rna->string_value, MOD_OPENMFX_MAX_STRING_VALUE);
       break;
 
     default:
       std::cerr << "-- Skipping parameter " << param->name
-                << " (unsupported type: " << param->type << ")"
+                << " (unsupported type: " << static_cast<int>(param->type) << ")"
                 << std::endl;
       break;
   }
@@ -65,31 +67,31 @@ void MFX_copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParame
 
 void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxPropertyStruct *prop)
 {
-  switch (rna->type) {
-    case PARAM_TYPE_INTEGER_3D:
+  switch (static_cast<ParameterType>(rna->type)) {
+    case ParameterType::Integer3d:
       rna->integer_vec_value[2] = prop->value[2].as_int;
-    case PARAM_TYPE_INTEGER_2D:
+    case ParameterType::Integer2d:
       rna->integer_vec_value[1] = prop->value[1].as_int;
-    case PARAM_TYPE_INTEGER:
+    case ParameterType::Integer:
       rna->integer_vec_value[0] = prop->value[0].as_int;
       break;
 
-    case PARAM_TYPE_RGBA:
+    case ParameterType::Rgba:
       rna->float_vec_value[3] = (float)prop->value[3].as_double;
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB:
+    case ParameterType::Double3d:
+    case ParameterType::Rgb:
       rna->float_vec_value[2] = (float)prop->value[2].as_double;
-    case PARAM_TYPE_DOUBLE_2D:
+    case ParameterType::Double2d:
       rna->float_vec_value[1] = (float)prop->value[1].as_double;
-    case PARAM_TYPE_DOUBLE:
+    case ParameterType::Double:
       rna->float_vec_value[0] = (float)prop->value[0].as_double;
       break;
 
-    case PARAM_TYPE_BOOLEAN:
+    case ParameterType::Boolean:
       rna->integer_vec_value[0] = (int)prop->value[0].as_int;
       break;
 
-    case PARAM_TYPE_STRING:
+    case ParameterType::String:
       strncpy(rna->string_value,
               prop->value[0].as_char,
               MOD_OPENMFX_MAX_STRING_VALUE);
@@ -108,22 +110,22 @@ void MFX_copy_parameter_minmax_to_rna(int rna_type,
                                   float & float_rna,
                                   const OfxPropertyStruct *prop)
 {
-  switch (rna_type) {
-    case PARAM_TYPE_INTEGER_3D:
-    case PARAM_TYPE_INTEGER_2D:
-    case PARAM_TYPE_INTEGER:
+  switch (static_cast<ParameterType>(rna_type)) {
+    case ParameterType::Integer3d:
+    case ParameterType::Integer2d:
+    case ParameterType::Integer:
       int_rna = prop->value[0].as_int;
       break;
 
-    case PARAM_TYPE_RGBA:
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB:
-    case PARAM_TYPE_DOUBLE_2D:
-    case PARAM_TYPE_DOUBLE:
+    case ParameterType::Rgba:
+    case ParameterType::Double3d:
+    case ParameterType::Rgb:
+    case ParameterType::Double2d:
+    case ParameterType::Double:
       float_rna = static_cast<float>(prop->value[0].as_double);
       break;
 
-    case PARAM_TYPE_BOOLEAN:
+    case ParameterType::Boolean:
       int_rna = prop->value[0].as_int;
       break;
   }
@@ -132,31 +134,31 @@ void MFX_copy_parameter_minmax_to_rna(int rna_type,
 void MFX_copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxParamHandle param)
 {
   rna->type = static_cast<int>(param->type);
-  switch (rna->type) {
-    case PARAM_TYPE_INTEGER_3D:
+  switch (param->type) {
+    case ParameterType::Integer3d:
       rna->integer_vec_value[2] = param->value[2].as_int;
-    case PARAM_TYPE_INTEGER_2D:
+    case ParameterType::Integer2d:
       rna->integer_vec_value[1] = param->value[1].as_int;
-    case PARAM_TYPE_INTEGER:
+    case ParameterType::Integer:
       rna->integer_vec_value[0] = param->value[0].as_int;
       break;
 
-    case PARAM_TYPE_RGBA:
+    case ParameterType::Rgba:
       rna->float_vec_value[3] = (float)param->value[3].as_double;
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB:
+    case ParameterType::Double3d:
+    case ParameterType::Rgb:
       rna->float_vec_value[2] = (float)param->value[2].as_double;
-    case PARAM_TYPE_DOUBLE_2D:
+    case ParameterType::Double2d:
       rna->float_vec_value[1] = (float)param->value[1].as_double;
-    case PARAM_TYPE_DOUBLE:
+    case ParameterType::Double:
       rna->float_vec_value[0] = (float)param->value[0].as_double;
       break;
 
-    case PARAM_TYPE_BOOLEAN:
+    case ParameterType::Boolean:
       rna->integer_vec_value[0] = (int)param->value[0].as_int;
       break;
 
-    case PARAM_TYPE_STRING:
+    case ParameterType::String:
       strncpy(rna->string_value, param->value[0].as_char, MOD_OPENMFX_MAX_STRING_VALUE);
       break;
 

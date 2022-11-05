@@ -33,8 +33,6 @@
  * the 'runtime' field of the ModifierData.
  */
 
-#include "../host/mfxParamType.h"
-
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
@@ -50,6 +48,27 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// A C-enum version of OpenMfx::ParameterType
+enum MfxParamType {
+  PARAM_TYPE_UNKNOWN = -1,
+  PARAM_TYPE_INTEGER,
+  PARAM_TYPE_INTEGER_2D,
+  PARAM_TYPE_INTEGER_3D,
+  PARAM_TYPE_DOUBLE,
+  PARAM_TYPE_DOUBLE_2D,
+  PARAM_TYPE_DOUBLE_3D,
+  PARAM_TYPE_RGB,
+  PARAM_TYPE_RGBA,
+  PARAM_TYPE_BOOLEAN,
+  PARAM_TYPE_CHOICE,
+  PARAM_TYPE_STRING,
+  PARAM_TYPE_CUSTOM,
+  PARAM_TYPE_PUSHBUTTON,
+  PARAM_TYPE_GROUP,
+  PARAM_TYPE_PAGE,
+};
+
 
 // Callback types required by mfxHost
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain

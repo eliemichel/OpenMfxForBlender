@@ -18,7 +18,7 @@
 
 /** \file
  * \ingroup openmfx
- * Utility functions using Blender functions
+ * Provides a C interface to some OpenMfx object attributes
  */
 
 #ifndef __MFX_UTILS_H__
@@ -30,16 +30,22 @@
 extern "C" {
 #endif
 
-#include "mfxPluginRegistry.h"
-
 /**
  * Get absolute path (ui file browser returns relative path for saved files)
  */
 void MFX_normalize_plugin_path(char *dest_path, const char *src_path);
 
-const PluginRegistry *MFX_get_plugin_registry(bNode *node);
+/**
+ * @return the number of effects available in the OpenMfx effect library
+ * currently loaded, or 0 if no library is loaded.
+ */
+int MFX_node_get_effect_count(bNode *node);
 
-int MFX_component_size(const char *componentType);
+/**
+ * @param effect_index is assumed to be between 0 included
+ * and MFX_node_get_effect_count(node) excluded.
+ */
+const char *MFX_node_get_effect_identifier(bNode *node, int effect_index);
 
 #ifdef __cplusplus
 }

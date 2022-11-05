@@ -22,10 +22,12 @@
 
 #pragma once
 
-#include "ofxMeshEffect.h"
+#include <ofxMeshEffect.h>
 
-struct PluginRegistry;
 struct bNode;
+namespace OpenMfx {
+class EffectLibrary;
+}
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
@@ -34,6 +36,9 @@ namespace blender::nodes::node_geo_open_mfx_cc {
  * Holds information about the currently loaded OpenMfx effect
  */
 class RuntimeData {
+ public:
+   using EffectLibrary = OpenMfx::EffectLibrary;
+
  public:
   RuntimeData();
   ~RuntimeData();
@@ -47,7 +52,7 @@ class RuntimeData {
 
   OfxMeshEffectHandle effectDescriptor() const;
   OfxMeshEffectHandle effectInstance() const;
-  const PluginRegistry &registry() const;
+  const EffectLibrary &library() const;
   bool mustUpdate() const;
 
  private:
@@ -64,7 +69,7 @@ class RuntimeData {
   int m_loaded_effect_index;
   OfxMeshEffectHandle m_effect_descriptor;
   OfxMeshEffectHandle m_effect_instance;
-  PluginRegistry *m_registry;
+  EffectLibrary *m_library;
 };
 
 }  // namespace blender::nodes::node_geo_open_mfx_cc

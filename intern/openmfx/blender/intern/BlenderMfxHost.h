@@ -25,13 +25,13 @@
 #include "BKE_geometry_set.hh"
 #include "BLI_generic_virtual_array.hh"
 
-#include <mfxHost/MfxHost>
-#include <mfxHost/attributes>
+#include <OpenMfx/Sdk/Cpp/Host/Host>
+#include <OpenMfx/Sdk/Cpp/Host/Attributes>
+#include <OpenMfx/Sdk/Cpp/Host/AttributeProps>
 
 #include <functional>
 #include <vector>
 
-struct MfxAttributeProps;
 struct Mesh;
 struct Object;
 struct MLoopCol;
@@ -40,8 +40,9 @@ struct MIntProperty;
 
 using CallbackList = std::vector<std::function<void()>>;
 
-class BlenderMfxHost : public OpenMfx::MfxHost {
+class BlenderMfxHost : public OpenMfx::Host {
  public:
+  using AttributeProps = OpenMfx::AttributeProps;
   static BlenderMfxHost &GetInstance();
 
  public:
@@ -154,7 +155,7 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
     int blenderPolygonCount = 0;
   };
 
-  static bool hasNoLooseEdge(int face_count, const MfxAttributeProps &faceSize);
+  static bool hasNoLooseEdge(int face_count, const AttributeProps& faceSize);
 
   /**
    * Copy the model to world matrix from the blender object to target mesh properties.
@@ -186,7 +187,7 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
    * Given the connectivity attributes, compute the numbers of verts/loops/polys
    * for the new Blender mesh
    */
-  OfxStatus computeBlenderMeshElementsCounts(const MfxAttributeProps &faceSize,
+  OfxStatus computeBlenderMeshElementsCounts(const AttributeProps &faceSize,
                                              ElementCounts &counts) const;
 
   /**
@@ -292,9 +293,9 @@ class BlenderMfxHost : public OpenMfx::MfxHost {
   /**
    * Extract from ofx mesh the basic attributes (point position, corner point, face size)
    */
-  OfxStatus extractBasicAttributes(const MfxAttributeProps &pointPosition,
-                                   const MfxAttributeProps &cornerPoint,
-                                   const MfxAttributeProps &faceSize,
+  OfxStatus extractBasicAttributes(const AttributeProps &pointPosition,
+                                   const AttributeProps &cornerPoint,
+                                   const AttributeProps &faceSize,
                                    Mesh *blenderMesh,
                                    const ElementCounts &counts) const;
 

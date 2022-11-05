@@ -1,0 +1,1 @@
+There is still some cleanup to do here, headers files at the root are not used and belong in the C SDK.

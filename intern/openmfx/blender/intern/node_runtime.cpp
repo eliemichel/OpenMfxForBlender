@@ -29,13 +29,14 @@
 
 #include "DNA_node_types.h" // bNode
 
-#include "PluginRegistryManager.h"
 #include "BlenderMfxHost.h"
+
+#include <OpenMfx/Sdk/Cpp/Host/EffectRegistry>
+#include <OpenMfx/Sdk/Cpp/Host/EffectLibrary>
 
 #include <stdio.h>
 
-using OpenMfx::PluginRegistryManager;
-#define PluginManager OpenMfx::PluginRegistryManager::GetInstance()
+#define EffectRegistry OpenMfx::EffectRegistry::GetInstance()
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
@@ -45,7 +46,7 @@ RuntimeData::RuntimeData()
   m_loaded_effect_index = -1;
   m_effect_descriptor = nullptr;
   m_effect_instance = nullptr;
-  m_registry = nullptr;
+  m_library = nullptr;
   m_must_update = true;
 }
 
@@ -59,10 +60,10 @@ RuntimeData &RuntimeData::operator=(const RuntimeData &other)
   BLI_strncpy(m_loaded_plugin_path, other.m_loaded_plugin_path, sizeof(m_loaded_plugin_path));
   m_loaded_effect_index = other.m_loaded_effect_index;
   m_effect_descriptor = other.m_effect_descriptor;
-  m_registry = other.m_registry;
+  m_library = other.m_library;
   m_must_update = other.m_must_update;
 
-  PluginManager.incrementRegistryReference(m_registry);
+  EffectRegistry.incrementLibraryReference(m_library);
 
   if (other.m_effect_instance != nullptr) {
     ensureEffectInstance();
@@ -90,8 +91,8 @@ bool RuntimeData::setPluginPath(const char *plugin_path)
   char abs_path[FILE_MAX];
   MFX_normalize_plugin_path(abs_path, m_loaded_plugin_path);
 
-  PluginManager.setHost(&BlenderMfxHost::GetInstance());
-  m_registry = PluginManager.getRegistry(abs_path);
+  EffectRegistry.setHost(&BlenderMfxHost::GetInstance());
+  m_library = EffectRegistry.getLibrary(abs_path);
 
   m_must_update = true;
   return true;
@@ -108,7 +109,7 @@ bool RuntimeData::setEffectIndex(int effect_index)
   }
 
   if (isPluginLoaded()) {
-    m_loaded_effect_index = min_ii(max_ii(-1, effect_index), m_registry->num_plugins - 1);
+    m_loaded_effect_index = min_ii(max_ii(-1, effect_index), m_library->effectCount() - 1);
   }
   else {
     m_loaded_effect_index = -1;
@@ -137,9 +138,9 @@ OfxMeshEffectHandle RuntimeData::effectInstance() const
   return m_effect_instance;
 }
 
-const PluginRegistry &RuntimeData::registry() const
+const OpenMfx::EffectLibrary &RuntimeData::library() const
 {
-  return *m_registry;
+  return *m_library;
 }
 
 bool RuntimeData::mustUpdate() const
@@ -153,8 +154,8 @@ void RuntimeData::unloadPlugin()
     printf("Unloading OFX plugin %s\n", m_loaded_plugin_path);
     freeEffectInstance();
 
-    PluginManager.releaseRegistry(m_registry);
-    m_registry = nullptr;
+    EffectRegistry.releaseLibrary(m_library);
+    m_library = nullptr;
   }
   m_loaded_plugin_path[0] = '\0';
   m_loaded_effect_index = -1;
@@ -162,7 +163,7 @@ void RuntimeData::unloadPlugin()
 
 inline bool RuntimeData::isPluginLoaded() const
 {
-  return m_registry != nullptr;
+  return m_library != nullptr;
 }
 
 void RuntimeData::ensureEffectInstance()
@@ -173,7 +174,7 @@ void RuntimeData::ensureEffectInstance()
   if (!isPluginLoaded() || m_loaded_effect_index == -1)
     return; // Invalid effect
 
-  m_effect_descriptor = PluginManager.getEffectDescriptor(m_registry, m_loaded_effect_index);
+  m_effect_descriptor = EffectRegistry.getEffectDescriptor(m_library, m_loaded_effect_index);
 
   if (m_effect_descriptor == nullptr)
     return; // Invalid effect

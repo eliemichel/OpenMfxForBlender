@@ -23,7 +23,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "MFX_modifier.h"
-#include "OpenMfxRuntime.h"
+#include "modifier_runtime.h"
 
 #include "DNA_mesh_types.h"      // Mesh
 #include "DNA_meshdata_types.h"  // MVert
@@ -36,18 +36,20 @@
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
+using RuntimeData = blender::modifiers::modifier_open_mfx_cc::RuntimeData;
+
 /**
- * Ensure that fxmd->modifier.runtime points to a valid OpenMfxRuntime and return
+ * Ensure that fxmd->modifier.runtime points to a valid RuntimeData and return
  * this poitner, correctly casted.
  * (idempotent)
  */
-static OpenMfxRuntime *ensure_runtime(OpenMfxModifierData *fxmd)
+static RuntimeData *ensure_runtime(OpenMfxModifierData *fxmd)
 {
 
   // Init
-  OpenMfxRuntime *runtime = (OpenMfxRuntime *)fxmd->modifier.runtime;
+  RuntimeData *runtime = (RuntimeData *)fxmd->modifier.runtime;
   if (NULL == runtime) {
-    runtime = new OpenMfxRuntime();
+    runtime = new RuntimeData();
     fxmd->modifier.runtime = runtime;
   }
 
@@ -59,13 +61,13 @@ static OpenMfxRuntime *ensure_runtime(OpenMfxModifierData *fxmd)
     BKE_modifier_set_error(NULL, &fxmd->modifier, "Could not load ofx plugins!");
   }
 
-  return (OpenMfxRuntime *)fxmd->modifier.runtime;
+  return (RuntimeData *)fxmd->modifier.runtime;
 }
 
 void MFX_modifier_reload_effect_info(OpenMfxModifierData *fxmd)
 {
 
-  OpenMfxRuntime *runtime = ensure_runtime(fxmd);
+  RuntimeData *runtime = ensure_runtime(fxmd);
   runtime->reload_effect_info(fxmd);
 }
 
@@ -79,7 +81,7 @@ void MFX_modifier_on_plugin_changed(OpenMfxModifierData *fxmd)
 void MFX_modifier_on_effect_changed(OpenMfxModifierData *fxmd)
 {
 
-  OpenMfxRuntime *runtime = ensure_runtime(fxmd);
+  RuntimeData *runtime = ensure_runtime(fxmd);
   runtime->reload_parameters(fxmd);
   runtime->reload_extra_inputs(fxmd);
 }
@@ -87,7 +89,7 @@ void MFX_modifier_on_effect_changed(OpenMfxModifierData *fxmd)
 void MFX_modifier_free_runtime_data(void *runtime_data)
 {
 
-  OpenMfxRuntime *runtime = (OpenMfxRuntime *)runtime_data;
+  RuntimeData *runtime = (RuntimeData *)runtime_data;
   if (NULL != runtime) {
     delete runtime;
   }
@@ -99,7 +101,7 @@ Mesh *MFX_modifier_do(OpenMfxModifierData *fxmd,
                       Object *object)
 {
 
-  OpenMfxRuntime *runtime = ensure_runtime(fxmd);
+  RuntimeData *runtime = ensure_runtime(fxmd);
   Mesh *output_mesh = runtime->cook(fxmd, depsgraph, mesh, object);
 
   return output_mesh;
@@ -119,7 +121,7 @@ void MFX_modifier_copydata(OpenMfxModifierData *source, OpenMfxModifierData *des
     destination->effects = (OpenMfxEffect *)MEM_dupallocN(source->effects);
   }
 
-  OpenMfxRuntime *runtime = (OpenMfxRuntime *)source->modifier.runtime;
+  RuntimeData *runtime = (RuntimeData *)source->modifier.runtime;
   if (NULL != runtime) {
     runtime->set_message_in_rna(destination);
   }
@@ -127,6 +129,6 @@ void MFX_modifier_copydata(OpenMfxModifierData *source, OpenMfxModifierData *des
 
 void MFX_modifier_before_update_depsgraph(OpenMfxModifierData *fxmd)
 {
-  OpenMfxRuntime *runtime = ensure_runtime(fxmd);
+  RuntimeData *runtime = ensure_runtime(fxmd);
   runtime->set_input_prop_in_rna(fxmd);
 }

@@ -18,11 +18,14 @@
 # All rights reserved.
 # ***** END GPL LICENSE BLOCK *****
 
-add_subdirectory(openfx)
-add_subdirectory(util)
+option(OPENMFX_BUILD_EXAMPLES "Build example projects" OFF)
 
-add_subdirectory(host)
-add_subdirectory(plugins)
+# Main target (C API)
+add_library(OpenMfx INTERFACE)
+target_include_directories(OpenMfx INTERFACE include/)
+add_library(OpenMfx::Core ALIAS OpenMfx)
+
+add_subdirectory(sdk)
 
 add_subdirectory(blender)
 

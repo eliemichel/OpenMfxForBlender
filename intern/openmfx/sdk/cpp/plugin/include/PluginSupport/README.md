@@ -1,0 +1,1 @@
+These files are here for backward compatibility, but the recommended path is OpenMfx/Sdk/Cpp/Plugin

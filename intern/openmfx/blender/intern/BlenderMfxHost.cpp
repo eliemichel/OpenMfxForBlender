@@ -21,11 +21,10 @@
  */
 
 #include "BlenderMfxHost.h"
-#include "sdk/MfxAttributeProps.h"
 
-#include "util/mfx_util.h"
-#include "ofxExtras.h"
-#include <mfxHost/mesh>
+#include <OpenMfx/Sdk/Cpp/Host/Host>
+#include <OpenMfx/Sdk/Cpp/Host/AttributeProps>
+#include <OpenMfx/Sdk/Cpp/Host/Mesh>
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_meshdata_types.h" // MVert
@@ -46,6 +45,7 @@
 #include <cassert>
 
 using blender::GVArray;
+using OpenMfx::AttributeProps;
 
 #ifndef max
 #  define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -243,7 +243,7 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseModifier(OfxMeshHandle ofxMesh,
     return status;
   }
 
-  MfxAttributeProps pointPosition, cornerPoint, faceSize;
+  AttributeProps pointPosition, cornerPoint, faceSize;
   pointPosition.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition);
   cornerPoint.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint);
   faceSize.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize);
@@ -316,7 +316,7 @@ OfxStatus BlenderMfxHost::BeforeMeshReleaseNode(OfxMeshHandle ofxMesh,
     return status;
   }
 
-  MfxAttributeProps pointPosition, cornerPoint, faceSize;
+  AttributeProps pointPosition, cornerPoint, faceSize;
   pointPosition.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition);
   cornerPoint.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribCorner, kOfxMeshAttribCornerPoint);
   faceSize.fetchProperties(propertySuite, meshEffectSuite, ofxMesh, kOfxMeshAttribFace, kOfxMeshAttribFaceSize);
@@ -424,7 +424,7 @@ OfxStatus BlenderMfxHost::BeforeMeshAllocateNode(OfxMeshHandle ofxMesh,
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-bool BlenderMfxHost::hasNoLooseEdge(int face_count, const MfxAttributeProps &faceSize)
+bool BlenderMfxHost::hasNoLooseEdge(int face_count, const AttributeProps &faceSize)
 {
   for (int i = 0; i < face_count; ++i) {
     int corner_count = *faceSize.at<int>(i);
@@ -515,7 +515,7 @@ OfxStatus BlenderMfxHost::countMeshElements(OfxMeshHandle ofxMesh, ElementCounts
   return kOfxStatOK;
 }
 
-OfxStatus BlenderMfxHost::computeBlenderMeshElementsCounts(const MfxAttributeProps &faceSize,
+OfxStatus BlenderMfxHost::computeBlenderMeshElementsCounts(const AttributeProps &faceSize,
                                                            ElementCounts &counts) const
 {
   // Figure out geometry size on Blender side.
@@ -847,7 +847,8 @@ OfxStatus BlenderMfxHost::setupCornerAttribute(OfxMeshHandle ofxMesh,
       int stride;
       MFX_CHECK(propertySuite->propGetInt(attrib, kOfxMeshAttribPropStride, 0, &stride));
 
-      int elementSize = componentCount * MFX_component_size(componentType);
+      int elementSize = componentCount *
+                        OpenMfx::byteSizeOf(OpenMfx::attributeTypeAsEnum(componentType));
       for (int i = 0; i < counts.ofxCornerCount; i++) {
         char *element = data + i * (size_t)stride;
         if (i < counts.blenderLoopCount) {
@@ -939,9 +940,9 @@ OfxStatus BlenderMfxHost::setupRequestedAttributes(
   return kOfxStatOK;
 }
 
-OfxStatus BlenderMfxHost::extractBasicAttributes(const MfxAttributeProps &pointPosition,
-                                                 const MfxAttributeProps &cornerPoint,
-                                                 const MfxAttributeProps &faceSize,
+OfxStatus BlenderMfxHost::extractBasicAttributes(const AttributeProps &pointPosition,
+                                                 const AttributeProps &cornerPoint,
+                                                 const AttributeProps &faceSize,
                                                  Mesh *blenderMesh,
                                                  const ElementCounts &counts) const
 {
@@ -1019,8 +1020,7 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
   // TODO: Use semantics to get UV layers back from mfx mesh
   int uv_layers = 4;
   char name[MAX_ATTRIB_NAME];
-  char *ofx_uv_data;
-  int ofx_uv_stride;
+  AttributeProps uv_props;
   for (int k = 0; k < uv_layers; ++k) {
     OfxPropertySetHandle uv_attrib;
     sprintf(name, "uv%d", k);
@@ -1028,9 +1028,8 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
     status = meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &uv_attrib);
     if (kOfxStatOK == status) {
       printf("Found!\n");
-      MFX_CHECK(propertySuite->propGetPointer(
-          uv_attrib, kOfxMeshAttribPropData, 0, (void **)&ofx_uv_data));
-      MFX_CHECK(propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &ofx_uv_stride));
+      MFX_CHECK(propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void **)&uv_props.data));
+      MFX_CHECK(propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &uv_props.stride));
 
       if (counts.blenderLooseEdgeCount > 0) {
         // TODO implement OFX->Blender UV conversion for loose edge meshes
@@ -1052,7 +1051,7 @@ OfxStatus BlenderMfxHost::extractUvAttributes(OfxMeshHandle ofxMesh,
           &blenderMesh->ldata, CD_MLOOPUV, uvname, counts.ofxCornerCount);
 
       for (int i = 0; i < counts.ofxCornerCount; ++i) {
-        float *uv = attributeAt<float>(ofx_uv_data, ofx_uv_stride, i);
+        float *uv = uv_props.at<float>(i);
         uv_data[i].uv[0] = uv[0];
         uv_data[i].uv[1] = uv[1];
       }
@@ -1083,8 +1082,9 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
       continue;
     }
     const OfxAttributeStruct &ofxAttrib = ofxMesh->attributes[idx];
-    char *ofxAttribData = (char*)ofxAttrib.properties[kOfxMeshAttribPropData].value[0].as_pointer;
-    int ofxAttribStride = ofxAttrib.properties[kOfxMeshAttribPropStride].value[0].as_int;
+    AttributeProps ofxAttribProps;
+    ofxAttribProps.data = (char *)ofxAttrib.properties[kOfxMeshAttribPropData].value[0].as_pointer;
+    ofxAttribProps.stride = ofxAttrib.properties[kOfxMeshAttribPropStride].value[0].as_int;
     
     //blender::bke::StrongAnonymousAttributeID id(requestedAttrib.name());
     const eAttrDomain domain = ATTR_DOMAIN_POINT;  // TODO
@@ -1093,7 +1093,7 @@ OfxStatus BlenderMfxHost::extractExpectedAttributes(
                                                                    domain);
     float *destData = attribute.span.data();
     for (int k = 0; k < counts.ofxPointCount; ++k) {
-      destData[k] = *attributeAt<float>(ofxAttribData, ofxAttribStride, k);
+      destData[k] = *ofxAttribProps.at<float>(k);
     }
     attribute.finish();
     ++i;

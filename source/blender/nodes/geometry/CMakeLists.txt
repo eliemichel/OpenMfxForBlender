@@ -20,8 +20,10 @@ set(INC
   ../../windowmanager
   ../../../../intern/guardedalloc
   ../../../../intern/openmfx/blender
-  ../../../../intern/openmfx/host
-  ../../../../intern/openmfx/openfx
+  ../../../../intern/openmfx/include
+  ../../../../intern/openmfx/sdk/cpp/common/include
+  ../../../../intern/openmfx/sdk/cpp/host/include
+  ../../../../intern/openmfx/sdk/cpp/extern
   # RNA_prototypes.h
   ${CMAKE_BINARY_DIR}/source/blender/makesrna
 )

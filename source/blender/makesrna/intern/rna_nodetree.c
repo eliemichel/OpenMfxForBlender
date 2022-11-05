@@ -4537,8 +4537,6 @@ static const EnumPropertyItem *rna_GeometryNodeOpenMfx_effect_enum_item(struct b
                                                                         bool *r_free)
 {
   bNode *node = (bNode *)ptr->data;
-  const PluginRegistry *registry = MFX_get_plugin_registry(node);
-
   EnumPropertyItem *item = NULL, tmp_item = {0};
   int totitem = 0;
 
@@ -4546,12 +4544,14 @@ static const EnumPropertyItem *rna_GeometryNodeOpenMfx_effect_enum_item(struct b
   tmp_item.identifier = tmp_item.name = "(No effect selected)";
   RNA_enum_item_add(&item, &totitem, &tmp_item);
 
-  if (registry != NULL) {
+  int n = MFX_node_get_effect_count(node);
+
+  if (n > 0) {
     RNA_enum_item_add_separator(&item, &totitem);
 
-    for (int i = 0; i < registry->num_plugins; ++i) {
+    for (int i = 0; i < n; ++i) {
       tmp_item.value = i;
-      tmp_item.identifier = tmp_item.name = registry->plugins[i]->pluginIdentifier;
+      tmp_item.identifier = tmp_item.name = MFX_node_get_effect_identifier(node, i);
       RNA_enum_item_add(&item, &totitem, &tmp_item);
     }
   }

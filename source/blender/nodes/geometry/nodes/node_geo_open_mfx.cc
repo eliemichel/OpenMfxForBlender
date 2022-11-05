@@ -42,11 +42,11 @@
 #include "intern/BlenderMfxHost.h"
 #include "TinyTimer.h"
 
-#include <mfxHost/mesheffect>
-#include <mfxHost/properties>
-#include "util/mfx_util.h"
+#include <OpenMfx/Sdk/Cpp/Host/MeshEffect>
+#include <OpenMfx/Sdk/Cpp/Host/Properties>
 
 using MeshInternalDataNode = BlenderMfxHost::MeshInternalDataNode;
+using OpenMfx::AttributeProps;
 
 namespace blender::nodes::node_geo_open_mfx_cc {
 
@@ -204,47 +204,47 @@ static void MFX_node_add_param_input(NodeDeclarationBuilder &b,
 {
   const char *label = MFX_param_label(param);
   switch (param.type) {
-    case PARAM_TYPE_INTEGER:
+    case OpenMfx::ParameterType::Integer:
       b.add_input<decl::Int>(label);
       break;
-    case PARAM_TYPE_INTEGER_2D:
+    case OpenMfx::ParameterType::Integer2d:
       b.add_input<decl::Int>((std::string(label) + ".x").c_str());
       b.add_input<decl::Int>((std::string(label) + ".y").c_str());
       break;
-    case PARAM_TYPE_INTEGER_3D:
+    case OpenMfx::ParameterType::Integer3d:
       b.add_input<decl::Int>((std::string(label) + ".x").c_str());
       b.add_input<decl::Int>((std::string(label) + ".y").c_str());
       b.add_input<decl::Int>((std::string(label) + ".z").c_str());
       break;
-    case PARAM_TYPE_DOUBLE:
+    case OpenMfx::ParameterType::Double:
       b.add_input<decl::Float>(label);
       break;
-    case PARAM_TYPE_DOUBLE_2D:
+    case OpenMfx::ParameterType::Double2d:
       b.add_input<decl::Vector>(label);
       break;
-    case PARAM_TYPE_DOUBLE_3D:
+    case OpenMfx::ParameterType::Double3d:
       b.add_input<decl::Vector>(label);
       break;
-    case PARAM_TYPE_RGB:
+    case OpenMfx::ParameterType::Rgb:
       b.add_input<decl::Color>(label);
       break;
-    case PARAM_TYPE_RGBA:
+    case OpenMfx::ParameterType::Rgba:
       b.add_input<decl::Color>(label);
       break;
-    case PARAM_TYPE_BOOLEAN:
+    case OpenMfx::ParameterType::Boolean:
       b.add_input<decl::Bool>(label);
       break;
-    case PARAM_TYPE_CHOICE:
+    case OpenMfx::ParameterType::Choice:
       b.add_input<decl::Int>(label);
       break;
-    case PARAM_TYPE_STRING:
+    case OpenMfx::ParameterType::String:
       b.add_input<decl::String>(label);
       break;
-    case PARAM_TYPE_CUSTOM:
-    case PARAM_TYPE_PUSH_BUTTON:
-    case PARAM_TYPE_GROUP:
-    case PARAM_TYPE_PAGE:
-    case PARAM_TYPE_UNKNOWN:
+    case OpenMfx::ParameterType::Custom:
+    case OpenMfx::ParameterType::PushButton:
+    case OpenMfx::ParameterType::Group:
+    case OpenMfx::ParameterType::Page:
+    case OpenMfx::ParameterType::Unknown:
     default:
       break;
   }
@@ -254,37 +254,37 @@ static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
 {
   const char *label = MFX_param_label(param);
   switch (param.type) {
-    case PARAM_TYPE_INTEGER:
-    case PARAM_TYPE_CHOICE:
+    case OpenMfx::ParameterType::Integer:
+    case OpenMfx::ParameterType::Choice:
       param.value[0].as_int = b.extract_input<int>(label);
       break;
-    case PARAM_TYPE_INTEGER_2D:
+    case OpenMfx::ParameterType::Integer2d:
       param.value[0].as_int = b.extract_input<int>((std::string(label) + ".x").c_str());
       param.value[1].as_int = b.extract_input<int>((std::string(label) + ".y").c_str());
       break;
-    case PARAM_TYPE_INTEGER_3D:
+    case OpenMfx::ParameterType::Integer3d:
       param.value[0].as_int = b.extract_input<int>((std::string(label) + ".x").c_str());
       param.value[1].as_int = b.extract_input<int>((std::string(label) + ".y").c_str());
       param.value[2].as_int = b.extract_input<int>((std::string(label) + ".z").c_str());
       break;
-    case PARAM_TYPE_DOUBLE:
+    case OpenMfx::ParameterType::Double:
       param.value[0].as_double = b.extract_input<float>(label);
       break;
-    case PARAM_TYPE_DOUBLE_2D: {
+    case OpenMfx::ParameterType::Double2d: {
       float2 value = b.extract_input<float2>(label);
       param.value[0].as_double = value[0];
       param.value[1].as_double = value[1];
       break;
     }
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB: {
+    case OpenMfx::ParameterType::Double3d:
+    case OpenMfx::ParameterType::Rgb: {
       float3 value = b.extract_input<float3>(label);
       param.value[0].as_double = value[0];
       param.value[1].as_double = value[1];
       param.value[2].as_double = value[2];
       break;
     }
-    case PARAM_TYPE_RGBA: {
+    case OpenMfx::ParameterType::Rgba: {
       ColorGeometry4f value = b.extract_input<ColorGeometry4f>(label);
       param.value[0].as_double = value[0];
       param.value[1].as_double = value[1];
@@ -292,17 +292,17 @@ static void MFX_node_extract_param(GeoNodeExecParams &b, OfxParamStruct &param)
       param.value[3].as_double = value[3];
       break;
     }
-    case PARAM_TYPE_BOOLEAN:
+    case OpenMfx::ParameterType::Boolean:
       param.value[0].as_bool = b.extract_input<bool>(label);
       break;
-    case PARAM_TYPE_STRING:
+    case OpenMfx::ParameterType::String:
       param.value[0].as_const_char = b.extract_input<std::string>(label).c_str();
       break;
-    case PARAM_TYPE_CUSTOM:
-    case PARAM_TYPE_PUSH_BUTTON:
-    case PARAM_TYPE_GROUP:
-    case PARAM_TYPE_PAGE:
-    case PARAM_TYPE_UNKNOWN:
+    case OpenMfx::ParameterType::Custom:
+    case OpenMfx::ParameterType::PushButton:
+    case OpenMfx::ParameterType::Group:
+    case OpenMfx::ParameterType::Page:
+    case OpenMfx::ParameterType::Unknown:
     default:
       break;
   }
@@ -971,42 +971,42 @@ static void node_geo_exec(GeoNodeExecParams params)
       MeshComponent &in_component = geometry_set.get_component_for_write<MeshComponent>();
       MeshComponent &out_component = outputIt->geo.get_component_for_write<MeshComponent>();
 
+      AttributeProps originPointsPoolSize;
       const OfxAttributeStruct &ofxAttribOriginPointsPoolSize = AttributeIOMap.attributes[{
           OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointsPoolSize"}];
-      char *ofxAttribDataOriginPointsPoolSize = (char *)ofxAttribOriginPointsPoolSize
+      originPointsPoolSize.data = (char *)ofxAttribOriginPointsPoolSize
                                                     .properties[kOfxMeshAttribPropData]
                                                     .value[0]
                                                     .as_pointer;
-      int ofxAttribStrideOriginPointsPoolSize =
+      originPointsPoolSize.stride =
           ofxAttribOriginPointsPoolSize.properties[kOfxMeshAttribPropStride].value[0].as_int;
 
+      AttributeProps originPointIndex;
       const OfxAttributeStruct &ofxAttribOriginPointIndex = AttributeIOMap.attributes[{
           OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointIndex"}];
-      char *ofxAttribDataOriginPointIndex =
+      originPointIndex.data =
           (char *)ofxAttribOriginPointIndex.properties[kOfxMeshAttribPropData].value[0].as_pointer;
-      int ofxAttribStrideOriginPointIndex =
+      originPointIndex.stride =
           ofxAttribOriginPointIndex.properties[kOfxMeshAttribPropStride].value[0].as_int;
 
+      AttributeProps originPointWeight;
       const OfxAttributeStruct &ofxAttribOriginPointWeight = AttributeIOMap.attributes[{
           OfxAttributeStruct::AttributeAttachment::Mesh, "OfxMeshAttribOriginPointWeight"}];
-      char *ofxAttribDataOriginPointWeight = (char *)ofxAttribOriginPointWeight
+      originPointWeight.data = (char *)ofxAttribOriginPointWeight
                                                  .properties[kOfxMeshAttribPropData]
                                                  .value[0]
                                                  .as_pointer;
-      int ofxAttribStrideOriginPointWeight =
+      originPointWeight.stride =
           ofxAttribOriginPointWeight.properties[kOfxMeshAttribPropStride].value[0].as_int;
 
       auto getOriginPointsPoolSize = [&](int outputPointIndex) {
-        return *attributeAt<int>(
-            ofxAttribDataOriginPointsPoolSize, ofxAttribStrideOriginPointsPoolSize, outputPointIndex);
+        return *originPointsPoolSize.at<int>(outputPointIndex);
       };
       auto getOriginPointIndex = [&](int originPoint) {
-        return *attributeAt<int>(
-            ofxAttribDataOriginPointIndex, ofxAttribStrideOriginPointIndex, originPoint);
+        return *originPointIndex.at<int>(originPoint);
       };
       auto getOriginPointWeight = [&](int originPointIndex) {
-        return *attributeAt<float>(
-            ofxAttribDataOriginPointWeight, ofxAttribStrideOriginPointWeight, originPointIndex);
+        return *originPointWeight.at<float>(originPointIndex);
       };
       // TODO: extend this process to other types and other domains
       propagate_attributes(attributes_to_propagate,

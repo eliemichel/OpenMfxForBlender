@@ -31,6 +31,8 @@
 
 #include "MFX_node_runtime.h"
 
+#include <OpenMfx/Sdk/Cpp/Host/EffectLibrary>
+
 void MFX_normalize_plugin_path(char* dest_path, const char* src_path)
 {
     BLI_strncpy(dest_path, src_path, FILE_MAX);
@@ -42,23 +44,14 @@ void MFX_normalize_plugin_path(char* dest_path, const char* src_path)
     }
 }
 
-const PluginRegistry *MFX_get_plugin_registry(bNode *node)
+int MFX_node_get_effect_count(bNode *node)
 {
   NodeGeometryOpenMfxRuntimeHandle *runtime = ((NodeGeometryOpenMfx *)(node->storage))->runtime;
-  return &runtime->registry();
+  return runtime->library().effectCount();
 }
 
-int MFX_component_size(const char *componentType)
+const char *MFX_node_get_effect_identifier(bNode *node, int effect_index)
 {
-  if (0 == strcmp(componentType, kOfxMeshAttribTypeUByte)) {
-    return sizeof(unsigned char);
-  }
-  if (0 == strcmp(componentType, kOfxMeshAttribTypeInt)) {
-    return sizeof(int);
-  }
-  if (0 == strcmp(componentType, kOfxMeshAttribTypeFloat)) {
-    return sizeof(float);
-  }
-  BLI_assert(false); // Unknown attribute type!
-  return 0;
+  NodeGeometryOpenMfxRuntimeHandle *runtime = ((NodeGeometryOpenMfx *)(node->storage))->runtime;
+  return runtime->library().effectIdentifier(effect_index);
 }
