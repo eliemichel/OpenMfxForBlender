@@ -182,8 +182,6 @@ set(SRC
 set(INC
   ../../../../intern/clog
   ../../../../intern/openmfx/blender
-  ../../../../intern/openmfx/host
-  ../../../../intern/openmfx/openfx
 
   # Needed for defaults forward declarations.
   ../../blenloader

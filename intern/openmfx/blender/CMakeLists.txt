@@ -24,7 +24,7 @@ get_target_property(INC OpenMfx::Sdk::Cpp::Host INCLUDE_DIRECTORIES)
 list(APPEND OPENMFX_SDK_INCLUDES ${INC})
 get_target_property(INC OpenMfx::Sdk::Cpp::Common INCLUDE_DIRECTORIES)
 list(APPEND OPENMFX_SDK_INCLUDES ${INC})
-get_target_property(INC OpenMfx::Core INCLUDE_DIRECTORIES)
+get_target_property(INC OpenMfx::Core INTERFACE_INCLUDE_DIRECTORIES)
 list(APPEND OPENMFX_SDK_INCLUDES ${INC})
 list(REMOVE_DUPLICATES OPENMFX_SDK_INCLUDES)
 

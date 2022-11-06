@@ -1,4 +1,4 @@
-file(GLOB SRC src/*.cpp src/*.h)
+file(GLOB SRC src/*.cpp src/*.c src/*.h)
 add_library(OpenMfx_Sdk_Cpp_Common ${SRC})
 
 target_include_directories(
