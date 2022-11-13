@@ -23,6 +23,12 @@ jobs:
       with:
         path: ${{github.workspace}}/blender
         
+    - name: Install system deps
+      run: |
+        sudo apt-get install -y \
+        build-essential git subversion cmake libx11-dev libxxf86vm-dev libxcursor-dev libxi-dev libxrandr-dev libxinerama-dev libegl-dev \
+        libwayland-dev wayland-protocols libxkbcommon-dev libdbus-1-dev linux-libc-dev
+        
     - name: Cache dependencies
       id: cache-lib
       uses: actions/cache@v3
