@@ -161,7 +161,7 @@ void RuntimeData::unloadPlugin()
   m_loaded_effect_index = -1;
 }
 
-inline bool RuntimeData::isLibraryLoaded() const
+bool RuntimeData::isLibraryLoaded() const
 {
   return m_library != nullptr;
 }
