@@ -1,0 +1,81 @@
+name: CMake
+
+on:
+  push:
+    branches: [ "openmfx" ]
+  pull_request:
+    branches: [ "openmfx" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+  SVN_REVISION: 63009
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
+    # You can convert this to a matrix build if you need cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        path: ${{github.workspace}}/blender
+        
+    - name: Cache dependencies
+      id: cache-lib
+      uses: actions/cache@v3
+      with:
+        key: svn-r${{env.SVN_REVISION}}
+        path: |
+          ${{github.workspace}}/lib
+
+    - name: Get dependencies
+      if: ${{ steps.cache-lib.outputs.cache-hit != 'true' }}
+      # Get precompiled libraries from SVN
+      run: |
+        svn \
+          --non-interactive \
+          checkout \
+          -r ${{env.SVN_REVISION}} \
+          https://svn.blender.org/svnroot/bf-blender/trunk/lib/linux_centos7_x86_64 \
+          ${{github.workspace}}/lib/linux_centos7_x86_64
+      #run: |
+      #  python ${{github.workspace}}/blender/build_files/utils/make_update.py \
+      #    --no-blender \
+      #    --no-submodules \
+      #    --use-tests \
+      #    --use-centos-libraries \
+      #    --svn-branch r${{env.SVN_REVISION}}
+      
+    - name: Get test dependencies
+      if: ${{ steps.cache-lib.outputs.cache-hit != 'true' }}
+      run: |
+        svn \
+          --non-interactive \
+          checkout \
+          -r ${{env.SVN_REVISION}} \
+          https://svn.blender.org/svnroot/bf-blender/trunk/lib/tests \
+          ${{github.workspace}}/lib/tests
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: |
+        cmake \
+          -S ${{github.workspace}}/blender \
+          -B ${{github.workspace}}/build \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          -DWITH_X11_XINPUT=OFF
+
+    - name: Build
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      # Execute tests defined by the CMake configuration.
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      run: ctest -C ${{env.BUILD_TYPE}}
+
