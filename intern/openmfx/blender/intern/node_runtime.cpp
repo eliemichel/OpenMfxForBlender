@@ -108,7 +108,7 @@ bool RuntimeData::setEffectIndex(int effect_index)
     freeEffectInstance();
   }
 
-  if (isPluginLoaded()) {
+  if (isLibraryLoaded()) {
     m_loaded_effect_index = min_ii(max_ii(-1, effect_index), m_library->effectCount() - 1);
   }
   else {
@@ -150,7 +150,7 @@ bool RuntimeData::mustUpdate() const
 
 void RuntimeData::unloadPlugin()
 {
-  if (isPluginLoaded()) {
+  if (isLibraryLoaded()) {
     printf("Unloading OFX plugin %s\n", m_loaded_plugin_path);
     freeEffectInstance();
 
@@ -161,7 +161,7 @@ void RuntimeData::unloadPlugin()
   m_loaded_effect_index = -1;
 }
 
-inline bool RuntimeData::isPluginLoaded() const
+inline bool RuntimeData::isLibraryLoaded() const
 {
   return m_library != nullptr;
 }
@@ -171,7 +171,7 @@ void RuntimeData::ensureEffectInstance()
   if (nullptr != m_effect_instance)
     return; // Instance already available
 
-  if (!isPluginLoaded() || m_loaded_effect_index == -1)
+  if (!isLibraryLoaded() || m_loaded_effect_index == -1)
     return; // Invalid effect
 
   m_effect_descriptor = EffectRegistry.getEffectDescriptor(m_library, m_loaded_effect_index);

@@ -47,11 +47,15 @@ void MFX_normalize_plugin_path(char* dest_path, const char* src_path)
 int MFX_node_get_effect_count(bNode *node)
 {
   NodeGeometryOpenMfxRuntimeHandle *runtime = ((NodeGeometryOpenMfx *)(node->storage))->runtime;
+  if (!runtime || !runtime->isLibraryLoaded())
+    return 0;
   return runtime->library().effectCount();
 }
 
 const char *MFX_node_get_effect_identifier(bNode *node, int effect_index)
 {
   NodeGeometryOpenMfxRuntimeHandle *runtime = ((NodeGeometryOpenMfx *)(node->storage))->runtime;
+  if (!runtime || !runtime->isLibraryLoaded())
+    return nullptr;
   return runtime->library().effectIdentifier(effect_index);
 }

@@ -54,11 +54,11 @@ class RuntimeData {
   OfxMeshEffectHandle effectInstance() const;
   const EffectLibrary &library() const;
   bool mustUpdate() const;
+  bool isLibraryLoaded() const;
 
  private:
   // Release the current plugin registry and reset
   void unloadPlugin();
-  bool isPluginLoaded() const;
 
   void ensureEffectInstance();
   void freeEffectInstance();
