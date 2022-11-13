@@ -22,8 +22,17 @@ jobs:
     - uses: actions/checkout@v3
       with:
         path: ${{github.workspace}}/blender
+        
+    - name: Cache dependencies
+      id: cache-lib
+      uses: actions/cache@v3
+      with:
+        key: svn-r${{env.SVN_REVISION}}
+        path: |
+          ${{github.workspace}}/lib
 
     - name: Get dependencies
+      if: ${{ steps.cache-lib.outputs.cache-hit != 'true' }}
       # Get precompiled libraries from SVN
       run: |
         svn \
@@ -41,6 +50,7 @@ jobs:
       #    --svn-branch r${{env.SVN_REVISION}}
       
     - name: Get test dependencies
+      if: ${{ steps.cache-lib.outputs.cache-hit != 'true' }}
       run: |
         svn \
           --non-interactive \
@@ -57,6 +67,7 @@ jobs:
           -S ${{github.workspace}}/blender \
           -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          -DWITH_X11_XINPUT=OFF
 
     - name: Build
       # Build your program with the given configuration
