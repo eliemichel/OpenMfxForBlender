@@ -29,7 +29,7 @@ jobs:
         svn \
           --non-interactive \
           checkout \
-          -r ${{env.63009}} \
+          -r ${{env.SVN_REVISION}} \
           https://svn.blender.org/svnroot/bf-blender/trunk/lib/linux_centos7_x86_64 \
           ${{github.workspace}}/lib/linux_centos7_x86_64
       #run: |
@@ -45,7 +45,7 @@ jobs:
         svn \
           --non-interactive \
           checkout \
-          -r ${{env.63009}} \
+          -r ${{env.SVN_REVISION}} \
           https://svn.blender.org/svnroot/bf-blender/trunk/lib/tests \
           ${{github.workspace}}/lib/tests
 
