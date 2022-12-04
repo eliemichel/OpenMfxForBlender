@@ -824,17 +824,17 @@ static void node_geo_exec(GeoNodeExecParams params)
         //spans.resize(attribCount);
         GeometryComponent &component = inputData.geo.get_component_for_write(GEO_COMPONENT_TYPE_MESH);
 
+        blender::bke::GeometryComponentFieldContext pointContext{component, ATTR_DOMAIN_POINT};
         blender::fn::FieldEvaluator pointEvaluator{
-            GeometryComponentFieldContext{component, ATTR_DOMAIN_POINT},
-            component.attribute_domain_size(ATTR_DOMAIN_POINT)};
+            pointContext, component.attribute_domain_size(ATTR_DOMAIN_POINT)};
 
+        blender::bke::GeometryComponentFieldContext cornerContext{component, ATTR_DOMAIN_CORNER};
         blender::fn::FieldEvaluator cornerEvaluator{
-            GeometryComponentFieldContext{component, ATTR_DOMAIN_CORNER},
-            component.attribute_domain_size(ATTR_DOMAIN_CORNER)};
+            cornerContext, component.attribute_domain_size(ATTR_DOMAIN_CORNER)};
 
+        blender::bke::GeometryComponentFieldContext faceContext{component, ATTR_DOMAIN_FACE};
         blender::fn::FieldEvaluator faceEvaluator{
-            GeometryComponentFieldContext{component, ATTR_DOMAIN_FACE},
-            component.attribute_domain_size(ATTR_DOMAIN_FACE)};
+            faceContext, component.attribute_domain_size(ATTR_DOMAIN_FACE)};
 
         // Evaluate requested attributes
         for (int j = 0; j < attribCount ; ++j) {
@@ -1044,30 +1044,6 @@ static void node_geo_exec(GeoNodeExecParams params)
             << " - openmfx.node_geo_exec.total: " << PERF(0).summary() << "\n"
             << " - openmfx.node_geo_exec.cook: " << PERF(1).summary() << "\n"
             << std::flush;
-
-  #if 0
-  if (params.node().outputs.first == nullptr)
-    return;
-  // We first retrieve the property (olive count) and the input socket (radius)
-  const NodeGeometryOpenMfx &storage = node_storage(params.node());
-  const int olive_count = storage.olive_count;
-  const float radius = params.extract_input<float>("Radius");
-
-  // Then we create the mesh (let's put it in a separate function)
-  IndexRange base_polys, olives_polys;
-  Mesh *mesh = create_pizza_mesh(olive_count, radius, 32, base_polys, olives_polys);
-
-  if (params.output_is_required("Base")) {
-    set_bool_face_field_output(params, "Base", base_polys, mesh);
-  }
-
-  if (params.output_is_required("Olives")) {
-    set_bool_face_field_output(params, "Olives", base_polys, mesh);
-  }
-
-  // We build a geometry set to wrap the mesh and set it as the output value
-  params.set_output("Mesh", GeometrySet::create_with_mesh(mesh));
-  #endif
 }
 
 static void node_gather_link_searches(GatherLinkSearchOpParams &UNUSED(params))
