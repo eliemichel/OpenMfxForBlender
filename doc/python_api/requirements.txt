@@ -6,7 +6,7 @@ Pygments==2.12.0
 docutils==0.17.1
 snowballstemmer==2.2.0
 babel==2.10.1
-requests==2.27.1
+requests==2.31.0
 
 # Only needed to match the theme used for the official documentation.
 # Without this theme, the default theme will be used.
